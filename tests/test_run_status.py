@@ -71,7 +71,10 @@ def test_writer_never_raises_when_the_path_is_unusable(tmp_path):
 
 def test_null_writer_is_a_safe_noop():
     n = NullRunStatus()
-    n.stage(1, "recon"); n.target_started("f", 1, 2); n.update(x=1); n.finish()
+    n.stage(1, "recon")
+    n.target_started("f", 1, 2)
+    n.update(x=1)
+    n.finish()
 
 
 # ── API ──────────────────────────────────────────────────────
