@@ -1,0 +1,60 @@
+# Runtime artifacts — never commit
+workspace/
+
+# Findings database — generated at runtime, contains crash data. Never commit.
+findings.yaml
+findings.yaml.*
+
+# Secrets — LLM provider keys. NEVER commit. Use .env.example as the template.
+.env
+.env.*
+!.env.example
+
+# Frontend deps
+node_modules/
+
+# Large OSS-Fuzz corpus — fetched/generated at runtime, not shipped (size + corpus licensing).
+# The small curated per-format seeds under seeds/<format>/ are kept and versioned.
+seeds/oss_fuzz_corpus*/
+
+# Run logs and editor backups
+*.log
+*.bak
+*.bak/
+**/harnesses.bak/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+nemesis-env/
+.venv/
+venv/
+
+# AFL artifacts
+.afl-tmin-temp-*
+000000000000000000000000000000*
+
+# Claude Code session files
+.claude/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Byte-compiled
+*.so
+*.o
+*.a
+
+# Temp install scripts (development one-offs)
+install_*.py
+patch_*.py
+*_v2.py

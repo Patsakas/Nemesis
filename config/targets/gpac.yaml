@@ -1,0 +1,82 @@
+# ============================================================
+# NEMESIS — GPAC target configuration (example)
+# ============================================================
+# Demonstrates multi-target support. Adjust paths for your setup.
+
+fuzzing:
+  timeout_hours: 0.25
+
+target:
+  name: "gpac"
+  oss_fuzz_project: ""  # GPAC is not in OSS-Fuzz
+  source_root: "$HOME/gpac_clean"
+  work_root: "$HOME/gpac_work"
+  build_dir: "$HOME/gpac_work/build_fuzz"
+  debug_build_dir: "$HOME/gpac_clean/build_debug"
+  build:
+    configure: >
+      rm -f config.mak &&
+      CC=afl-clang-fast CXX=afl-clang-fast++
+      ./configure
+      --static-bin
+      --use-zlib=no
+      --use-ffmpeg=no
+      --use-jpeg=no
+      --use-png=no
+      --use-ogg=no
+      --use-vorbis=no
+      --use-theora=no
+      --use-openjpeg=no
+      --extra-cflags="-g -fsanitize=address -Wno-error"
+    make: "make -j$(nproc)"
+    debug_configure: >
+      rm -f config.mak &&
+      CC=clang CXX=clang++
+      ./configure
+      --static-bin
+      --use-zlib=no
+      --use-ffmpeg=no
+      --use-jpeg=no
+      --use-png=no
+      --use-ogg=no
+      --use-vorbis=no
+      --use-theora=no
+      --use-openjpeg=no
+      --extra-cflags="-g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -Wno-error"
+    debug_make: "make -j$(nproc)"
+  repro_binary: "bin/gcc/MP4Box"
+  repro_args: ["-info"]
+  pinned_funcs: []
+  # Generalization fields
+  source_subdir: "src"
+  include_subdir: "include/gpac"
+  library_name: "libgpac_static.a"
+  link_libs: "-lz -lm -lpthread -ldl"
+  harness_includes: ["gpac/isomedia.h", "gpac/setup.h"]
+  api_func_fixes: {}
+  magic_bytes:
+    isom: ["ftyp", "moov", "mdat"]
+    mp4: ["ftyp"]
+
+recon_scoring:
+  bonus_patterns:
+    "isom_": 5.0
+    "gf_isom_": 4.0
+    "media_": 3.0
+  penalty_files:
+    - "utf8.c"
+    - "error.c"
+    - "os_config_init.c"
+  penalty_dirs:
+    - "test"
+    - "apps"
+    - "extra_lib"
+  penalty_funcs:
+    - "_del"
+    - "_dump"
+
+seeds:
+  formats:
+    mp4: "$HOME/Nemesis/seeds/gpac/mp4"
+    isom: "$HOME/Nemesis/seeds/gpac/mp4"
+  oss_fuzz_corpus: ""

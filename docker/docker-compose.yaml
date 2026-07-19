@@ -1,0 +1,58 @@
+# ============================================================
+# NEMESIS Docker Compose
+# ============================================================
+# Services:
+#   nemesis-engine  — main pipeline orchestrator
+#   nemesis-fuzzer  — AFL++ fuzzing worker (scalable)
+#
+# Usage:
+#   docker compose up nemesis-engine
+#   docker compose up --scale nemesis-fuzzer=4
+
+services:
+  nemesis-engine:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: nemesis-engine
+    command: ["run", "-t", "libarchive"]
+    environment:
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+      - NEMESIS_ENGINE__LOG_LEVEL=INFO
+      - NEMESIS_ENGINE__LOG_FORMAT=json
+    volumes:
+      # Mount target source code
+      - ${TARGET_SOURCE:-./targets}:/targets:ro
+      # Persist results and caches
+      - nemesis-results:/results
+      - nemesis-cache:/results/llm_cache
+    # AFL++ needs access to /dev/shm
+    shm_size: '2g'
+    # Pin to specific CPUs for stable fuzzing performance
+    cpuset: "0-3"
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+
+  nemesis-fuzzer:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    command: ["fuzz", "-t", "libarchive"]
+    environment:
+      - NEMESIS_ENGINE__LOG_LEVEL=INFO
+    volumes:
+      - ${TARGET_SOURCE:-./targets}:/targets:ro
+      - nemesis-results:/results
+    shm_size: '1g'
+    deploy:
+      replicas: 4
+      resources:
+        limits:
+          memory: 4G
+          cpus: '1'
+
+volumes:
+  nemesis-results:
+  nemesis-cache:

@@ -1,0 +1,1 @@
+user::rw-,user:root:rwx,group::r--,mask::rwx,other::r--

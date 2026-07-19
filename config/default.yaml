@@ -1,0 +1,164 @@
+# ============================================================
+# NEMESIS — Default Configuration
+# ============================================================
+# Override per-target with config/targets/<project>.yaml
+
+engine:
+  # Maximum self-healing feedback iterations before flagging for manual review
+  max_feedback_iterations: 3
+  # Minimum coverage increase (fraction) to consider a patch successful
+  coverage_threshold: 0.05
+  # Working directory for builds, findings, logs.
+  # IMPORTANT: Use a Linux ext4 path (not /mnt/c or OneDrive) — AFL++ writes
+  # thousands of small files and OneDrive/NTFS causes I/O errors.
+  work_dir: "~/nemesis_workspace"
+  # Log level: DEBUG, INFO, WARNING, ERROR
+  log_level: "INFO"
+  # Output format for logs: json, console
+  log_format: "console"
+
+llm:
+  # Two-Brain architecture: role-specific models via NVIDIA NIM
+  # Fix 147 (2026-05-09): upgraded to DeepSeek-V4 family. Pro for ARCHITECT
+  # (1M ctx, MoE, coding-tuned, no thinking — fast structured JSON output).
+  # Flash for DEBUGGER (284B MoE, thinking=high reasoning for repair).
+  # Rolled back 2026-05-09: DeepSeek-V4-Pro tripped circuit breaker on
+  # 22K-token harness prompts (timeout > 3min). Mistral-Small-4-119b is
+  # slower per-token but more reliable end-to-end. Keeping DeepSeek-V4-Flash
+  # for the debugger (smaller, faster) and as a fallback-chain entry.
+  architect:
+    name: "mistral-architect"
+    base_url: "https://integrate.api.nvidia.com/v1"
+    api_key_env: "NVIDIA_API_KEY"
+    model: "mistralai/mistral-small-4-119b-2603"
+    max_tokens: 16384
+    temperature: 0.2
+    enable_thinking: false
+    reasoning_budget: 0
+    context_budget_tokens: 30000
+    context_window: 256000
+    timeout: 180
+  debugger:
+    name: "gpt-oss-debugger"
+    base_url: "https://integrate.api.nvidia.com/v1"
+    api_key_env: "NVIDIA_API_KEY"
+    model: "openai/gpt-oss-120b"
+    max_tokens: 8192
+    temperature: 0.3
+    enable_thinking: false
+    reasoning_budget: 0
+    # gpt-oss-120b is fast on SMALL prompts but its default (high) reasoning
+    # HANGS on large planner/repair prompts (measured: high >5min, low ~37s on
+    # an 18K-token prompt). reasoning_effort=low keeps it well under the timeout.
+    reasoning_effort: "low"
+    timeout: 240
+  # One-shot per library — call quality dominates over latency, so use the strongest
+  # model the account has access to. Probed 2026-05-05 against integrate.api.nvidia.com.
+  onboarder:
+    name: "mistral-medium-onboarder"
+    base_url: "https://integrate.api.nvidia.com/v1"
+    api_key_env: "NVIDIA_API_KEY"
+    model: "mistralai/mistral-medium-3.5-128b"
+    max_tokens: 8192
+    temperature: 0.1
+    enable_thinking: false
+    reasoning_budget: 0
+    timeout: 600
+  # Provider chain — NVIDIA NIM (build.nvidia.com) is the PRIMARY backend.
+  # Order from a 2026-05-31 latency + JSON-mode benchmark on this account:
+  #   gpt-oss-120b      1.8s JSON / 4.9s codegen / reasoning — top all-rounder
+  #   qwen3.5-397b-a17b 2.2s JSON / 7.9s codegen — strong MoE
+  #   mistral-small-4   0.7s JSON / 5.8s codegen — fastest, proven
+  # Dropped from chain: deepseek-v4-flash (90s JSON timeout) and minimax-m2.7
+  # (emitted no code within budget). cerebras/groq/gemini stay as cross-vendor
+  # fallback for when the NVIDIA tier is rate-limited.
+  providers:
+    - name: "nvidia-gpt-oss-120b"
+      base_url: "https://integrate.api.nvidia.com/v1"
+      api_key_env: "NVIDIA_API_KEY"
+      model: "openai/gpt-oss-120b"
+      reasoning_effort: "low"   # else default reasoning hangs on large prompts
+    - name: "nvidia-qwen3.5-397b"
+      base_url: "https://integrate.api.nvidia.com/v1"
+      api_key_env: "NVIDIA_API_KEY"
+      model: "qwen/qwen3.5-397b-a17b"
+    - name: "nvidia-mistral-small-4"
+      base_url: "https://integrate.api.nvidia.com/v1"
+      api_key_env: "NVIDIA_API_KEY"
+      model: "mistralai/mistral-small-4-119b-2603"
+    - name: "cerebras"
+      base_url: "https://api.cerebras.ai/v1"
+      api_key_env: "CEREBRAS_API_KEY"
+      model: "qwen-3-235b-a22b-instruct-2507"
+    - name: "groq"
+      base_url: "https://api.groq.com/openai/v1"
+      api_key_env: "GROQ_API_KEY"
+      model: "llama-3.3-70b-versatile"
+    - name: "gemini"
+      base_url: "https://generativelanguage.googleapis.com/v1beta/openai"
+      api_key_env: "GOOGLE_AI_KEY"
+      model: "gemini-2.5-flash"
+  # Legacy fields (backward compat — used if providers list is empty)
+  provider: "groq"
+  model: "llama-3.3-70b-versatile"
+  fallback_model: "llama-3.1-8b-instant"
+  max_tokens: 4096
+  # Low temperature for deterministic, reproducible patches
+  temperature: 0.2
+  # Cache LLM responses to avoid redundant API calls (important for free tier RPD limits)
+  cache_enabled: true
+  cache_dir: "~/nemesis_workspace/llm_cache"
+  # Cost tracking
+  track_costs: true
+
+fuzzing:
+  fuzzer: "afl++"
+  # Pipeline strategy (DEFAULT): "harness" (Strategy A — no patches, smart harness
+  # generation) or "patch" (Strategy B — rsync to work_root + bypass-blocker patches)
+  strategy: "harness"
+  # Sanitizer: asan, msan, ubsan
+  sanitizer: "asan"
+  # Number of parallel fuzzer instances
+  instances: 4
+  # Mutation strategies for multi-instance setup
+  strategies:
+    - "havoc"
+    - "splice"
+    - "deterministic"
+    - "explore"
+  # Timeout per target (hours)
+  timeout_hours: 0.5
+  # AFL++ environment variables
+  afl_env:
+    AFL_AUTORESUME: "1"
+    AFL_SKIP_CPUFREQ: "1"
+    AFL_FAST_CAL: "1"
+
+symbolic:
+  solver: "z3"
+  # Z3 solver timeout per query (seconds)
+  timeout_seconds: 30
+  # Use angr for runtime constraint extraction (requires [angr] extra)
+  use_angr: false
+  # angr exploration timeout (seconds)
+  angr_timeout: 120
+
+introspector:
+  # OSS-Fuzz Introspector API base URL
+  api_url: "https://introspector.oss-fuzz.com/api"
+  # Coverage threshold — functions below this are candidates
+  coverage_threshold_pct: 50.0
+  # Prioritize functions with memory operations
+  prioritize_memory_ops: true
+  # Filename patterns (fnmatch) to exclude from local source scan
+  # Prevents NEMESIS harnesses from appearing as scan targets
+  exclude_files:
+    - "fuzz_*.c"
+  # Directory name components to exclude (matched against any part of the path)
+  exclude_dirs:
+    - "test"
+    - "contrib"
+    - "build"
+  # Enrich targets with per-function headers and existing harness info
+  enable_enrichment: true
+  enrichment_batch_size: 10

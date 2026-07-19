@@ -1,0 +1,1 @@
+user:65534:rwx,group:65534:rwx,other::r--,mask::rwx

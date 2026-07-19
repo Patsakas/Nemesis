@@ -1,0 +1,20 @@
+[
+  {
+    "id": "CVE-2020-35864",
+    "description": "An issue was discovered in the flatbuffers crate through 2020-04-11 for Rust. read_scalar (and read_scalar_at) can transmute values without unsafe blocks.",
+    "references": [
+      "https://rustsec.org/advisories/RUSTSEC-2020-0009.html",
+      "https://rustsec.org/advisories/RUSTSEC-2020-0009.html"
+    ],
+    "published": "2020-12-31T10:15:15.160"
+  },
+  {
+    "id": "CVE-2019-25004",
+    "description": "An issue was discovered in the flatbuffers crate before 0.6.1 for Rust. Arbitrary bytes can be reinterpreted as a bool, defeating soundness.",
+    "references": [
+      "https://rustsec.org/advisories/RUSTSEC-2019-0028.html",
+      "https://rustsec.org/advisories/RUSTSEC-2019-0028.html"
+    ],
+    "published": "2020-12-31T10:15:14.363"
+  }
+]

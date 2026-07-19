@@ -1,0 +1,72 @@
+Fix 138-140 + auto-onboarding hardening — rediscovers cJSON CVE-2023-53154 in 81s
+
+End-to-end validation of NEMESIS auto-onboarding against a never-tested library
+(cJSON v1.7.17, commit 87d8f09). After the suite of fixes below, NEMESIS produced
+a confirmed CWE-125 finding for CVE-2023-53154 in 81 seconds of AFL fuzzing on
+cJSON_ParseWithLength, with stack trace matching the upstream record (parse_string
+@ cJSON.c:786 -> parse_object -> parse_value -> cJSON_ParseWithLengthOpts).
+
+Onboarding (nemesis/onboard.py)
+  - Recursive CMakeLists walk + scoring picks the right add_library() target when
+    it lives in a subdir (libtiff/CMakeLists.txt, etc.); negative-lookahead regex
+    handles add_library(name source.def) without STATIC/SHARED keyword.
+  - find_package() walk extended to **/*.cmake (codec helpers) - fixes link_libs
+    starvation for libtiff (missed -lz, -ljpeg, -ljbig, -lzstd, -lwebp).
+  - library_name now prefixed with source_subdir -> resolves to libtiff/libtiff.a.
+  - link_libs filtered through `gcc -print-file-name` so missing dev packages
+    (libdeflate, libLerc) are dropped instead of breaking the build.
+  - Auto-emit ubsan_configure / coverage_configure with matching build_dirs;
+    enables source-line coverage (line_cov in harness.quality_score).
+  - Auto-link existing seeds/<format>/ corpora into seeds.formats based on
+    LLM-detected magic_bytes.
+  - ONBOARD_SYSTEM prompt: require terminal "Output ONLY valid JSON" mandate +
+    FORBIDDEN INTERNAL FUNCTIONS section + struct-callback pattern. Plus a
+    defensive injection in onboard.py if the model omits the JSON mandate.
+  - Mistral Medium 3.5 onboarder role wired into config/default.yaml + ModelRole.
+  - bonus_func_patterns auto-emitted by onboarder for recon scoring.
+
+Symbolic auto-fix layer (nemesis/symbolic/__init__.py)
+  - Fix 90 ext.: __AFL_LOOP(N) without while() now wrapped for both brace and
+    statement-form variants.
+  - Fix 138: strip __AFL_FUZZ_TESTCASE_BUF / _LEN = ... assignments (macros are
+    not l-values).
+  - Fix 139 (the killer): auto-rewrite Func(__AFL_FUZZ_TESTCASE_BUF, ...,
+    __AFL_FUZZ_TESTCASE_LEN, ...) parser calls to use a tightly-sized malloc'd
+    copy so ASAN redzones detect semantic over-reads. Without this, every
+    heap-buffer-over-read CVE is invisible to AFL because the AFL input lives
+    in a 1 MB static buffer where over-reads land in valid memory.
+
+Fuzzing & triage (nemesis/fuzzing/__init__.py)
+  - Per-AFL-run binary_snapshot + binary_debug_snapshot in findings/<run>/<func>/
+    so triage's afl-cmin replays against the binary that produced the crashes
+    instead of the latest feedback-refined one.
+  - Strip -l<projlib> from harness compile_flags in symbolic.builder (LLM
+    hallucinations of -ltiff broke the linker since libtiff.so is not installed).
+  - Pre-validation (Fix 107): keep seeds whose standalone replay surfaces a
+    sanitizer marker - those are confirmed bug triggers and AFL should replay
+    them on first iteration. Original behavior silently dropped them.
+  - Dictionary auto-extracts #define X <int> from public headers as LE byte
+    sequences (411 tokens for libtiff, 16 for cJSON).
+  - Seed-command allowlist broadened (cp/mv/convert/seq/for/...) with denylist
+    on dangerous patterns - unblocks LLM-generated seed synthesis.
+  - Fix 140: CWE classifier reads ASAN's "READ of size N" / "WRITE of size N"
+    line and maps heap-buffer-overflow READs to CWE-125 (Out-of-bounds Read)
+    instead of CWE-122. Matches CVE-2023-53154's official classification.
+
+Pipeline (nemesis/pipeline.py)
+  - _auto_discover_targets skips Introspector candidates whose function name
+    is absent from the local source - prevents promotion of post-fork APIs
+    (TIFFOpenW added after libtiff 4.3.0) that fail compile.
+
+Neural (nemesis/neural/__init__.py)
+  - api_decls cap raised 40 -> 250 (libtiff has 193 public externs; the old cap
+    starved the LLM and triggered hallucinations of internal helpers).
+  - <api_declarations> directive strengthened: any function not listed is
+    INTERNAL/PRIVATE and will fail to link, even if it appears in the source.
+
+Configs / data
+  - config/targets/cjson.yaml: auto-generated for the backtest, kept for
+    reproducibility.
+  - findings.yaml: appended the cJSON CVE-2023-53154 rediscovery entry.
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>

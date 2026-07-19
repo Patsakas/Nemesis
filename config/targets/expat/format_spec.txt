@@ -1,0 +1,56 @@
+XML document format (as parsed by expat)
+
+Top-level layout:
+- Optional byte-order mark (BOM): 0xEF 0xBB 0xBF (UTF-8), 0xFF 0xFE (UTF-16LE), or 0xFE 0xFF (UTF-16BE) — 2–3 bytes, fixed.
+- Optional XML declaration: <?xml version="1.0" encoding="..." standalone="..."?> — ASCII, variable length, terminated by ?>.
+- Optional DOCTYPE / DTD subset (CRITICAL — populates expat's internal scaffold tree):
+    <!DOCTYPE root [
+      <!ELEMENT name (content_model)>
+      <!ELEMENT name2 (...)>
+      <!ENTITY ent_name "value">
+      <!ATTLIST name attr_name CDATA "default">
+    ]>
+  Where `content_model` is either `EMPTY`, `ANY`, `(#PCDATA)`, a name reference,
+  or a parenthesised composition: `(a, b, c)` (sequence), `(a | b | c)` (choice),
+  `a+` `a*` `a?` (cardinality). Crucially, parentheses can be NESTED ARBITRARILY
+  DEEP: `(((((((((b))))))))))` is valid XML 1.0 and produces a deeply nested
+  XML_Content tree internally. Examples seedgen MUST emit:
+    <!DOCTYPE r [<!ELEMENT r (((((((((b))))))))) >]><r/>
+    <!DOCTYPE r [<!ELEMENT r (((a|b)|(c|d))|((e|f)|(g|h)))>]><r/>
+    <!DOCTYPE r [<!ELEMENT r ((a,b),(c,d),(e,f),(g,h)+)*>]><r/>
+- Root element and nested content: <root>...</root> — ASCII/UTF-8/UTF-16, variable length.
+
+Structurally meaningful fields:
+- XML declaration fields (if present):
+  * version: ASCII string (e.g., "1.0" or "1.1"), quoted, 5–7 bytes typical.
+  * encoding: ASCII string (e.g., "UTF-8", "UTF-16"), quoted, 5–10 bytes typical. Must match actual encoding.
+  * standalone: "yes" or "no" or omitted, quoted if present, 2–4 bytes.
+- Element tags: <tag> or </tag> — ASCII names, 1–N bytes, enclosed in < and >. Opening tags may include attributes.
+- Attributes: name="value" or name='value' — ASCII names/values, variable length. Values must be properly quoted and escaped.
+- Text content: raw character data between tags, variable length. May include escaped entities (&amp;, &lt;, etc.).
+- Comments: <!-- ... --> — ASCII, variable length, terminated by -->.
+- CDATA sections: <![CDATA[...]]> — raw bytes, variable length, terminated by ]]>.
+- Processing instructions: <?target data?> — ASCII, variable length, terminated by ?>.
+
+DTD scaffold geometry (matters for build_node / build_model recursion):
+- Each `(...)` group in an `<!ELEMENT>` content model becomes one XML_Content
+  node internally. `(a)` = 2 nodes (group + child). `((a))` = 3 nodes. Each
+  level of nesting adds one frame to build_node's recursion. Triggering deep
+  recursion needs ~20–500 nesting levels (input size cap permitting).
+- Mutator must INSERT extra `(` `)` pairs into existing ELEMENT content models
+  to grow scaffold depth, AND emit fresh `<!ELEMENT>` declarations so that
+  there is at least one to parse.
+
+Mutator strategy:
+- Preserve framing: always keep angle brackets (<, >) and quote delimiters (" or ') balanced and in place.
+- Target version string: flip between "1.0" and "1.1", or inject invalid versions like "99.0" or "0.0".
+- Target encoding: flip between valid encodings (UTF-8, UTF-16LE, UTF-16BE) or inject invalid ones (e.g., "ASCII-X").
+- Target standalone: flip between "yes", "no", or omit entirely.
+- Target tag names: replace with valid XML names (e.g., "root", "a", "x1") or invalid ones (e.g., "1a", "a b", "a<b").
+- Target attribute names/values: replace with valid strings or inject edge cases (empty, very long, or special chars like <, >, &).
+- Target text content: inject UTF-8 multi-byte sequences, overlong encodings, or invalid byte sequences (e.g., 0xFF in UTF-8).
+- Target CDATA: inject raw bytes including nulls, control chars, or sequences that could trigger buffer issues.
+- DO NOT break well-formedness of structural delimiters (e.g., do not corrupt < or > in tags).
+- DO ensure that mutations in quoted strings or CDATA do not introduce unescaped quotes or ]]> sequences that would prematurely terminate the field.
+
+PER-MUTATION COST: keep each mutation tiny — at most ~16 bytes of write. AFL's havoc/cmplog will compose larger runs across iterations.

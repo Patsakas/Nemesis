@@ -1,0 +1,4 @@
+<?xml version="1.0"?>
+<ns:root xmlns:ns="http://example.com" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <ns:child>data</ns:child>
+</ns:root>

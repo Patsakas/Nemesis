@@ -1,0 +1,47 @@
+Standard MIDI File (SMF) format layout:
+
+Top-level file structure:
+- Header chunk (14 bytes, fixed):
+  - Chunk type: "MThd" (4 bytes ASCII)
+  - Length: 6 (4 bytes BE, always 0x00000006)
+  - Format type (2 bytes BE): 0 = single track, 1 = multi-track, 2 = multi-song
+  - Number of tracks (2 bytes BE)
+  - Division (2 bytes BE): bits 15-14 = 0 (ticks per quarter note), or 1 (SMPTE frames); if 0, bits 13-0 = ticks per quarter note
+
+- Track chunks (variable count, one per track):
+  - Chunk type: "MTrk" (4 bytes ASCII)
+  - Length: N (4 bytes BE, length of track data in bytes)
+  - Track data: N bytes of MIDI events (variable-length)
+
+MIDI event encoding in track data:
+- Delta time: variable-length quantity (VLQ) encoding (1-4 bytes, MSB=1 for continuation, MSB=0 for last byte)
+- Event type: 1 byte (status byte) or implied via running status (omitted if same as previous)
+  - Status byte: bits 7-4 = command (0x8-0xF for channel messages, 0xF for system messages), bits 3-0 = channel (0-15)
+  - System messages: 0xF0 (SysEx start), 0xF7 (SysEx continuation), 0xFF (meta-events)
+- Meta-events (0xFF status byte):
+  - Type: 1 byte (0x00-0x7F, e.g., 0x2F = End of Track, 0x51 = Tempo Change)
+  - Length: VLQ (1-4 bytes)
+  - Data: length bytes (e.g., Tempo Change: 3 bytes = microseconds per quarter note, BE)
+
+Structurally meaningful fields:
+- Header chunk: format type, track count, division (PPQN or SMPTE)
+- Track chunks: length field (must match actual track data size)
+- Delta times: VLQ values (must be valid VLQ, non-zero for non-EOT events)
+- Status bytes: command/channel fields (must be valid MIDI commands)
+- Meta-events: type byte (must be valid meta-event type), length VLQ, data (e.g., Tempo Change must be 3 bytes)
+- End of Track (0xFF 0x2F 0x00) must terminate each track
+
+Mutator strategy:
+- Preserve header chunk type ("MThd"), length (6), and chunk framing
+- Target header format type (flip between 0/1/2, or invalid values like 3)
+- Target track count (overflow-prone: 0, 1, 65535, or invalid like 65536)
+- Target division (PPQN: 0, 1, 32768, or invalid like 32769; SMPTE: set bits 15-14 to 1)
+- Preserve track chunk type ("MTrk") and recompute length field after mutations
+- Target delta times: flip VLQ bytes (ensure valid VLQ encoding, e.g., avoid leading zeros in continuation bytes)
+- Target status bytes: flip command/channel bits (e.g., change Note On to Note Off, or valid to invalid commands like 0x0-0x7)
+- Target meta-event types: flip to valid (0x2F, 0x51) or invalid (0x80+) values; ensure length VLQ is valid
+- For Tempo Change (0xFF 0x51), target the 3-byte microseconds value (overflow-prone: 0, 500000, 16777215)
+- Ensure End of Track (0xFF 0x2F 0x00) is present at the end of each track; if mutated, re-add it
+- DO NOT break VLQ encoding or chunk length fields without recomputing them
+
+PER-MUTATION COST: keep each mutation tiny — at most ~16 bytes of write. AFL's havoc/cmplog will compose larger runs across iterations.

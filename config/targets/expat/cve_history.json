@@ -1,0 +1,32 @@
+[
+  {
+    "id": "CVE-2025-59375",
+    "description": "libexpat in Expat before 2.7.2 allows attackers to trigger large dynamic memory allocations via a small document that is submitted for parsing.",
+    "references": [
+      "https://github.com/libexpat/libexpat/issues/1018",
+      "https://github.com/libexpat/libexpat/pull/1034",
+      "https://github.com/libexpat/libexpat/blob/676a4c531ec768732fac215da9730b5f50fbd2bf/expat/Changes#L45-L74"
+    ],
+    "published": "2025-09-15T03:15:40.920"
+  },
+  {
+    "id": "CVE-2022-25315",
+    "description": "In Expat (aka libexpat) before 2.4.5, there is an integer overflow in storeRawNames.",
+    "references": [
+      "https://github.com/libexpat/libexpat/pull/559",
+      "https://github.com/libexpat/libexpat/pull/559",
+      "http://www.openwall.com/lists/oss-security/2022/02/19/1"
+    ],
+    "published": "2022-02-18T05:15:08.237"
+  },
+  {
+    "id": "CVE-2022-25314",
+    "description": "In Expat (aka libexpat) before 2.4.5, there is an integer overflow in copyString.",
+    "references": [
+      "https://github.com/libexpat/libexpat/pull/560",
+      "https://github.com/libexpat/libexpat/pull/560",
+      "http://www.openwall.com/lists/oss-security/2022/02/19/1"
+    ],
+    "published": "2022-02-18T05:15:08.187"
+  }
+]

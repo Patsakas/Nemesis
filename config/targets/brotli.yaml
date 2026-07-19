@@ -1,0 +1,779 @@
+# ============================================================
+# NEMESIS — Brotli target configuration
+# ============================================================
+# Google Brotli: compression library (OT1 in Google VRP)
+# OSS-Fuzz only covers BrotliDecoderDecompressStream (1 target).
+# Attack surface: encoder (never fuzzed), dictionary APIs, one-shot decoder.
+
+fuzzing:
+  timeout_hours: 0.25  # 15 min per target for scan mode
+  # DEEP FUZZ CONFIGS (uncomment desired profile):
+  #
+  # Profile A: 24h campaign, 3 targets × 8h each
+  # timeout_hours: 8.0
+  # scan_budget_hours: 24.0
+  # per_target_max_minutes: 480
+  #
+  # Profile B: 12h scan, 6 targets × 2h each
+  # timeout_hours: 2.0
+  # scan_budget_hours: 12.0
+  # per_target_max_minutes: 120
+  #
+  # Profile C: single target 24h deep fuzz
+  # timeout_hours: 24.0
+  # per_target_max_minutes: 1440
+  #
+  # Custom mutator: structure-aware mutations for brotli encoder input format
+  # (understands quality byte + lgwin byte + data layout)
+  # Uncomment to enable:
+  # custom_mutator_source: "nemesis/templates/afl_custom_mutator_brotli.c"
+
+target:
+  name: "brotli"
+  oss_fuzz_project: "brotli"
+  source_root: "$HOME/brotli_clean"
+  work_root: "$HOME/brotli_work"
+  build_dir: "$HOME/brotli_work/build_fuzz"
+  debug_build_dir: "$HOME/brotli_clean/build_debug"
+  build:
+    configure: >
+      rm -f CMakeCache.txt &&
+      CC=afl-clang-fast CXX=afl-clang-fast++
+      cmake ..
+      -DCMAKE_C_COMPILER=afl-clang-fast
+      -DCMAKE_CXX_COMPILER=afl-clang-fast++
+      -DCMAKE_BUILD_TYPE=Debug
+      -DCMAKE_C_FLAGS="-g -fsanitize=address,undefined,pointer-overflow -fno-sanitize-recover=all -Wno-error -Wno-unused-variable -Wno-unused-parameter -Wno-uninitialized -Wno-deprecated-declarations -DBROTLI_EXPERIMENTAL=1"
+      -DBUILD_SHARED_LIBS=OFF
+      -DBROTLI_BUILD_TOOLS=OFF
+      -DBROTLI_DISABLE_TESTS=ON
+    make: "make -j$(nproc)"
+    debug_configure: >
+      rm -f CMakeCache.txt &&
+      CC=clang CXX=clang++
+      cmake ..
+      -DCMAKE_C_COMPILER=clang
+      -DCMAKE_CXX_COMPILER=clang++
+      -DCMAKE_BUILD_TYPE=Debug
+      -DCMAKE_C_FLAGS="-g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -Wno-error -Wno-unused-variable -Wno-unused-parameter -Wno-uninitialized -Wno-deprecated-declarations -DBROTLI_EXPERIMENTAL=1"
+      -DBUILD_SHARED_LIBS=OFF
+      -DBROTLI_BUILD_TOOLS=OFF
+      -DBROTLI_DISABLE_TESTS=ON
+    debug_make: "make -j$(nproc)"
+    ubsan_configure: >
+      rm -f CMakeCache.txt &&
+      CC=clang CXX=clang++
+      cmake ..
+      -DCMAKE_C_COMPILER=clang
+      -DCMAKE_CXX_COMPILER=clang++
+      -DCMAKE_BUILD_TYPE=Debug
+      -DCMAKE_C_FLAGS="-g -O1 -fsanitize=undefined,pointer-overflow -fno-sanitize-recover=all -fno-omit-frame-pointer -Wno-error -Wno-unused-variable -Wno-unused-parameter -Wno-uninitialized -Wno-deprecated-declarations -DBROTLI_EXPERIMENTAL=1"
+      -DBUILD_SHARED_LIBS=OFF
+      -DBROTLI_BUILD_TOOLS=OFF
+      -DBROTLI_DISABLE_TESTS=ON
+    ubsan_make: "make -j$(nproc)"
+    coverage_configure: >
+      rm -f CMakeCache.txt &&
+      CC=clang CXX=clang++
+      cmake ..
+      -DCMAKE_C_COMPILER=clang
+      -DCMAKE_CXX_COMPILER=clang++
+      -DCMAKE_BUILD_TYPE=Debug
+      -DCMAKE_C_FLAGS="-g -O1 -fprofile-instr-generate -fcoverage-mapping -Wno-error -Wno-unused-variable -Wno-unused-parameter -Wno-uninitialized -Wno-deprecated-declarations -DBROTLI_EXPERIMENTAL=1"
+      -DBUILD_SHARED_LIBS=OFF
+      -DBROTLI_BUILD_TOOLS=OFF
+      -DBROTLI_DISABLE_TESTS=ON
+    coverage_make: "make -j$(nproc)"
+  ubsan_build_dir: "$HOME/brotli_clean/build_ubsan"
+  coverage_build_dir: "$HOME/brotli_clean/build_coverage"
+  # CLI tool for crash reproduction
+  repro_binary: "brotli"
+  repro_args: ["-d", "-f"]  # decompress, force overwrite
+  pinned_funcs:
+    # === DICTIONARY: Encoder compound dict (public API → exercises CreatePreparedDictionary + Zopfli dict lookup) ===
+  - func_name: "BrotliEncoderPrepareDictionary"
+    file_path: "c/enc/encode.c"
+    has_memory_ops: true
+    has_pointer_arith: true
+    force_no_blocker: true
+    needed_headers: ["brotli/encode.h", "brotli/shared_dictionary.h"]
+    harness_hint: |
+      COMPOUND DICTIONARY ENCODER HARNESS:
+      Split fuzz input: first 2 bytes = dict_size (uint16 LE, capped at 32768),
+      next dict_size bytes = dictionary data, remaining bytes = data to compress.
+
+      BrotliEncoderPreparedDictionary *pd = BrotliEncoderPrepareDictionary(
+          BROTLI_SHARED_DICTIONARY_RAW, dict_size, dict_data,
+          BROTLI_MAX_QUALITY, NULL, NULL, NULL);
+      if (!pd) { continue; }
+
+      BrotliEncoderState *state = BrotliEncoderCreateInstance(NULL, NULL, NULL);
+      BrotliEncoderSetParameter(state, BROTLI_PARAM_QUALITY, 10 + (buf[2] % 2));
+      BrotliEncoderSetParameter(state, BROTLI_PARAM_LGWIN, 16);
+      BrotliEncoderAttachPreparedDictionary(state, pd);
+
+      Compress the remaining data with BrotliEncoderCompressStream + BROTLI_OPERATION_FINISH.
+      Cleanup: BrotliEncoderDestroyInstance(state); BrotliEncoderDestroyPreparedDictionary(pd);
+
+      IMPORTANT: Quality MUST be 10 or 11 (Zopfli path) to exercise compound dict lookup.
+    # === DICTIONARY: Internal hash table construction (direct call) ===
+  - func_name: "CreatePreparedDictionary"
+    file_path: "c/enc/compound_dictionary.c"
+    has_memory_ops: true
+    has_pointer_arith: true
+    direct_internal: true
+    force_no_blocker: true
+    needed_headers: ["brotli/shared_dictionary.h"]
+    harness_hint: |
+      Direct call to internal dictionary hash table constructor.
+      Initialize MemoryManager: BrotliInitMemoryManager(&m, NULL, NULL, NULL)
+      Call: CreatePreparedDictionary(&m, buf, len) where buf/len is the fuzz input.
+      Check result for NULL. If non-NULL: DestroyPreparedDictionary(&m, result).
+      Cleanup: BrotliWipeOutMemoryManager(&m).
+      Cap len at 256KB to avoid OOM.
+    # === DICTIONARY: Decoder with fuzz-controlled dictionary ===
+  - func_name: "BrotliSharedDictionaryAttach"
+    file_path: "c/common/shared_dictionary.c"
+    has_memory_ops: true
+    has_pointer_arith: true
+    force_no_blocker: true
+    needed_headers: ["brotli/shared_dictionary.h"]
+    harness_hint: |
+      SERIALIZED DICTIONARY PARSER:
+      This exercises the complex binary parser behind BROTLI_EXPERIMENTAL.
+      Create: BrotliSharedDictionary *dict = BrotliSharedDictionaryCreateInstance(NULL, NULL, NULL);
+      Attach with SERIALIZED type: BrotliSharedDictionaryAttach(dict,
+          BROTLI_SHARED_DICTIONARY_SERIALIZED, len, buf);
+      Then ALSO try RAW type: BrotliSharedDictionaryAttach(dict,
+          BROTLI_SHARED_DICTIONARY_RAW, len, buf);
+      Cleanup: BrotliSharedDictionaryDestroyInstance(dict);
+      NOTE: SERIALIZED requires magic bytes 0x91 0x00 — AFL will discover this.
+    # === ENCODER: Quality 0 (fast fragment path) ===
+  - func_name: "BrotliCompressFragmentFast"
+    file_path: "c/enc/compress_fragment.c"
+    has_memory_ops: true
+    has_pointer_arith: true
+    direct_internal: true    # Fix 123: call directly via internal headers
+    force_no_blocker: true
+      # Fix 136: storage_ix is the bit-level write cursor; the storage buffer
+      # was sized 2*input_size + 502 bytes per Fix 131 rules. If the encoder
+      # advances the cursor past 8*(2*input_size + 502) bits, it has written
+      # past the buffer it was given — silent OOB write.
+    output_invariants:
+    - "(storage_ix >> 3) <= (size_t)(2 * input_size + 502)"
+    # === ENCODER: Quality 1 (two-pass fragment path) ===
+  - func_name: "BrotliCompressFragmentTwoPass"
+    file_path: "c/enc/compress_fragment_two_pass.c"
+    has_memory_ops: true
+    has_pointer_arith: true
+    direct_internal: true    # Fix 123: call directly via internal headers
+    force_no_blocker: true
+      # Fix 136: storage buffer for two-pass is 2*input_size + 503 bytes.
+    output_invariants:
+    - "(storage_ix >> 3) <= (size_t)(2 * input_size + 503)"
+    # === ENCODER: Quality 2-9 (hash matching + backward references) ===
+  - func_name: "BrotliCreateBackwardReferences"
+    file_path: "c/enc/backward_references.c"
+    has_memory_ops: true
+    has_pointer_arith: true
+    direct_internal: true    # Fix 123: call directly via internal headers
+    force_no_blocker: true
+    # === ENCODER: Quality 10-11 (Zopfli optimal parsing — slowest, most complex) ===
+  - func_name: "BrotliZopfliComputeShortestPath"
+    file_path: "c/enc/backward_references_hq.c"
+    has_memory_ops: true
+    has_pointer_arith: true
+    direct_internal: true    # Fix 123: call directly via internal headers
+    force_no_blocker: true
+    # === ENCODER: Huffman + bitstream (all qualities) ===
+  - func_name: "BrotliStoreMetaBlock"
+    file_path: "c/enc/brotli_bit_stream.c"
+    has_memory_ops: true
+    has_pointer_arith: true
+    direct_internal: true    # Fix 123: call directly via internal headers
+    force_no_blocker: true
+    # === ENCODER: Block splitting (quality >= 2) ===
+  - func_name: "BrotliSplitBlock"
+    file_path: "c/enc/block_splitter.c"
+    has_memory_ops: true
+    has_pointer_arith: true
+    direct_internal: true    # Fix 123: call directly via internal headers
+    force_no_blocker: true
+    # === ENCODER: Metablock construction ===
+  - func_name: "BrotliBuildMetaBlock"
+    file_path: "c/enc/metablock.c"
+    has_memory_ops: true
+    has_pointer_arith: true
+    direct_internal: true    # Fix 123: call directly via internal headers
+    force_no_blocker: true
+    # === ENCODER: One-shot API (different code path from streaming) ===
+  - func_name: "BrotliEncoderCompress"
+    file_path: "c/enc/encode.c"
+    has_memory_ops: true
+    has_pointer_arith: true
+    harness_hint: "One-shot API: BrotliEncoderCompress(quality, lgwin, BROTLI_MODE_GENERIC, len, buf, &out_size, out_buf). Derive quality=buf[0]%12, lgwin=10+buf[1]%15. Cap input at 128KB, output buffer = BrotliEncoderMaxCompressedSize(len)."
+      # Fix 136: encoder must respect its self-declared upper bound on output size.
+      # Violating this means the encoder wrote past the buffer it told the caller
+      # was sufficient — heap corruption hidden behind a logical contract.
+    output_invariants:
+    - "encoded_size <= BrotliEncoderMaxCompressedSize(input_size)"
+    # === ENCODER: Streaming entry point (covers all quality paths) ===
+  - func_name: "BrotliEncoderCompressStream"
+    file_path: "c/enc/encode.c"
+    has_memory_ops: true
+    has_pointer_arith: true
+    harness_hint: "Streaming encoder: create instance, set quality from buf[0]%12 and lgwin from 10+buf[1]%15, compress buf[2:] with BROTLI_OPERATION_FINISH. Drain output with BrotliEncoderHasMoreOutput loop."
+    # === ENCODER: Round-trip verification (logic bug detection) ===
+    # Fix 135: differential_oracle flag drives a generic round-trip prompt block
+    # so the LLM produces an encode→decode + memcmp + abort harness even when
+    # it ignores the inline harness_hint string.
+  - func_name: "BrotliEncoderCompress_RoundTrip"
+    file_path: "c/enc/encode.c"
+    has_memory_ops: true
+    has_pointer_arith: true
+    indirect_reach: true
+    differential_oracle: true
+    harness_hint: "ROUND-TRIP VERIFICATION: compress buf[2:] with quality=buf[0]%12, lgwin=10+buf[1]%15 via BrotliEncoderCompress, then decompress output with BrotliDecoderDecompress and assert(memcmp(original, decoded, len)==0). Any mismatch = abort() = encoder bug. Cap input at 64KB."
+    # ── Decoder targets (Introspector 2026-05-10): public API, 0% existing
+    # fuzz coverage despite high complexity. The OSS-Fuzz brotli project only
+    # fuzzes BrotliDecoderDecompressStream; the one-shot decoder + dictionary
+    # attach paths are completely unfuzzed. Each is a 0-cov public API on a
+    # tier-OT1 VRP target — direct attacker-controlled buffers.
+  - func_name: "BrotliDecoderDecompress"
+    file_path: "c/dec/decode.c"
+    has_memory_ops: true
+    has_pointer_arith: true
+      # Fix 156: highest pin priority — Introspector ranks this as complexity
+      # 819, public API, 0% existing fuzz coverage. Run FIRST in any
+      # `--max-targets N` selection regardless of other pins.
+    priority_score: 250.0
+    harness_hint: "ONE-SHOT DECODER. Public API: BrotliDecoderResult BrotliDecoderDecompress(size_t encoded_size, const uint8_t* encoded_buf, size_t* decoded_size, uint8_t* decoded_buf). Pass entire fuzz buffer as encoded_buf with len=encoded_size. Pre-allocate a 4MB decoded_buf via malloc and set *decoded_size=4*1024*1024 before each call (decoder writes the actual size back). Free both buffers every iteration. No dictionary parameters — pure decompress path. Cap input at 256KB to avoid OOM artifacts."
+  - func_name: "BrotliDecoderTakeOutput"
+    file_path: "c/dec/decode.c"
+    has_memory_ops: true
+    indirect_reach: true
+      # Fix 156: 2nd-priority decoder target.
+    priority_score: 200.0
+    harness_hint: "Streaming decoder output extraction. Build a BrotliDecoderState via BrotliDecoderCreateInstance(NULL,NULL,NULL); feed the fuzz buffer with BrotliDecoderDecompressStream in chunks of buf[0]%64+1 bytes; after each chunk call BrotliDecoderTakeOutput(state, &out_size). Drain output until BROTLI_FALSE return. BrotliDecoderDestroyInstance every iteration. Cap input 64KB."
+  - func_name: "BrotliSafeReadBits32Slow"
+    file_path: "c/dec/bit_reader.c"
+    has_memory_ops: true
+    has_pointer_arith: true
+    direct_internal: true
+      # Fix 156: 3rd-priority — internal bit reader slow path.
+    priority_score: 180.0
+    harness_hint: "Internal bit reader slow path — 0-coverage edge case. Build BrotliBitReader via BrotliInitBitReader(&br, encoded_buf, encoded_size); call BrotliSafeReadBits32Slow(&br, n_bits=buf[0]%32+1, &val) in a loop until ReadBytes consumed > 4KB. The slow path is hit when the fast path's 64-bit alignment check fails — feed mis-aligned buffer offsets via BrotliBitReaderSetInput at varied positions."
+  # Fix 135: harness compile flags. asan_ubsan adds `-fno-sanitize-recover=undefined`
+  # so UBSan diagnostics (signed-int overflow, shift overflow, pointer-overflow)
+  # actually crash AFL's child instead of just logging. The library build already
+  # has `-fno-sanitize-recover=all` — this aligns the harness build with it.
+  sanitizer_profile: "asan_ubsan"
+  # Fix 136: post-fuzz LeakSanitizer pass on a sample of the AFL queue.
+  # Encoder targets allocate hash tables, dictionaries, ringbuffers — any
+  # missing destroy / wipeout call surfaces here as CWE-401.
+  leak_detection: true
+  leak_detection_sample_size: 30
+  # Library structure — brotli has 3 libs: common, dec, enc
+  # We link all 3 for full coverage (encoder harnesses need all)
+  source_subdir: "c"
+  include_subdir: "c/include"
+  library_name: "libbrotlidec.a"
+  # Link order matters: enc depends on common, dec depends on common
+  link_libs: "-L. -lbrotlienc -lbrotlidec -lbrotlicommon -lm"
+  harness_includes: ["brotli/decode.h", "brotli/encode.h", "brotli/shared_dictionary.h", "brotli/types.h"]
+  # Fix 123: internal header dirs for direct internal function harnessing
+  internal_include_dirs: ["c/enc", "c/dec", "c/common"]
+  harness_template: |
+    You are a fuzzing engineer generating AFL++ harnesses for the Brotli compression library.
+
+    CRITICAL RULES:
+    1. Use the public Brotli API: BrotliDecoderCreateInstance, BrotliEncoderCreateInstance, etc.
+    2. NEVER copy-paste struct definitions — use #include <brotli/decode.h> and <brotli/encode.h>
+    3. Do NOT call internal/static functions UNLESS <internal_declarations> is present in this prompt
+    4. Use AFL++ persistent mode (__AFL_LOOP) and deferred forkserver (__AFL_FUZZ_INIT)
+    5. Read input from __AFL_FUZZ_TESTCASE_BUF / __AFL_FUZZ_TESTCASE_LEN
+    6. ALWAYS include: stdio.h, stdlib.h, string.h, stdint.h, unistd.h, brotli/decode.h, brotli/encode.h
+    7. Clean up with BrotliDecoderDestroyInstance / BrotliEncoderDestroyInstance between iterations
+    8. Cap output buffer at 16MB to avoid OOM false positives
+
+    AVAILABLE APIs (choose based on target function location):
+
+    === DECODER (c/dec/) — input is brotli-compressed data ===
+    - BrotliDecoderCreateInstance(0, 0, 0) → state
+    - BrotliDecoderSetParameter(state, param, value)
+    - BrotliDecoderAttachDictionary(state, type, data_size, data)
+    - BrotliDecoderDecompress(encoded_size, encoded, &decoded_size, decoded)  [one-shot]
+    - BrotliDecoderDecompressStream(state, &avail_in, &next_in, &avail_out, &next_out, &total)  [streaming]
+    - BrotliDecoderDestroyInstance(state)
+
+    === ENCODER (c/enc/) — input is raw data to compress ===
+    - BrotliEncoderCreateInstance(0, 0, 0) → state
+    - BrotliEncoderSetParameter(state, BROTLI_PARAM_QUALITY, quality)
+    - BrotliEncoderSetParameter(state, BROTLI_PARAM_LGWIN, lgwin)
+    - BrotliEncoderSetParameter(state, BROTLI_PARAM_MODE, mode)
+    - BrotliEncoderCompress(quality, lgwin, mode, input_size, input, &encoded_size, encoded)  [one-shot]
+    - BrotliEncoderCompressStream(state, op, &avail_in, &next_in, &avail_out, &next_out, &total)  [streaming]
+    - BrotliEncoderDestroyInstance(state)
+
+    === SHARED DICTIONARY (c/common/) ===
+    - BrotliSharedDictionaryCreateInstance(0, 0, 0)
+    - BrotliSharedDictionaryAttach(dict, type, data_size, data)
+    - BrotliSharedDictionaryDestroyInstance(dict)
+
+    HARNESS VARIANTS BY TARGET LOCATION:
+
+    For c/dec/ targets (decoder): Use compressed .br data as input
+    ```c
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <string.h>
+    #include <stdint.h>
+    #include <brotli/decode.h>
+
+    __AFL_FUZZ_INIT();
+
+    int main(int argc, char **argv)
+    {
+    #ifdef __AFL_HAVE_MANUAL_CONTROL
+        __AFL_INIT();
+    #endif
+        unsigned char *buf = __AFL_FUZZ_TESTCASE_BUF;
+
+        while (__AFL_LOOP(10000)) {
+            int len = __AFL_FUZZ_TESTCASE_LEN;
+            if (len < 1 || len > 512 * 1024) continue;
+
+            /* Streaming decoder — exercises all internal decoder states */
+            BrotliDecoderState *state = BrotliDecoderCreateInstance(0, 0, 0);
+            if (!state) continue;
+
+            const uint8_t *next_in = buf;
+            size_t avail_in = (size_t)len;
+            size_t total_out = 0;
+            const size_t kOutLimit = 1 << 24;  /* 16MB cap */
+            uint8_t out_buf[4096];
+
+            BrotliDecoderResult result = BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT;
+            while (result == BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT) {
+                size_t avail_out = sizeof(out_buf);
+                uint8_t *next_out = out_buf;
+                result = BrotliDecoderDecompressStream(
+                    state, &avail_in, &next_in, &avail_out, &next_out, &total_out);
+                if (total_out > kOutLimit) break;
+            }
+
+            BrotliDecoderDestroyInstance(state);
+        }
+        return 0;
+    }
+    ```
+
+    For c/enc/ targets (encoder): Use RAW uncompressed data as input
+    ```c
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <string.h>
+    #include <stdint.h>
+    #include <brotli/encode.h>
+
+    __AFL_FUZZ_INIT();
+
+    int main(int argc, char **argv)
+    {
+    #ifdef __AFL_HAVE_MANUAL_CONTROL
+        __AFL_INIT();
+    #endif
+        unsigned char *buf = __AFL_FUZZ_TESTCASE_BUF;
+
+        while (__AFL_LOOP(10000)) {
+            int len = __AFL_FUZZ_TESTCASE_LEN;
+            if (len < 1 || len > 256 * 1024) continue;
+
+            /* Streaming encoder — fuzz input controls data being compressed */
+            BrotliEncoderState *state = BrotliEncoderCreateInstance(0, 0, 0);
+            if (!state) continue;
+
+            /* Use fuzz input to derive quality/window parameters for diversity */
+            int quality = (buf[0] % 12);  /* 0-11 */
+            int lgwin = 10 + (buf[0] >> 4);  /* 10-25 */
+            if (lgwin > BROTLI_MAX_WINDOW_BITS) lgwin = BROTLI_MAX_WINDOW_BITS;
+            BrotliEncoderSetParameter(state, BROTLI_PARAM_QUALITY, quality);
+            BrotliEncoderSetParameter(state, BROTLI_PARAM_LGWIN, lgwin);
+
+            const uint8_t *next_in = buf + 1;
+            size_t avail_in = (size_t)(len - 1);
+            uint8_t out_buf[4096];
+            size_t avail_out = sizeof(out_buf);
+            uint8_t *next_out = out_buf;
+            size_t total_out = 0;
+
+            /* Compress with FINISH to exercise full encoder pipeline */
+            BrotliEncoderCompressStream(state, BROTLI_OPERATION_FINISH,
+                &avail_in, &next_in, &avail_out, &next_out, &total_out);
+
+            /* Drain any remaining output */
+            while (BrotliEncoderHasMoreOutput(state)) {
+                avail_out = sizeof(out_buf);
+                next_out = out_buf;
+                BrotliEncoderCompressStream(state, BROTLI_OPERATION_FINISH,
+                    &avail_in, &next_in, &avail_out, &next_out, &total_out);
+            }
+
+            BrotliEncoderDestroyInstance(state);
+        }
+        return 0;
+    }
+    ```
+
+    For c/common/shared_dictionary.c targets: Use raw bytes as dictionary input
+    ```c
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <string.h>
+    #include <stdint.h>
+    #include <brotli/shared_dictionary.h>
+    #include <brotli/decode.h>
+
+    __AFL_FUZZ_INIT();
+
+    int main(int argc, char **argv)
+    {
+    #ifdef __AFL_HAVE_MANUAL_CONTROL
+        __AFL_INIT();
+    #endif
+        unsigned char *buf = __AFL_FUZZ_TESTCASE_BUF;
+
+        while (__AFL_LOOP(10000)) {
+            int len = __AFL_FUZZ_TESTCASE_LEN;
+            if (len < 4 || len > 256 * 1024) continue;
+
+            /* Split input: first half = dictionary, second half = compressed stream */
+            size_t dict_size = len / 2;
+            size_t stream_size = len - dict_size;
+            const uint8_t *dict_data = buf;
+            const uint8_t *stream_data = buf + dict_size;
+
+            BrotliDecoderState *state = BrotliDecoderCreateInstance(0, 0, 0);
+            if (!state) continue;
+
+            /* Attach fuzz-controlled dictionary data */
+            BrotliDecoderAttachDictionary(state, BROTLI_SHARED_DICTIONARY_RAW,
+                dict_size, dict_data);
+
+            /* Then try to decode with that dictionary */
+            const uint8_t *next_in = stream_data;
+            size_t avail_in = stream_size;
+            uint8_t out_buf[4096];
+            size_t total_out = 0;
+
+            BrotliDecoderResult result = BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT;
+            while (result == BROTLI_DECODER_RESULT_NEEDS_MORE_OUTPUT) {
+                size_t avail_out = sizeof(out_buf);
+                uint8_t *next_out = out_buf;
+                result = BrotliDecoderDecompressStream(
+                    state, &avail_in, &next_in, &avail_out, &next_out, &total_out);
+                if (total_out > (1 << 24)) break;
+            }
+
+            BrotliDecoderDestroyInstance(state);
+        }
+        return 0;
+    }
+    ```
+
+    For COMPOUND DICTIONARY targets (BrotliEncoderPrepareDictionary):
+    Exercises hash table construction from fuzz data + compound dict lookup in Zopfli.
+    ```c
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <string.h>
+    #include <stdint.h>
+    #include <brotli/encode.h>
+    #include <brotli/shared_dictionary.h>
+
+    __AFL_FUZZ_INIT();
+
+    int main(int argc, char **argv)
+    {
+    #ifdef __AFL_HAVE_MANUAL_CONTROL
+        __AFL_INIT();
+    #endif
+        unsigned char *buf = __AFL_FUZZ_TESTCASE_BUF;
+
+        while (__AFL_LOOP(10000)) {
+            int len = __AFL_FUZZ_TESTCASE_LEN;
+            if (len < 4 || len > 128 * 1024) continue;
+
+            /* Split: first 2 bytes = dict_size (LE uint16), then dict, then data */
+            uint16_t dict_size = (uint16_t)buf[0] | ((uint16_t)buf[1] << 8);
+            if (dict_size > 32768) dict_size = 32768;
+            if ((int)dict_size + 2 >= len) continue;
+            const uint8_t *dict_data = buf + 2;
+            const uint8_t *input = buf + 2 + dict_size;
+            size_t input_size = (size_t)(len - 2 - dict_size);
+            if (input_size < 1) continue;
+
+            /* Create prepared dictionary from fuzz-controlled data */
+            BrotliEncoderPreparedDictionary *pd = BrotliEncoderPrepareDictionary(
+                BROTLI_SHARED_DICTIONARY_RAW, dict_size, dict_data,
+                BROTLI_MAX_QUALITY, NULL, NULL, NULL);
+            if (!pd) continue;
+
+            /* Compress with compound dictionary at quality 10-11 (Zopfli path) */
+            BrotliEncoderState *state = BrotliEncoderCreateInstance(NULL, NULL, NULL);
+            if (!state) { BrotliEncoderDestroyPreparedDictionary(pd); continue; }
+            BrotliEncoderSetParameter(state, BROTLI_PARAM_QUALITY, 10 + (buf[2] % 2));
+            BrotliEncoderSetParameter(state, BROTLI_PARAM_LGWIN, 16);
+            BrotliEncoderAttachPreparedDictionary(state, pd);
+
+            const uint8_t *next_in = input;
+            size_t avail_in = input_size;
+            uint8_t out_buf[4096];
+            size_t avail_out = sizeof(out_buf);
+            uint8_t *next_out = out_buf;
+            size_t total_out = 0;
+
+            BrotliEncoderCompressStream(state, BROTLI_OPERATION_FINISH,
+                &avail_in, &next_in, &avail_out, &next_out, &total_out);
+            while (BrotliEncoderHasMoreOutput(state)) {
+                avail_out = sizeof(out_buf);
+                next_out = out_buf;
+                BrotliEncoderCompressStream(state, BROTLI_OPERATION_FINISH,
+                    &avail_in, &next_in, &avail_out, &next_out, &total_out);
+            }
+
+            BrotliEncoderDestroyInstance(state);
+            BrotliEncoderDestroyPreparedDictionary(pd);
+        }
+        return 0;
+    }
+    ```
+
+    For ROUND-TRIP VERIFICATION targets (c/enc/ when harness_hint says "ROUND-TRIP"):
+    This is the highest-value harness variant — any encoder/decoder inconsistency becomes a crash.
+    ```c
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <string.h>
+    #include <stdint.h>
+    #include <brotli/encode.h>
+    #include <brotli/decode.h>
+
+    __AFL_FUZZ_INIT();
+
+    int main(int argc, char **argv)
+    {
+    #ifdef __AFL_HAVE_MANUAL_CONTROL
+        __AFL_INIT();
+    #endif
+        unsigned char *buf = __AFL_FUZZ_TESTCASE_BUF;
+
+        while (__AFL_LOOP(10000)) {
+            int len = __AFL_FUZZ_TESTCASE_LEN;
+            if (len < 3 || len > 65536 + 2) continue;
+
+            /* Fuzz-derived parameters */
+            int quality = buf[0] % 12;  /* 0-11 */
+            int lgwin = 10 + buf[1] % 15; /* 10-24 */
+            if (lgwin > BROTLI_MAX_WINDOW_BITS) lgwin = BROTLI_MAX_WINDOW_BITS;
+            const uint8_t *input = buf + 2;
+            size_t input_size = (size_t)(len - 2);
+
+            /* Step 1: Compress */
+            size_t encoded_size = BrotliEncoderMaxCompressedSize(input_size);
+            if (encoded_size == 0) encoded_size = input_size + 1024;
+            uint8_t *encoded = (uint8_t *)malloc(encoded_size);
+            if (!encoded) continue;
+
+            int ok = BrotliEncoderCompress(quality, lgwin, BROTLI_MODE_GENERIC,
+                input_size, input, &encoded_size, encoded);
+            if (!ok) { free(encoded); continue; }
+
+            /* Step 2: Decompress */
+            size_t decoded_size = input_size + 1024;  /* generous buffer */
+            uint8_t *decoded = (uint8_t *)malloc(decoded_size);
+            if (!decoded) { free(encoded); continue; }
+
+            BrotliDecoderResult res = BrotliDecoderDecompress(
+                encoded_size, encoded, &decoded_size, decoded);
+
+            /* Step 3: ASSERT round-trip correctness */
+            if (res == BROTLI_DECODER_RESULT_SUCCESS) {
+                if (decoded_size != input_size ||
+                    memcmp(input, decoded, input_size) != 0) {
+                    /* Encoder/decoder mismatch — this IS a bug */
+                    abort();
+                }
+            }
+
+            free(decoded);
+            free(encoded);
+        }
+        return 0;
+    }
+    ```
+
+    FORBIDDEN PATTERNS:
+    - malloc(huge_number) without cap — causes OOM false positives
+    - No output size cap — decompression bombs trigger OOM
+    - Calling BrotliEncoderCompress with quality > 11 — undefined behavior
+    - Using static/internal functions directly (UNLESS <internal_declarations> is present)
+
+    DIRECT INTERNAL HARNESSING (Fix 123):
+    When <internal_declarations> is present, you MUST:
+    1. #include the internal header (e.g. "block_splitter.h", "metablock.h")
+    2. Call the target function DIRECTLY with constructed arguments from fuzz input
+    3. Allocate/initialize all struct parameters (use MemoryManager pattern or malloc+memset)
+    4. Do NOT use the public BrotliEncoder/Decoder API for these targets
+    5. Cap all allocations and use ASAN-safe patterns (check malloc return values)
+
+    CRITICAL BROTLI INTERNAL INITIALIZATION RULES (Fix 131):
+    These rules prevent harness bugs that cause false-positive crashes.
+    Violating ANY of them will produce NULL-pointer SEGVs or buffer overflows in the harness, NOT in brotli.
+
+    A. Hasher initialization — MUST follow this EXACT sequence:
+       Hasher hasher;
+       HasherInit(&hasher);                       // step 1: zero the struct
+       HasherSetup(&mgr, &params, &hasher,        // step 2: ALLOCATES hash table
+                   position, input_size, BROTLI_FALSE);
+       // NEVER skip HasherSetup — without it, hasher.common.extra[0/1] are NULL.
+       // HasherReset() does NOT replace HasherSetup() — it only clears counters.
+
+    B. dist_cache size — MUST be 16 entries, NOT 4:
+       int dist_cache[BROTLI_NUM_DISTANCE_SHORT_CODES];  // = 16
+       memset(dist_cache, 0, sizeof(dist_cache));
+       dist_cache[0] = 4; dist_cache[1] = 11; dist_cache[2] = 15; dist_cache[3] = 16;
+       // The encoder reads dist_cache[4..15] — using int dist_cache[4] causes stack overflow.
+
+    C. MemoryManager — initialize with:
+       MemoryManager mgr;
+       BrotliInitMemoryManager(&mgr, NULL, NULL, NULL);
+       // Clean up at end with: BrotliWipeOutMemoryManager(&mgr);
+
+    D. BrotliEncoderParams — initialize ALL fields:
+       BrotliEncoderParams params;
+       memset(&params, 0, sizeof(params));
+       params.mode = BROTLI_MODE_GENERIC;
+       params.quality = quality;   // from fuzz input: buf[0] % 12
+       params.lgwin = lgwin;       // from fuzz input: 10 + (buf[0] >> 4), capped at BROTLI_MAX_WINDOW_BITS
+       params.dist.alphabet_size_max = 544;
+       params.dist.alphabet_size_limit = 544;
+       params.dist.max_distance = ((size_t)1 << lgwin) - 16;
+       // Include "encoder_dict.h" and call:
+       BrotliInitSharedEncoderDictionary(&params.dictionary);
+
+    E. Buffer sizing rules (from caller code analysis):
+       - BrotliCompressFragmentTwoPass: storage_size = 2 * input_size + 503
+       - BrotliCompressFragmentFast: storage_size = 2 * input_size + 502
+       - ringbuffer_mask = (1 << lgwin) - 1  (must be power-of-2 minus 1)
+       - ZopfliNode array: (input_size + 1) elements
+
+    Output ONLY valid JSON with:
+    {
+      "target_func": "function_name",
+      "input_format": "brotli compressed stream / raw data for encoder / dictionary data",
+      "c_code": "complete C harness source code",
+      "seed_commands": ["shell commands to generate seed files"],
+      "compile_flags": "-g -O1 -fno-omit-frame-pointer",
+      "input_spec": {
+        "params": [
+          {"name": "quality", "offset": 0, "size": 1, "type": "uint8", "transform": "mod 12", "range": [0, 11]},
+          {"name": "lgwin", "offset": 1, "size": 1, "type": "uint8", "transform": "mod 15 + 10", "range": [10, 24]}
+        ],
+        "data_offset": 2,
+        "data_type": "raw",
+        "min_size": 3,
+        "max_size": 65538,
+        "interesting_sizes": [1024, 4096, 16384, 65536]
+      }
+    }
+
+    input_spec rules:
+    - List EVERY buf[] byte read as a param (name, offset, size, type).
+    - transform: the arithmetic applied (e.g., "mod 12", "mod 15 + 10", "" for identity).
+    - range: [min, max] of the POST-transform value the library sees.
+    - data_offset: first byte index where the variable-length payload starts.
+    - data_type: "raw" for encoder input, "compressed" for decoder input.
+    - For decoder-only harnesses (opaque compressed input), use params=[], data_type="compressed".
+  api_func_fixes: {}
+  magic_bytes:
+    # Brotli streams don't have a fixed magic header — first byte encodes WBITS
+    # but we can use sliding window size patterns
+    brotli_stream: []
+
+recon_scoring:
+  bonus_patterns:
+    "enc/": 8.0       # Encoder — NEVER fuzzed by OSS-Fuzz
+    "dec/": 3.0       # Decoder — partially fuzzed
+    "common/": 4.0    # Shared code — dictionary/transform
+  bonus_func_patterns:
+    # Encoder internals — highest value (never fuzzed)
+    "BrotliEncoder": 10.0
+    "BrotliCompress": 8.0
+    "CreateBackwardReferences": 8.0
+    "BrotliOptimizeHistograms": 7.0
+    "BrotliStoreMetaBlock": 7.0
+    "BrotliCreateHuffmanTree": 6.0
+    "HashInsert": 6.0
+    "FindLongestMatch": 6.0
+    # Dictionary/transform — interesting attack surface
+    "BrotliSharedDictionary": 7.0
+    "BrotliTransform": 5.0
+    "BrotliDecoderAttachDictionary": 7.0
+    "PreparedDictionary": 9.0
+    "AttachDictionary": 8.0
+    "SharedDictionary": 8.0
+    # Decoder internals that may have edge cases
+    "DecodeMetaBlockLength": 5.0
+    "ReadHuffmanCode": 5.0
+    "ProcessCommands": 4.0
+    "BrotliDecoderDecompress": 4.0  # one-shot path (different from streaming)
+  penalty_files:
+  - "static_dict_lut.c"      # Giant lookup table, no logic
+  - "dictionary.c"           # Static data
+  - "static_init.c"          # One-time init
+  penalty_dirs:
+  - "tools"
+  - "java"
+  - "python"
+  - "js"
+  - "go"
+  - "csharp"
+  - "research"
+  - "scripts"
+  - "docs"
+  - "tests"
+  - "fuzz"       # existing OSS-Fuzz target
+  penalty_funcs:
+  - "Version"
+  - "ErrorString"
+  - "GetErrorCode"
+  low_value_files:
+    "static_dict_lut.c": 9.0
+    "dictionary.c": 9.0
+    "context.c": 4.0
+
+seeds:
+  format_aliases:
+    encoder: "brotli_encoder"
+    compress: "brotli_encoder"
+    backward_references: "brotli_encoder"
+    hash: "brotli_encoder"
+    metablock: "brotli_encoder"
+    block_splitter: "brotli_encoder"
+    histogram: "brotli_encoder"
+    huffman: "brotli"
+    decode: "brotli"
+    dec: "brotli"
+    transform: "brotli"
+    dictionary: "brotli"
+    shared_dictionary: "brotli"
+  formats:
+    brotli: "$HOME/Nemesis/seeds/brotli"
+    brotli_encoder: "$HOME/Nemesis/seeds/brotli_encoder"
+  # Fix 115: Encoder/producer role gets plaintext seeds (not compressed .br files)
+  encoder_formats:
+    brotli_encoder: "$HOME/Nemesis/seeds/brotli_encoder"
+  encoder_subdirs: ["enc", "encode", "compress"]
+  brotli: "$HOME/Nemesis/seeds/brotli"
+  brotli_encoder: "$HOME/Nemesis/seeds/brotli_encoder"

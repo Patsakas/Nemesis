@@ -1,0 +1,43 @@
+File layout:
+8-byte fixed signature: \x89 P N G \r \n \x1A \n
+Chunk sequence (repeated until IEND):
+- 4-byte BE length (max 2^31-1)
+- 4-byte ASCII type tag (e.g., IHDR, PLTE, IDAT, IEND, gAMA, sRGB, tEXt, tIME)
+- <length> bytes of chunk data
+- 4-byte BE CRC32 (over type tag + data)
+
+Mandatory first chunk: IHDR (length = 13 bytes)
+- width: 4-byte BE
+- height: 4-byte BE
+- bit_depth: 1 byte (1,2,4,8,16)
+- color_type: 1 byte (0=gray, 2=RGB, 3=indexed, 4=gray+alpha, 6=RGBA)
+- compression: 1 byte (must be 0)
+- filter: 1 byte (must be 0)
+- interlace: 1 byte (0=none, 1=Adam7)
+
+Optional chunks (order-sensitive):
+- PLTE: palette, length = 3 * color_count (1-256), RGB888 entries
+- tRNS: transparency, length varies by color_type (e.g., 1 byte per palette entry for indexed)
+- gAMA: gamma, 4-byte BE integer
+- cHRM: chromaticities, 8x 4-byte BE integers
+- sRGB: rendering intent, 1 byte (0-3)
+- pHYs: pixel aspect, 9 bytes (2x 4-byte BE + 1 byte unit)
+- tIME: timestamp, 7 bytes (2-byte year, 1-byte month/day/hour/minute/second)
+- tEXt: text, null-separated keyword:text pairs
+
+Final chunk: IEND (length = 0, no data)
+
+Mutator strategy:
+- Preserve signature and IHDR framing (length, type, CRC structure).
+- Target IHDR width/height with boundary values (0, 1, max-1, max) and overflow-prone deltas.
+- Flip bit_depth through valid set {1,2,4,8,16} plus invalid edges (0, 3, 17, 255).
+- Flip color_type through valid {0,2,3,4,6} plus invalid edges (1,5,7,255).
+- Flip compression/filter to non-zero to break invariants.
+- Toggle interlace between 0 and 1, plus invalid (2-255).
+- For PLTE: mutate color_count (1-256) and RGB values; ensure length matches 3*color_count.
+- For tRNS: mutate alpha values (0-255) and ensure length consistency with color_type.
+- For IDAT: mutate deflate stream bytes (avoid breaking zlib header unless targeting decompressor).
+- Recompute CRC32 for any mutated chunk (type + data) to maintain structural validity.
+- Never corrupt chunk length fields unless explicitly targeting length-overflow paths.
+
+PER-MUTATION COST: keep each mutation tiny — at most ~16 bytes of write. AFL's havoc/cmplog will compose larger runs across iterations.

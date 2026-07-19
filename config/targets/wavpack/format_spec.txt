@@ -1,0 +1,52 @@
+WavPack file format (little-endian, chunked, CRC-armoured)
+
+Top-level file layout:
+- Optional RIFF header (legacy mode, 12 bytes):
+  <4-byte ASCII "RIFF"> <4-byte LE chunk size> <4-byte ASCII "WAVE">
+- Followed by WavPack blocks (each block is a chunk):
+  <WavpackHeader (32 bytes)> <variable-length packed audio data> [optional metadata chunks]
+
+WavpackHeader (32 bytes, little-endian):
+- ckID: 4 bytes (ASCII "wvpk" for .wv files)
+- ckSize: 4 bytes LE (size of block data + metadata, excluding header)
+- version: 2 bytes LE (stream version, e.g., 0x402–0x410)
+- block_index_u8: 1 byte (upper 8 bits of 40-bit block index)
+- total_samples_u8: 1 byte (upper 8 bits of 40-bit total samples)
+- total_samples: 4 bytes LE (lower 32 bits; 0xFFFFFFFF = unknown)
+- block_index: 4 bytes LE (lower 32 bits of block index)
+- block_samples: 4 bytes LE (samples in this block)
+- flags: 4 bytes LE (bitfield for mode, channels, data type, etc.)
+- crc: 4 bytes LE (CRC32 over header + data, computed with polynomial 0x04C11DB7)
+
+Structurally meaningful fields:
+- ckID: Must remain "wvpk" for valid blocks.
+- ckSize: Must match actual block data size (mutator must update after data changes).
+- version: Must stay within [0x402, 0x410] for compatibility.
+- block_index (40-bit): Sequential block counter; mutator may increment or corrupt.
+- total_samples (40-bit): Total samples in stream; 0xFFFFFFFF in lower 32 bits = unknown.
+- block_samples: Must be > 0; overflow-prone (target for mutations).
+- flags: Bitfield with critical mode bits:
+  - BYTES_STORED (0x3): 1–4 bytes/sample
+  - MONO_FLAG (0x4): Mono vs. stereo
+  - HYBRID_FLAG (0x8): Hybrid mode
+  - FLOAT_DATA (0x80): IEEE 32-bit float
+  - INT32_DATA (0x100): Extended int handling
+  - DSD_FLAG (0x80000000): 1-bit DSD PCM
+  - HAS_CHECKSUM (0x10000000): Trailing checksum present
+
+Metadata chunks (optional, follow block data):
+- Each metadata chunk starts with a 1-byte ID (bitfield: ID_UNIQUE, ID_OPTIONAL_DATA, etc.)
+- Size is either 1 byte (if ID_ODD_SIZE=0) or 2/4 bytes LE (if ID_LARGE=1).
+- Data follows immediately; no padding.
+
+Mutator strategy:
+- Preserve ckID ("wvpk") and RIFF header (if present).
+- Target block_samples with overflow-prone values (e.g., 0, max uint32, or near-boundary).
+- Flip flags bits through valid/invalid combinations (e.g., toggle MONO_FLAG, FLOAT_DATA).
+- Corrupt block_index or total_samples (40-bit) to test seek/validation logic.
+- Mutate version to edge cases (0x401, 0x411) or invalid values.
+- For metadata chunks: flip ID bits, corrupt sizes, or inject malformed chunks.
+- DO recompute crc after any header/data mutation (CRC32 over header + data).
+- If HAS_CHECKSUM flag is set, ensure trailing checksum is updated or corrupted.
+
+PER-MUTATION COST: keep each mutation tiny — at most ~16 bytes of write. AFL's havoc/cmplog will compose larger runs across iterations.

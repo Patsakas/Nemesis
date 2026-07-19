@@ -1,0 +1,1 @@
+default:user::rwx,default:group::r-x,default:other::r-x

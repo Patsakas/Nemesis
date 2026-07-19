@@ -1,0 +1,377 @@
+# ============================================================
+# NEMESIS — Draco target configuration
+# ============================================================
+# Google Draco: 3D mesh + point cloud compression library.
+# https://github.com/google/draco — Standard tier in Google OSS VRP.
+#
+# Why this target:
+#   - Heavy parsing surface (bit decoder, symbol decoder, edgebreaker
+#     mesh decoder, attribute decoder with custom types).
+#   - Less aggressively fuzzed than brotli — OSS-Fuzz coverage is
+#     moderate, leaving real surface for novel findings.
+#   - C++ codebase but the fuzz API is small and stable.
+#
+# One-time setup (user-side):
+#     git clone --depth=1 https://github.com/google/draco ~/draco_clean
+#     rsync -a --delete ~/draco_clean/ ~/draco_work/
+#
+# Then:
+#     nemesis run -t draco --scan --max-targets 6 --strategy harness
+
+fuzzing:
+  strategy: "harness"
+  timeout_hours: 0.25  # 15 min per target in scan mode
+  # Deep-fuzz profile (uncomment to use):
+  # timeout_hours: 8.0
+  # scan_budget_hours: 24.0
+  # per_target_max_minutes: 480
+
+target:
+  name: "draco"
+  oss_fuzz_project: "draco"
+  source_root: "$HOME/draco_clean"
+  work_root: "$HOME/draco_work"
+  build_dir: "$HOME/draco_work/build_fuzz"
+  debug_build_dir: "$HOME/draco_clean/build_debug"
+  ubsan_build_dir: "$HOME/draco_clean/build_ubsan"
+  coverage_build_dir: "$HOME/draco_clean/build_coverage"
+
+  build:
+    configure: >
+      rm -f CMakeCache.txt &&
+      CC=afl-clang-fast CXX=afl-clang-fast++
+      cmake ..
+      -DCMAKE_C_COMPILER=afl-clang-fast
+      -DCMAKE_CXX_COMPILER=afl-clang-fast++
+      -DCMAKE_BUILD_TYPE=Debug
+      -DCMAKE_CXX_FLAGS="-g -fsanitize=address,undefined,pointer-overflow -fno-sanitize-recover=all -Wno-error -Wno-unused-variable -Wno-unused-parameter -Wno-uninitialized -Wno-deprecated-declarations"
+      -DCMAKE_C_FLAGS="-g -fsanitize=address,undefined,pointer-overflow -fno-sanitize-recover=all -Wno-error -Wno-unused-variable -Wno-unused-parameter -Wno-uninitialized -Wno-deprecated-declarations"
+      -DBUILD_SHARED_LIBS=OFF
+      -DDRACO_TESTS=OFF
+      -DDRACO_JS_GLUE=OFF
+      -DDRACO_TRANSCODER_SUPPORTED=OFF
+    make: "make -j$(nproc) draco"
+    debug_configure: >
+      rm -f CMakeCache.txt &&
+      CC=clang CXX=clang++
+      cmake ..
+      -DCMAKE_C_COMPILER=clang
+      -DCMAKE_CXX_COMPILER=clang++
+      -DCMAKE_BUILD_TYPE=Debug
+      -DCMAKE_CXX_FLAGS="-g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -Wno-error -Wno-unused-variable -Wno-unused-parameter -Wno-uninitialized -Wno-deprecated-declarations"
+      -DCMAKE_C_FLAGS="-g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -Wno-error -Wno-unused-variable -Wno-unused-parameter -Wno-uninitialized -Wno-deprecated-declarations"
+      -DBUILD_SHARED_LIBS=OFF
+      -DDRACO_TESTS=OFF
+      -DDRACO_JS_GLUE=OFF
+      -DDRACO_TRANSCODER_SUPPORTED=OFF
+    debug_make: "make -j$(nproc) draco"
+    ubsan_configure: >
+      rm -f CMakeCache.txt &&
+      CC=clang CXX=clang++
+      cmake ..
+      -DCMAKE_C_COMPILER=clang
+      -DCMAKE_CXX_COMPILER=clang++
+      -DCMAKE_BUILD_TYPE=Debug
+      -DCMAKE_CXX_FLAGS="-g -O1 -fsanitize=undefined,pointer-overflow -fno-sanitize-recover=all -fno-omit-frame-pointer -Wno-error"
+      -DCMAKE_C_FLAGS="-g -O1 -fsanitize=undefined,pointer-overflow -fno-sanitize-recover=all -fno-omit-frame-pointer -Wno-error"
+      -DBUILD_SHARED_LIBS=OFF
+      -DDRACO_TESTS=OFF
+    ubsan_make: "make -j$(nproc) draco"
+    coverage_configure: >
+      rm -f CMakeCache.txt &&
+      CC=clang CXX=clang++
+      cmake ..
+      -DCMAKE_C_COMPILER=clang
+      -DCMAKE_CXX_COMPILER=clang++
+      -DCMAKE_BUILD_TYPE=Debug
+      -DCMAKE_CXX_FLAGS="-g -O1 -fprofile-instr-generate -fcoverage-mapping -Wno-error"
+      -DCMAKE_C_FLAGS="-g -O1 -fprofile-instr-generate -fcoverage-mapping -Wno-error"
+      -DBUILD_SHARED_LIBS=OFF
+      -DDRACO_TESTS=OFF
+    coverage_make: "make -j$(nproc) draco"
+
+  # Reproduction CLI: draco_decoder is the standalone binary built alongside
+  # libdraco.a. It accepts a .drc file and outputs a .ply mesh.
+  repro_binary: "draco_decoder"
+  repro_args: ["-i"]
+
+  # Source layout
+  source_subdir: "src"
+  include_subdir: "src"
+  library_name: "libdraco.a"
+  # Single static lib + libstdc++ for C++ runtime + libm for math.
+  # No external compression deps — draco vendors what it needs.
+  link_libs: "-L. -ldraco -lstdc++ -lm"
+
+  # Public C++ API headers — used by Fix 92 to inject real signatures into
+  # the prompt instead of letting the LLM hallucinate.
+  harness_includes:
+    - "draco/compression/decode.h"
+    - "draco/core/decoder_buffer.h"
+    - "draco/mesh/mesh.h"
+    - "draco/point_cloud/point_cloud.h"
+
+  # Internal include dirs — for direct_internal targets that need to call
+  # decoder building blocks directly (bit_decoder, symbol_decoder).
+  internal_include_dirs:
+    - "src/draco/compression/bit_coders"
+    - "src/draco/compression/entropy"
+    - "src/draco/compression/mesh"
+    - "src/draco/compression/attributes"
+
+  # Fix 135: harness compile flags
+  sanitizer_profile: "asan_ubsan"
+  # Fix 136: post-fuzz LeakSanitizer pass
+  leak_detection: true
+  leak_detection_sample_size: 30
+
+  pinned_funcs:
+    # === MAIN: One-shot mesh decode (largest attack surface) ===
+    - func_name: "DecodeMeshFromBuffer"
+      file_path: "src/draco/compression/decode.cc"
+      has_memory_ops: true
+      has_pointer_arith: true
+      force_no_blocker: true
+      needed_headers: ["draco/compression/decode.h", "draco/core/decoder_buffer.h"]
+      harness_hint: |
+        MESH DECODER HARNESS (C++):
+          draco::DecoderBuffer buffer;
+          buffer.Init(reinterpret_cast<const char*>(buf), len);
+          draco::Decoder decoder;
+          auto result = decoder.DecodeMeshFromBuffer(&buffer);
+          if (!result.ok()) continue;  // bad input, normal
+          auto mesh = std::move(result).value();
+          // mesh is a unique_ptr<Mesh> — destroyed on scope exit, no manual cleanup.
+
+        IMPORTANT: This is C++. Use afl-clang-fast++. Output filename should
+        end with .cc so cmake/clang treat it as C++.
+
+    # === MAIN: Point cloud decode (separate code path from mesh) ===
+    - func_name: "DecodePointCloudFromBuffer"
+      file_path: "src/draco/compression/decode.cc"
+      has_memory_ops: true
+      has_pointer_arith: true
+      force_no_blocker: true
+      needed_headers: ["draco/compression/decode.h"]
+      harness_hint: |
+        POINT CLOUD DECODER HARNESS:
+        Same shape as mesh harness, but call DecodePointCloudFromBuffer().
+        Exercises the point-cloud-specific attribute decoders.
+
+    # === MAIN: Format-detection entry point (cheap, but exercises header parser) ===
+    - func_name: "GetEncodedGeometryType"
+      file_path: "src/draco/compression/decode.cc"
+      has_memory_ops: true
+      has_pointer_arith: true
+      force_no_blocker: true
+      harness_hint: |
+        Just call decoder.GetEncodedGeometryType(&buffer) and discard result.
+        Validates that the header parser handles malformed magic / version
+        bytes without OOB read. Cap input at 64 KB.
+
+    # === INTERNAL: Edgebreaker mesh decoder (bug-prone topology decoder) ===
+    - func_name: "DecodeConnectivity"
+      file_path: "src/draco/compression/mesh/mesh_edgebreaker_decoder.cc"
+      has_memory_ops: true
+      has_pointer_arith: true
+      indirect_reach: true
+      force_no_blocker: true
+      harness_hint: |
+        Reach via the public Decoder::DecodeMeshFromBuffer path with quality
+        controlled by buf[0] (mesh method selector). Edgebreaker triggers when
+        the encoded stream uses kMeshEdgebreakerEncoder (default for medium-
+        complexity meshes). Internal function — direct-call would require
+        building a MeshDecoder + corner table from raw bytes.
+
+    # === INTERNAL: Sequential mesh decoder (alternative to edgebreaker) ===
+    - func_name: "DecodeConnectivity"
+      file_path: "src/draco/compression/mesh/mesh_sequential_decoder.cc"
+      has_memory_ops: true
+      has_pointer_arith: true
+      indirect_reach: true
+      force_no_blocker: true
+
+    # === INTERNAL: Symbol entropy decoder ===
+    - func_name: "DecodeSymbols"
+      file_path: "src/draco/compression/entropy/symbol_decoding.cc"
+      has_memory_ops: true
+      has_pointer_arith: true
+      indirect_reach: true
+      force_no_blocker: true
+      harness_hint: |
+        Reached indirectly via DecodeMeshFromBuffer. Symbol decoder is hot
+        in entropy decoding — small bit-level mistakes cause OOB reads.
+
+    # === INTERNAL: Bit decoder (arithmetic) ===
+    - func_name: "DecodeNextBit"
+      file_path: "src/draco/compression/bit_coders/rans_bit_decoder.cc"
+      has_memory_ops: true
+      has_pointer_arith: true
+      indirect_reach: true
+      force_no_blocker: true
+
+    # === INTERNAL: Attribute decoder (type confusion territory) ===
+    - func_name: "DecodeAttributesDecoderData"
+      file_path: "src/draco/compression/attributes/attributes_decoder.cc"
+      has_memory_ops: true
+      has_pointer_arith: true
+      indirect_reach: true
+      force_no_blocker: true
+      harness_hint: |
+        Attribute decoder reads (type_id, num_components, byte_offset) from
+        the bitstream. Untrusted type_id can drive a switch into the wrong
+        decoder → potential OOB reads. Most likely place to find a CVE.
+
+  api_func_fixes: {}
+
+  # Format magic — every Draco file starts with "DRACO"
+  magic_bytes:
+    drc_header:
+      - "DRACO"
+
+  # System-prompt template for harness generation. Tuned for draco's C++ API.
+  harness_template: |
+    You are a fuzzing engineer generating AFL++ harnesses for the Google Draco
+    3D compression library. The harness must be C++ (not C).
+
+    CRITICAL RULES:
+    1. Use the public Draco C++ API: draco::Decoder, draco::DecoderBuffer.
+    2. Use AFL++ persistent mode (__AFL_LOOP) and deferred forkserver
+       (__AFL_FUZZ_INIT()).
+    3. Read input from __AFL_FUZZ_TESTCASE_BUF / __AFL_FUZZ_TESTCASE_LEN.
+    4. ALWAYS include: cstdio, cstdint, cstring, cstdlib,
+       draco/compression/decode.h, draco/core/decoder_buffer.h.
+    5. The Decoder + DecoderBuffer are stack-allocated; results are
+       std::unique_ptr returned via draco::StatusOr<...>. No manual delete.
+    6. Cap input length: do NOT process inputs > 4 MB (OOM noise).
+    7. Skip empty / oversized inputs with `continue`.
+
+    REFERENCE HARNESS (mesh decoder):
+    ```cpp
+    #include <cstdio>
+    #include <cstdint>
+    #include <cstring>
+    #include <cstdlib>
+    #include "draco/compression/decode.h"
+    #include "draco/core/decoder_buffer.h"
+
+    __AFL_FUZZ_INIT();
+
+    int main(int argc, char **argv)
+    {
+    #ifdef __AFL_HAVE_MANUAL_CONTROL
+        __AFL_INIT();
+    #endif
+        unsigned char *buf = __AFL_FUZZ_TESTCASE_BUF;
+
+        while (__AFL_LOOP(10000)) {
+            int len = __AFL_FUZZ_TESTCASE_LEN;
+            if (len < 8 || len > 4 * 1024 * 1024) continue;
+
+            draco::DecoderBuffer dbuf;
+            dbuf.Init(reinterpret_cast<const char*>(buf), static_cast<size_t>(len));
+
+            draco::Decoder decoder;
+            auto result = decoder.DecodeMeshFromBuffer(&dbuf);
+            if (!result.ok()) continue;
+
+            // result is StatusOr<unique_ptr<Mesh>>. Extracting the value
+            // transfers ownership; the unique_ptr destroys the mesh on
+            // scope exit. No manual cleanup needed.
+            auto mesh = std::move(result).value();
+            (void)mesh;
+        }
+        return 0;
+    }
+    ```
+
+    For DecodePointCloudFromBuffer: same shape, swap the function call and
+    return type to PointCloud.
+
+    For GetEncodedGeometryType: cheaper — just call and discard. Smaller
+    input cap (64 KB).
+
+    FORBIDDEN PATTERNS:
+    - new draco::Decoder() (use stack allocation; new + missing delete = leak).
+    - manual free() / delete on the returned mesh (it's a unique_ptr).
+    - Calling DecodeMeshFromBuffer with a buffer that hasn't been Init()'d.
+    - Reading past the input length on the assumption that DecoderBuffer
+      will copy — it does NOT, it holds a non-owning pointer.
+
+    Output ONLY valid JSON with:
+    {
+      "target_func": "function_name",
+      "input_format": "draco compressed mesh / point-cloud byte stream",
+      "c_code": "complete C++ harness source code",
+      "seed_commands": ["shell commands to generate seed files"],
+      "compile_flags": "-g -O1 -fno-omit-frame-pointer",
+      "input_spec": {
+        "params": [],
+        "data_offset": 0,
+        "data_type": "compressed",
+        "min_size": 8,
+        "max_size": 4194304,
+        "interesting_sizes": [256, 4096, 65536, 1048576]
+      }
+    }
+
+  harness_helpers: {}
+  harness_conditional_includes: {}
+
+recon_scoring:
+  bonus_patterns:
+    "compression/": 8.0
+    "compression/mesh/": 9.0
+    "compression/entropy/": 8.0
+    "compression/bit_coders/": 8.0
+    "compression/attributes/": 9.0
+    "core/": 5.0
+    "mesh/": 6.0
+    "point_cloud/": 6.0
+  bonus_func_patterns:
+    # Decoder entry points — highest VRP value
+    "DecodeMeshFromBuffer": 10.0
+    "DecodePointCloudFromBuffer": 10.0
+    "DecodeConnectivity": 9.0
+    "DecodeAttributes": 9.0
+    "DecodeSymbols": 8.0
+    # Bit-level decoders — frequent OOB read source
+    "DecodeNextBit": 8.0
+    "DecodeBits32": 7.0
+    "rANS": 7.0
+    # Attribute / type code paths
+    "AttributeDecoder": 8.0
+    "AttributeQuantization": 7.0
+    "AttributeOctahedron": 7.0
+    # Edgebreaker traversal — complex topology code
+    "edgebreaker": 8.0
+    "EdgebreakerTraversalDecoder": 8.0
+    "DecodeCornerTable": 8.0
+  penalty_files:
+    - "draco_pc_encoder_main.cc"
+    - "draco_encoder_main.cc"
+  penalty_dirs:
+    - "tools"
+    - "javascript"
+    - "ruby"
+    - "maya"
+    - "unity"
+    - "tests"
+    - "testdata"
+  penalty_funcs:
+    - "PrintUsage"
+    - "PrintVersion"
+
+seeds:
+  formats:
+    drc: "$HOME/Nemesis/seeds/draco"
+  # Aliases — the planner picks "drc" for any decoder-class target.
+  format_aliases:
+    decode: "drc"
+    mesh: "drc"
+    point_cloud: "drc"
+    edgebreaker: "drc"
+    attribute: "drc"
+    symbol: "drc"
+    bit_decoder: "drc"
+    decoder_buffer: "drc"

@@ -1,0 +1,1 @@
+owner@:rw-p--aARWcCos:------:allow,group@:r-----a-R-c--s:------:allow,everyone@:r-----a-R-c--s:------:allow

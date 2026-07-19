@@ -1,0 +1,335 @@
+# ============================================================
+# NEMESIS — libarchive target configuration
+# ============================================================
+# Overrides values from config/default.yaml
+
+fuzzing:
+  timeout_hours: 0.25  # 15 min per target for scan mode (was 1.0h)
+
+target:
+  name: "libarchive"
+  # OSS-Fuzz project name (for Introspector API queries)
+  oss_fuzz_project: "libarchive"
+  # Local source checkout
+  # Clean source — NEVER patched. LLM patches go into work_root only.
+  source_root: "$HOME/libarchive_clean"
+  # Working copy — reset to source_root via rsync before each target.
+  work_root: "$HOME/libarchive_work"
+  # AFL-instrumented build (inside work_root — patched code)
+  build_dir: "$HOME/libarchive_work/build_fuzz"
+  # ASAN debug build (inside source_root — clean code, built once at startup)
+  debug_build_dir: "$HOME/libarchive_clean/build_debug"
+  # Build commands
+  build:
+    configure: >
+      rm -f CMakeCache.txt &&
+      CC=afl-clang-fast CXX=afl-clang-fast++
+      cmake ..
+      -DCMAKE_C_COMPILER=afl-clang-fast
+      -DCMAKE_CXX_COMPILER=afl-clang-fast++
+      -DCMAKE_BUILD_TYPE=Debug
+      -DCMAKE_C_FLAGS="-g -fsanitize=address -Wno-error -Wno-unused-variable -Wno-unused-parameter -Wno-uninitialized -Wno-format-security -Wno-unused-const-variable -Wno-unused-function -Wno-deprecated-declarations"
+    make: "make -j$(nproc)"
+    # ASAN build WITHOUT AFL instrumentation — used for unpatched verification
+    debug_configure: >
+      rm -f CMakeCache.txt &&
+      CC=clang CXX=clang++
+      cmake ..
+      -DCMAKE_C_COMPILER=clang
+      -DCMAKE_CXX_COMPILER=clang++
+      -DCMAKE_BUILD_TYPE=Debug
+      -DCMAKE_C_FLAGS="-g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -Wno-error -Wno-unused-variable -Wno-unused-parameter -Wno-uninitialized -Wno-format-security -Wno-unused-const-variable -Wno-unused-function -Wno-deprecated-declarations"
+      -DENABLE_TEST=OFF
+    debug_make: "make -j$(nproc) archive_static"
+    # UBSan-only build (no ASAN) — for multi-build crash verification
+    ubsan_configure: >
+      rm -f CMakeCache.txt &&
+      CC=clang CXX=clang++
+      cmake ..
+      -DCMAKE_C_COMPILER=clang
+      -DCMAKE_CXX_COMPILER=clang++
+      -DCMAKE_BUILD_TYPE=Debug
+      -DCMAKE_C_FLAGS="-g -O1 -fsanitize=undefined,pointer-overflow -fno-sanitize-recover=all -fno-omit-frame-pointer -Wno-error -Wno-unused-variable -Wno-unused-parameter -Wno-uninitialized -Wno-format-security -Wno-unused-const-variable -Wno-unused-function -Wno-deprecated-declarations"
+      -DENABLE_TEST=OFF
+    ubsan_make: "make -j$(nproc) archive_static"
+    # LLVM source-based coverage build (for function-level source coverage measurement)
+    coverage_configure: >
+      rm -f CMakeCache.txt &&
+      CC=clang CXX=clang++
+      cmake ..
+      -DCMAKE_C_COMPILER=clang
+      -DCMAKE_CXX_COMPILER=clang++
+      -DCMAKE_BUILD_TYPE=Debug
+      -DCMAKE_C_FLAGS="-g -O1 -fprofile-instr-generate -fcoverage-mapping -Wno-error -Wno-unused-variable -Wno-unused-parameter -Wno-uninitialized -Wno-format-security -Wno-unused-const-variable -Wno-unused-function -Wno-deprecated-declarations"
+      -DENABLE_TEST=OFF
+    coverage_make: "make -j$(nproc) archive_static"
+  ubsan_build_dir: "$HOME/libarchive_clean/build_ubsan"
+  coverage_build_dir: "$HOME/libarchive_clean/build_coverage"
+  # Binary to use for crash reproduction
+  repro_binary: "bin/bsdtar"
+  repro_args: ["-xOf"]  # extract to stdout: forces data block reads (needed for CAB checksum crash)
+  # pinned_funcs: []  — Stage 1 scoring now autonomously discovers format parsers
+  pinned_funcs: []
+  # Generalization: target-specific build/link parameters
+  source_subdir: "libarchive"
+  include_subdir: "libarchive"
+  library_name: "libarchive.a"
+  link_libs: "-lz -lbz2 -llzma -lcrypto -lzstd -lexpat -lacl -lxml2"
+  harness_includes: ["archive.h", "archive_entry.h"]
+  harness_template: |
+    You are a fuzzing engineer generating AFL++ harnesses for C libraries.
+
+    CRITICAL RULES:
+    1. ALWAYS use the real libarchive API (archive_read_new, archive_read_open_memory, etc.)
+    2. NEVER copy-paste struct definitions — use #include <archive.h> and #include <archive_entry.h>
+    3. NEVER call internal functions directly — go through the public API
+    4. Use AFL++ persistent mode (__AFL_LOOP) and deferred forkserver (__AFL_FUZZ_INIT)
+    5. Read input from __AFL_FUZZ_TESTCASE_BUF / __AFL_FUZZ_TESTCASE_LEN
+    6. ALWAYS include: stdio.h, stdlib.h, string.h, stdint.h, unistd.h, archive.h, archive_entry.h
+    7. Clean up with archive_read_free() between iterations — no leaks
+    8. FORBIDDEN functions (do NOT call these — they do not exist in the public API):
+       - archive_read_support_format_pax()  ← does NOT exist; use archive_read_support_format_tar()
+       - archive_read_support_format_posix() ← does NOT exist
+       For PAX/TAR targets use ONLY: archive_read_support_format_tar(a) or archive_read_support_format_all(a)
+
+    Here is a PROVEN WORKING TEMPLATE — adapt it for the target function:
+
+    ```c
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <string.h>
+    #include <stdint.h>
+    #include <unistd.h>
+    #include <archive.h>
+    #include <archive_entry.h>
+
+    __AFL_FUZZ_INIT();
+
+    int main(int argc, char **argv)
+    {
+    #ifdef __AFL_HAVE_MANUAL_CONTROL
+        __AFL_INIT();
+    #endif
+
+        unsigned char *buf = __AFL_FUZZ_TESTCASE_BUF;
+
+        while (__AFL_LOOP(10000)) {
+            int len = __AFL_FUZZ_TESTCASE_LEN;
+            if (len < 8 || len > 512 * 1024) continue;
+
+            struct archive *a = archive_read_new();
+            if (!a) continue;
+
+            /* Enable ONLY the specific format/filter for the target.
+               IMPORTANT: Use the EXACT format function specified in the prompt's
+               FORMAT REQUIREMENT section. Do NOT use archive_read_support_format_all(a).
+               Examples:
+               - archive_read_support_format_cab(a)   for CAB targets
+               - archive_read_support_format_tar(a)   for TAR/PAX targets
+               - archive_read_support_format_zip(a)   for ZIP targets
+               - archive_read_support_filter_gzip(a)  for gzip filter targets
+            */
+            archive_read_support_format_tar(a);  /* REPLACE with format from FORMAT REQUIREMENT */
+            archive_read_support_filter_all(a);
+
+            if (archive_read_open_memory(a, buf, len) == ARCHIVE_OK) {
+                struct archive_entry *entry;
+                while (archive_read_next_header(a, &entry) == ARCHIVE_OK) {
+                    /* Exercise entry metadata accessors (triggers metadata parsing) */
+                    archive_entry_pathname(entry);
+                    archive_entry_pathname_w(entry);
+                    archive_entry_size(entry);
+                    archive_entry_mtime(entry);
+                    archive_entry_mode(entry);
+
+                    /* CRITICAL: Actually decompress/read data blocks.
+                       archive_read_data() exercises ALL decompression code paths
+                       (gzip, bz2, lzma, lz4, zstd) — this is where most CVEs live.
+                       NEVER use archive_read_data_skip() — it bypasses decompression entirely. */
+                    char data_buf[4096];
+                    ssize_t r;
+                    while ((r = archive_read_data(a, data_buf, sizeof(data_buf))) > 0)
+                        ;
+                }
+            }
+
+            archive_read_free(a);
+        }
+
+        return 0;
+    }
+    ```
+
+    SEED GENERATION — use real archive files as seeds:
+    - For TAR/PAX: tar --format=posix -cf seed.tar /etc/hostname
+    - For CAB: Use any .cab file or generate with lcab
+    - For ZIP: zip seed.zip /etc/hostname
+    - For broad coverage: combine multiple format seeds in the seed directory
+
+    Adapt the template based on which format/filter the target function handles.
+    If the target is in archive_read_support_format_cab.c, use archive_read_support_format_cab(a).
+    If the target is in archive_read_support_filter_uu.c, use archive_read_support_filter_all(a).
+
+    FEW-SHOT EXAMPLE 1 — CAB format harness (exercises cab_checksum_finish etc.):
+    ```c
+    /* Key: enable ONLY format_cab, read ALL data, cap input at 512KB */
+    archive_read_support_format_cab(a);
+    archive_read_support_filter_all(a);
+    if (archive_read_open_memory(a, buf, len) == ARCHIVE_OK) {
+        struct archive_entry *entry;
+        while (archive_read_next_header(a, &entry) == ARCHIVE_OK) {
+            archive_entry_pathname(entry);
+            archive_entry_size(entry);
+            char dbuf[4096]; ssize_t r;
+            while ((r = archive_read_data(a, dbuf, sizeof(dbuf))) > 0) ;
+        }
+    }
+    ```
+
+    FEW-SHOT EXAMPLE 2 — Filter harness (exercises decompression filters):
+    ```c
+    /* Key: format_raw + specific filter for filter-level targets */
+    archive_read_support_format_raw(a);
+    archive_read_support_filter_gzip(a);  /* or _bzip2, _lzma, _lz4, _zstd */
+    if (archive_read_open_memory(a, buf, len) == ARCHIVE_OK) {
+        struct archive_entry *entry;
+        while (archive_read_next_header(a, &entry) == ARCHIVE_OK) {
+            char dbuf[4096]; ssize_t r;
+            while ((r = archive_read_data(a, dbuf, sizeof(dbuf))) > 0) ;
+        }
+    }
+    ```
+
+    FORBIDDEN PATTERNS (NEVER use these):
+    - archive_read_data_skip(a)  ← bypasses ALL decompression code, misses 90% of CVEs
+    - No input size cap           ← causes ASAN OOM false positives with large inputs
+
+    Output ONLY valid JSON with:
+    {
+      "target_func": "function_name",
+      "input_format": "format description (e.g., CAB, PAX tar, UUencoded)",
+      "c_code": "complete C harness source code using the template above",
+      "seed_commands": ["shell commands to generate REAL archive seed files"],
+      "compile_flags": "-g -O1 -fno-omit-frame-pointer"
+    }
+  api_func_fixes:
+    archive_read_support_format_pax: "archive_read_support_format_tar"
+    archive_read_entry: "archive_read_next_header"
+  magic_bytes:
+    format_zip: ["PK\x03\x04", "PK\x05\x06"]
+    format_cab: ["MSCF"]
+    format_rar: ["Rar!\x1a\x07\x00"]
+    format_rar5: ["Rar!\x1a\x07\x01\x00"]
+    format_7zip: ["7z\xbc\xaf\x27\x1c"]
+    format_xar: ["xar!"]
+    format_cpio: ["070701", "070702"]
+    format_lha: ["-lh0-", "-lh5-", "-lzs-", "-lz4-"]
+    format_warc: ["WARC/"]
+
+# Known blockers for this target (seeds the neural analysis)
+known_blockers:
+  - condition: "__STDC_ISO_10646__"
+    file: "libarchive/archive_string.c"
+    type: "macro"
+    description: "Defined on glibc/Ubuntu, blocks compat_2x UTF-8 path"
+  - condition: "PAX format requirement"
+    file: "libarchive/archive_read_support_format_tar.c"
+    line: 2074
+    type: "format_requirement"
+    description: "compat_2x check requires PAX (not USTAR) tar format"
+  - condition: "MSCF magic bytes"
+    file: "libarchive/archive_read_support_format_cab.c"
+    line: 580
+    type: "format_requirement"
+    description: "CAB handler requires MSCF (0x4D534346) header magic"
+
+# Ground truth bugs (for evaluation / regression testing)
+ground_truth:
+  - id: "bug1_acl_null_deref"
+    file: "libarchive/archive_acl.c"
+    line: 1758
+    cwe: "CWE-476"
+    function: "archive_acl_from_text_nl"
+    status: "reported"
+  - id: "bug2_uudecode_heap_overflow"
+    file: "libarchive/archive_read_support_filter_uu.c"
+    line: 502
+    cwe: "CWE-122"
+    function: "uudecode_filter_read"
+    status: "fixed"  # Fixed in commit 1e406c9e (May 2024): UUENCODE_MAX_LINE_LENGTH check added
+  - id: "bug3_cab_null_deref"
+    file: "libarchive/archive_read_support_format_cab.c"
+    line: 1179
+    cwe: "CWE-476"
+    function: "cab_checksum_finish"
+    status: "confirmed"  # AFL rediscovers in <2min; 6 crashes found in session 2026-03-18
+
+# Recon scoring — target-specific heuristics for Stage 1
+recon_scoring:
+  bonus_patterns:
+    "archive_read_support_format_": 5.0
+    "archive_read_support_filter_": 3.0
+  penalty_files:
+    - "archive_cmdline.c"
+    - "archive_options.c"
+    - "archive_acl.c"
+    - "archive_entry.c"
+    - "archive_string.c"
+  penalty_dirs:
+    - "cpio"
+    - "tar"
+    - "unzip"
+    - "bsdtar"
+    - "cat"
+    - "test_utils"
+    - "libarchive_fe"  # Frontend utilities (bsdtar helpers) — not in libarchive.a
+  penalty_funcs:
+    - "_options"
+  low_value_files:
+    "archive_acl.c": 9.0
+    "archive_entry.c": 9.0
+    "archive_string.c": 4.0
+
+# Seed directories — relative to the cloned Nemesis repo
+seeds:
+  # Alias→canonical format mapping (e.g. filename has "tar" → use "pax" seeds)
+  format_aliases:
+    tar: "pax"
+    cpio: "pax"
+    mtree: "pax"
+    warc: "pax"
+  # Generic format→path mapping (used by fuzzing stage)
+  formats:
+    pax: "$HOME/Nemesis/seeds/pax"
+    all_formats: "$HOME/Nemesis/seeds/all_formats"
+    uu: "$HOME/Nemesis/seeds/uu"
+    acl_text: "$HOME/Nemesis/seeds/acl_text"
+    cab: "$HOME/Nemesis/seeds/cab"
+    rar5: "$HOME/Nemesis/seeds/rar5"
+    sevenzip: "$HOME/Nemesis/seeds/sevenzip"
+    lha: "$HOME/Nemesis/seeds/lha"
+    zip: "$HOME/Nemesis/seeds/zip"
+    xar: "$HOME/Nemesis/seeds/xar"
+    iso: "$HOME/Nemesis/seeds/iso"
+  # Legacy per-format fields (backward compat)
+  pax: "$HOME/Nemesis/seeds/pax"
+  all_formats: "$HOME/Nemesis/seeds/all_formats"
+  uu: "$HOME/Nemesis/seeds/uu"
+  acl_text: "$HOME/Nemesis/seeds/acl_text"
+  cab: "$HOME/Nemesis/seeds/cab"
+  rar5: "$HOME/Nemesis/seeds/rar5"
+  sevenzip: "$HOME/Nemesis/seeds/sevenzip"
+  lha: "$HOME/Nemesis/seeds/lha"
+  zip: "$HOME/Nemesis/seeds/zip"
+  xar: "$HOME/Nemesis/seeds/xar"
+  iso: "$HOME/Nemesis/seeds/iso"
+  # OSS-Fuzz corpus — 29K+ inputs that already pass format checks
+  oss_fuzz_corpus: "$HOME/Nemesis/seeds/oss_fuzz_corpus"
+
+# Source patches applied for fuzzing
+patches:
+  - file: "libarchive/archive_string.c"
+    description: "Bypass __STDC_ISO_10646__ check for compat_2x path"
+    diff: |
+      - #if defined(__STDC_ISO_10646__)
+      + #if 0 && defined(__STDC_ISO_10646__)

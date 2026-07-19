@@ -1,0 +1,31 @@
+XML document layout (UTF-8/UTF-16 text, no fixed wire framing):
+
+Top-level structure:
+- Optional byte-order mark (BOM): UTF-8 (none), UTF-16LE (0xFF 0xFE), UTF-16BE (0xFE 0xFF).
+- Optional XML declaration: <?xml version="1.0" encoding="..." standalone="..."?> (ASCII text, no fixed length).
+- Root element: <root>...</root> (nested elements, attributes, text nodes).
+- Epilogue: optional whitespace/comments after root.
+
+Structurally meaningful fields:
+- Declaration attributes: version (string, typically "1.0"), encoding (string, e.g., "UTF-8"), standalone ("yes"/"no").
+- Element tags: <tag> and </tag> (ASCII, case-sensitive, no length prefix).
+- Attributes: name="value" or name='value' (ASCII, quoted, no length prefix).
+- Text content: raw UTF-8/UTF-16 between tags (no framing).
+- Entities: &name; or &#xHHHH; or &#DDDD; (ASCII, no fixed length).
+- Comments: <!-- ... --> (ASCII, no fixed length).
+- CDATA: <![CDATA[...]]> (ASCII, no fixed length).
+- Processing instructions: <?target data?> (ASCII, no fixed length).
+
+Mutator strategy:
+- Preserve well-formedness invariants: every <tag> must have a matching </tag> (or be self-closing <tag/>).
+- Target version/encoding strings with malformed or oversized values (e.g., version="999.999").
+- Flip attribute quoting style (" vs ') or remove quotes to force parser recovery.
+- Inject invalid UTF-8/UTF-16 sequences in text content or tag names.
+- Corrupt entity references (e.g., &x; or &#x123456789; with out-of-range codepoints).
+- Nest elements improperly (e.g., <a><b></a></b>) to test error resilience.
+- Insert unescaped < or & in text content or attribute values.
+- Duplicate or omit the XML declaration or root element.
+- For UTF-16, flip byte order or truncate BOM to force fallback parsing.
+- DO NOT recompute checksums (none exist in XML).
+
+PER-MUTATION COST: keep each mutation tiny — at most ~16 bytes of write. AFL's havoc/cmplog will compose larger runs across iterations.

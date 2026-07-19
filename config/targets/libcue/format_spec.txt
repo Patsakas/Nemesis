@@ -1,0 +1,31 @@
+File layout: plain-text CUE sheet (ASCII/UTF-8), line-oriented, no binary header.
+
+Top-level structure:
+- Zero or more global REM lines (metadata key/value pairs) starting with "REM "
+- Optional CATALOG line: "CATALOG <13-digit EAN/UPC>"
+- Optional CDTEXTFILE line: "CDTEXTFILE <path>"
+- One or more TRACK lines, each followed by zero or more INDEX lines and per-track REM lines.
+
+Concrete line formats:
+- REM: "REM <TYPE> <value>" where TYPE is one of: DATE, REPLAYGAIN_ALBUM_GAIN, REPLAYGAIN_ALBUM_PEAK, REPLAYGAIN_TRACK_GAIN, REPLAYGAIN_TRACK_PEAK, COMMENT, DISCNUMBER, TOTALDISCS. Value is arbitrary text; no length prefix.
+- CATALOG: fixed 13-character alphanumeric string after "CATALOG ".
+- CDTEXTFILE: arbitrary path string after "CDTEXTFILE ".
+- TRACK: "TRACK <number> <mode>" where <number> is 1-based track index (1-99), <mode> is one of: AUDIO, MODE1, MODE1/2352, MODE1/RAW, MODE2, MODE2/FORM1, MODE2/FORM2, MODE2/FORM_MIX, MODE2/RAW. Mode string is case-insensitive.
+- INDEX: "INDEX <number> <position>" where <number> is 00-99 (00 reserved for track start), <position> is MM:SS:FF (minutes:seconds:frames, 75 fps).
+
+Structurally meaningful fields:
+- Track number (numeric, 1-99).
+- Track mode (enumerated string).
+- Index number (00-99).
+- Position MM:SS:FF (three decimal numbers separated by colons; MM 0-99, SS 0-59, FF 0-74).
+- REM type (enumerated string).
+
+Mutator strategy:
+- Target numeric fields: track number, index number, MM, SS, FF in positions. Flip to boundary values (0, 1, 99, 74, 75) and small overflows (e.g., 100, 76).
+- Replace track mode strings with other valid modes plus a few invalid but plausible strings (e.g., "MODE3", "AUDIO_RAW").
+- Replace REM type strings with other valid types plus invalid ones (e.g., "REM_FOO").
+- Inject or delete entire lines (REM, INDEX) to test parser resilience to missing/extra data.
+- Preserve line-oriented structure: each mutation must keep lines terminated by \n or \r\n.
+- Do NOT corrupt the "TRACK", "INDEX", "REM", "CATALOG", "CDTEXTFILE" keywords themselves; only mutate their arguments.
+
+PER-MUTATION COST: keep each mutation tiny — at most ~16 bytes of write. AFL's havoc/cmplog will compose larger runs across iterations.

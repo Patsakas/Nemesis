@@ -1,0 +1,32 @@
+[
+  {
+    "id": "CVE-2026-33636",
+    "description": "LIBPNG is a reference library for use in applications that read, create, and manipulate PNG (Portable Network Graphics) raster image files. In versions 1.6.36 through 1.6.55, an out-of-bounds read and write exists in libpng's ARM/AArch64 Neon-optimized palette expansion path. When expanding 8-bit paletted rows to RGB or RGBA, the Neon loop processes a final partial chunk without verifying that enough input pixels remain. Because the implementation works backward from the end of the row, the final iteration dereferences pointers before the start of the row buffer (OOB read) and writes expanded ",
+    "references": [
+      "https://github.com/pnggroup/libpng/commit/7734cda20cf1236aef60f3bbd2267c97bbb40869",
+      "https://github.com/pnggroup/libpng/commit/aba9f18eba870d14fb52c5ba5d73451349e339c3",
+      "https://github.com/pnggroup/libpng/security/advisories/GHSA-wjr5-c57x-95m2"
+    ],
+    "published": "2026-03-26T17:16:41.477"
+  },
+  {
+    "id": "CVE-2026-33416",
+    "description": "LIBPNG is a reference library for use in applications that read, create, and manipulate PNG (Portable Network Graphics) raster image files. In versions 1.2.1 through 1.6.55, `png_set_tRNS` and `png_set_PLTE` each alias a heap-allocated buffer between `png_struct` and `png_info`, sharing a single allocation across two structs with independent lifetimes. The `trans_alpha` aliasing has been present since at least libpng 1.0, and the `palette` aliasing since at least 1.2.1. Both affect all prior release lines `png_set_tRNS` sets `png_ptr->trans_alpha = info_ptr->trans_alpha` (256-byte buffer) and ",
+    "references": [
+      "https://github.com/pnggroup/libpng/commit/23019269764e35ed8458e517f1897bd3c54820eb",
+      "https://github.com/pnggroup/libpng/commit/7ea9eea884a2328cc7fdcb3c0c00246a50d90667",
+      "https://github.com/pnggroup/libpng/commit/a3a21443ed12bfa1ef46fa0d4fb2b74a0fa34a25"
+    ],
+    "published": "2026-03-26T17:16:38.443"
+  },
+  {
+    "id": "CVE-2026-25646",
+    "description": "LIBPNG is a reference library for use in applications that read, create, and manipulate PNG (Portable Network Graphics) raster image files. Prior to 1.6.55, an out-of-bounds read vulnerability exists in the png_set_quantize() API function. When the function is called with no histogram and the number of colors in the palette is more than twice the maximum supported by the user's display, certain palettes will cause the function to enter into an infinite loop that reads past the end of an internal heap-allocated buffer. The images that trigger this vulnerability are valid per the PNG specificati",
+    "references": [
+      "https://github.com/pnggroup/libpng/commit/01d03b8453eb30ade759cd45c707e5a1c7277d88",
+      "https://github.com/pnggroup/libpng/security/advisories/GHSA-g8hp-mq4h-rqm3",
+      "http://www.openwall.com/lists/oss-security/2026/02/09/7"
+    ],
+    "published": "2026-02-10T18:16:37.817"
+  }
+]

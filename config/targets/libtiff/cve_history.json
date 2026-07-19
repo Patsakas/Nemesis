@@ -1,0 +1,32 @@
+[
+  {
+    "id": "CVE-2022-0924",
+    "description": "Out-of-bounds Read error in tiffcp in libtiff 4.3.0 allows attackers to cause a denial-of-service via a crafted tiff file. For users that compile libtiff from sources, the fix is available with commit 408976c4.",
+    "references": [
+      "https://gitlab.com/gitlab-org/cves/-/blob/master/2022/CVE-2022-0924.json",
+      "https://gitlab.com/libtiff/libtiff/-/issues/278",
+      "https://gitlab.com/libtiff/libtiff/-/merge_requests/311"
+    ],
+    "published": "2022-03-11T18:15:30.137"
+  },
+  {
+    "id": "CVE-2022-0909",
+    "description": "Divide By Zero error in tiffcrop in libtiff 4.3.0 allows attackers to cause a denial-of-service via a crafted tiff file. For users that compile libtiff from sources, the fix is available with commit f8d0f9aa.",
+    "references": [
+      "https://gitlab.com/gitlab-org/cves/-/blob/master/2022/CVE-2022-0909.json",
+      "https://gitlab.com/libtiff/libtiff/-/issues/393",
+      "https://gitlab.com/libtiff/libtiff/-/merge_requests/310"
+    ],
+    "published": "2022-03-11T18:15:28.047"
+  },
+  {
+    "id": "CVE-2022-0908",
+    "description": "Null source pointer passed as an argument to memcpy() function within TIFFFetchNormalTag () in tif_dirread.c in libtiff versions up to 4.3.0 could lead to Denial of Service via crafted TIFF file.",
+    "references": [
+      "https://gitlab.com/gitlab-org/cves/-/blob/master/2022/CVE-2022-0908.json",
+      "https://gitlab.com/libtiff/libtiff/-/commit/a95b799f65064e4ba2e2dfc206808f86faf93e85",
+      "https://gitlab.com/libtiff/libtiff/-/issues/383"
+    ],
+    "published": "2022-03-11T18:15:27.077"
+  }
+]

@@ -1,0 +1,30 @@
+[
+  {
+    "id": "CVE-2025-57052",
+    "description": "cJSON 1.5.0 through 1.7.18 allows out-of-bounds access via the decode_array_index_from_pointer function in cJSON_Utils.c, allowing remote attackers to bypass array bounds checking and access restricted data via malformed JSON pointer strings containing alphanumeric characters.",
+    "references": [
+      "https://x-0r.com/posts/cJSON-Array-Index-Parsing-Vulnerability",
+      "https://lists.debian.org/debian-lts-announce/2025/09/msg00019.html"
+    ],
+    "published": "2025-09-03T15:15:38.250"
+  },
+  {
+    "id": "CVE-2023-53154",
+    "description": "parse_string in cJSON before 1.7.18 has a heap-based buffer over-read via {\"1\":1, with no trailing newline if cJSON_ParseWithLength is called.",
+    "references": [
+      "https://github.com/DaveGamble/cJSON/issues/800",
+      "https://github.com/DaveGamble/cJSON/issues/800",
+      "https://github.com/DaveGamble/cJSON/compare/v1.7.17...v1.7.18"
+    ],
+    "published": "2025-05-23T16:15:22.080"
+  },
+  {
+    "id": "CVE-2023-26819",
+    "description": "cJSON 1.7.15 might allow a denial of service via a crafted JSON document such as {\"a\": true, \"b\": [ null,9999999999999999999999999999999999999999999999912345678901234567]}.",
+    "references": [
+      "https://github.com/boofish/json_bugs/tree/main/cjson",
+      "https://lists.debian.org/debian-lts-announce/2025/06/msg00014.html"
+    ],
+    "published": "2025-04-19T22:15:14.103"
+  }
+]

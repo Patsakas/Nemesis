@@ -1,0 +1,1 @@
+owner@:rwxp--aARWcCos:fdinS:allow,group@:rwxp--aARWcCos:fd----:allow,everyone@:r-----a-R-c--s:------:allow

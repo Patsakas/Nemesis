@@ -1,0 +1,32 @@
+[
+  {
+    "id": "CVE-2021-3520",
+    "description": "There's a flaw in lz4. An attacker who submits a crafted file to an application linked with lz4 may be able to trigger an integer overflow, leading to calling of memmove() on a negative size argument, causing an out-of-bounds write and/or a crash. The greatest impact of this flaw is to availability, with some potential impact to confidentiality and integrity as well.",
+    "references": [
+      "https://bugzilla.redhat.com/show_bug.cgi?id=1954559",
+      "https://bugzilla.redhat.com/show_bug.cgi?id=1954559",
+      "https://security.netapp.com/advisory/ntap-20211104-0005/"
+    ],
+    "published": "2021-06-02T13:15:13.170"
+  },
+  {
+    "id": "CVE-2019-17543",
+    "description": "LZ4 before 1.9.2 has a heap-based buffer overflow in LZ4_write32 (related to LZ4_compress_destSize), affecting applications that call LZ4_compress_fast with a large input. (This issue can also lead to data corruption.) NOTE: the vendor states \"only a few specific / uncommon usages of the API are at risk.\"",
+    "references": [
+      "https://github.com/lz4/lz4/issues/801",
+      "https://github.com/lz4/lz4/pull/756",
+      "https://github.com/lz4/lz4/pull/760"
+    ],
+    "published": "2019-10-14T02:15:10.873"
+  },
+  {
+    "id": "CVE-2014-4715",
+    "description": "Yann Collet LZ4 before r119, when used on certain 32-bit platforms that allocate memory beyond 0x80000000, does not properly detect integer overflows, which allows context-dependent attackers to cause a denial of service (memory corruption) or possibly have unspecified other impact via a crafted Literal Run, a different vulnerability than CVE-2014-4611.",
+    "references": [
+      "http://blog.securitymouse.com/2014/07/i-was-wrong-proving-lz4-exploitable.html",
+      "http://fastcompression.blogspot.fr/2014/07/software-vulnerabilities-how-it-works.html",
+      "http://secunia.com/advisories/59770"
+    ],
+    "published": "2014-07-03T04:22:16.123"
+  }
+]

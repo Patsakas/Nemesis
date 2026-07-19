@@ -1,0 +1,31 @@
+[
+  {
+    "id": "CVE-2026-6732",
+    "description": "A flaw was found in libxml2. This vulnerability occurs when the library processes a specially crafted XML Schema Definition (XSD) validated document that includes an internal entity reference. An attacker could exploit this by providing a malicious document, leading to a type confusion error that causes the application to crash. This results in a denial of service (DoS), making the affected system or application unavailable.",
+    "references": [
+      "https://bugzilla.redhat.com/show_bug.cgi?id=2461300",
+      "https://access.redhat.com/errata/RHSA-2026:11503",
+      "https://access.redhat.com/security/cve/CVE-2026-6732"
+    ],
+    "published": "2026-04-23T23:16:16.443"
+  },
+  {
+    "id": "CVE-2025-9714",
+    "description": "Uncontrolled recursion in XPath evaluation in libxml2 up to and including version 2.9.14 allows a local attacker to cause a stack overflow via crafted expressions. XPath processing functions `xmlXPathRunEval`, `xmlXPathCtxtCompile`, and `xmlXPathEvalExpr` were resetting recursion depth to zero before making potentially recursive calls. When such functions were called recursively this could allow for uncontrolled recursion and lead to a stack overflow. These functions now preserve recursion depth across recursive calls, allowing recursion depth to be controlled.",
+    "references": [
+      "https://gitlab.gnome.org/GNOME/libxml2/-/commit/677a42645ef22b5a50741bad5facf9d8a8bc6d21",
+      "https://lists.debian.org/debian-lts-announce/2025/09/msg00035.html"
+    ],
+    "published": "2025-09-10T19:15:42.707"
+  },
+  {
+    "id": "CVE-2025-6021",
+    "description": "A flaw was found in libxml2's xmlBuildQName function, where integer overflows in buffer size calculations can lead to a stack-based buffer overflow. This issue can result in memory corruption or a denial of service when processing crafted input.",
+    "references": [
+      "https://bugzilla.redhat.com/show_bug.cgi?id=2372406",
+      "https://access.redhat.com/errata/RHSA-2025:10630",
+      "https://access.redhat.com/errata/RHSA-2025:10698"
+    ],
+    "published": "2025-06-12T13:15:25.590"
+  }
+]

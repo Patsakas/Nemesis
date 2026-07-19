@@ -1,0 +1,350 @@
+# ============================================================
+# NEMESIS — libxml2 target configuration
+# ============================================================
+
+fuzzing:
+  strategy: "harness"  # Strategy A: no patches, direct harness generation
+  timeout_hours: 0.25  # 15 min per target for scan mode
+
+target:
+  name: "libxml2"
+  oss_fuzz_project: "libxml2"
+  source_root: "$HOME/libxml2_clean"
+  work_root: "$HOME/libxml2_work"
+  build_dir: "$HOME/libxml2_work/build_fuzz"
+  debug_build_dir: "$HOME/libxml2_clean/build_debug"
+  build:
+    configure: >
+      rm -f CMakeCache.txt &&
+      CC=afl-clang-fast CXX=afl-clang-fast++
+      cmake ..
+      -DCMAKE_C_COMPILER=afl-clang-fast
+      -DCMAKE_CXX_COMPILER=afl-clang-fast++
+      -DCMAKE_BUILD_TYPE=Debug
+      -DBUILD_SHARED_LIBS=OFF
+      -DLIBXML2_WITH_PYTHON=OFF
+      -DLIBXML2_WITH_TESTS=OFF
+      -DCMAKE_C_FLAGS="-g -fsanitize=address -Wno-error -Wno-unused-variable -Wno-unused-parameter -Wno-uninitialized -Wno-deprecated-declarations -Wno-format-security"
+    make: "make -j$(nproc) LibXml2"
+    debug_configure: >
+      rm -f CMakeCache.txt &&
+      CC=clang CXX=clang++
+      cmake ..
+      -DCMAKE_C_COMPILER=clang
+      -DCMAKE_CXX_COMPILER=clang++
+      -DCMAKE_BUILD_TYPE=Debug
+      -DBUILD_SHARED_LIBS=OFF
+      -DLIBXML2_WITH_PYTHON=OFF
+      -DLIBXML2_WITH_TESTS=OFF
+      -DCMAKE_C_FLAGS="-g -O1 -fsanitize=address,undefined -fno-omit-frame-pointer -Wno-error -Wno-unused-variable -Wno-unused-parameter -Wno-uninitialized -Wno-deprecated-declarations -Wno-format-security"
+    debug_make: "make -j$(nproc) LibXml2"
+    # LLVM source-based coverage build (for function-level source coverage measurement)
+    coverage_configure: >
+      rm -f CMakeCache.txt &&
+      CC=clang CXX=clang++
+      cmake ..
+      -DCMAKE_C_COMPILER=clang
+      -DCMAKE_CXX_COMPILER=clang++
+      -DCMAKE_BUILD_TYPE=Debug
+      -DBUILD_SHARED_LIBS=OFF
+      -DLIBXML2_WITH_PYTHON=OFF
+      -DLIBXML2_WITH_TESTS=OFF
+      -DCMAKE_C_FLAGS="-g -O1 -fprofile-instr-generate -fcoverage-mapping -Wno-error -Wno-unused-variable -Wno-unused-parameter -Wno-uninitialized -Wno-deprecated-declarations -Wno-format-security"
+    coverage_make: "make -j$(nproc) LibXml2"
+  coverage_build_dir: "$HOME/libxml2_clean/build_coverage"
+  repro_binary: "xmllint"
+  repro_args: ["--noout", "--recover"]
+  source_subdir: ""
+  include_subdir: "include"
+  library_name: "libxml2.a"
+  link_libs: "-lz -lm -llzma -ldl"
+  harness_includes:
+    - "libxml/parser.h"
+    - "libxml/tree.h"
+    - "libxml/xmlerror.h"
+    - "libxml/HTMLparser.h"
+    - "libxml/xmlreader.h"
+    - "libxml/xmlschemas.h"
+    - "libxml/relaxng.h"
+    - "libxml/xpath.h"
+    - "libxml/xpathInternals.h"
+    - "libxml/c14n.h"
+  harness_template: |
+    You are a fuzzing engineer generating AFL++ harnesses for the libxml2 C library.
+
+    CRITICAL RULES:
+    1. Use the PUBLIC API only — xmlReadMemory(), xmlCtxtReadMemory(), htmlReadMemory()
+    2. ALWAYS suppress error output: xmlSetGenericErrorFunc(NULL, xmlSilenceErrors) where
+       xmlSilenceErrors is a no-op callback, OR use xmlSetStructuredErrorFunc()
+    3. Use AFL++ persistent mode (__AFL_LOOP) and deferred forkserver (__AFL_FUZZ_INIT)
+    4. Read input from __AFL_FUZZ_TESTCASE_BUF / __AFL_FUZZ_TESTCASE_LEN
+    5. ALWAYS call xmlFreeDoc(doc) — prevent memory leaks between iterations
+    6. ALWAYS call xmlCleanupParser() OUTSIDE the loop (once at exit), NOT inside
+
+    MANDATORY PATTERN:
+    ```c
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <string.h>
+    #include <libxml/parser.h>
+    #include <libxml/tree.h>
+    #include <libxml/xmlerror.h>
+
+    __AFL_FUZZ_INIT();
+
+    static void xmlSilenceErrors(void *ctx, const char *msg, ...) { (void)ctx; (void)msg; }
+
+    int main(int argc, char **argv) {
+    #ifdef __AFL_HAVE_MANUAL_CONTROL
+        __AFL_INIT();
+    #endif
+        xmlInitParser();
+        xmlSetGenericErrorFunc(NULL, xmlSilenceErrors);
+
+        unsigned char *buf = __AFL_FUZZ_TESTCASE_BUF;
+
+        while (__AFL_LOOP(10000)) {
+            int len = __AFL_FUZZ_TESTCASE_LEN;
+            if (len < 4 || len > 512 * 1024) continue;
+
+            /* xmlReadMemory fully parses the document, exercising ALL parsing code */
+            xmlDocPtr doc = xmlReadMemory(
+                (const char *)buf, len,
+                "fuzz.xml",   /* fake URL */
+                NULL,         /* encoding — auto-detect */
+                XML_PARSE_NOENT | XML_PARSE_NONET | XML_PARSE_RECOVER
+            );
+
+            if (doc != NULL) {
+                /* Walk the tree to exercise tree-walking code */
+                xmlNodePtr root = xmlDocGetRootElement(doc);
+                (void)root;
+                xmlFreeDoc(doc);
+            }
+        }
+
+        xmlCleanupParser();
+        return 0;
+    }
+    ```
+
+    VARIANTS BY TARGET TYPE:
+    - XML parser targets (parser.c, SAX2.c): use xmlReadMemory() as above
+    - HTML parser targets (HTMLparser.c): use htmlReadMemory(buf, len, "fuzz.html", NULL, HTML_PARSE_RECOVER | HTML_PARSE_NONET)
+      requires: #include <libxml/HTMLparser.h>
+    - XPath targets (xpath.c): parse doc first, then xmlXPathNewContext(doc) + xmlXPathEvalExpression()
+    - Schema validation via Doc (xmlSchemaValidateDoc): MUST follow this EXACT sequence:
+      1. Parse a HARDCODED minimal XSD schema string with xmlSchemaNewMemParserCtxt()
+      2. xmlSchemaParse() to get xmlSchemaPtr
+      3. xmlSchemaNewValidCtxt(schema) — pass the SCHEMA, NOT the parser context
+      4. Parse the FUZZ INPUT as an XML doc via xmlReadMemory()
+      5. xmlSchemaValidateDoc(valid_ctxt, doc) — THIS is the target call
+      6. Cleanup in REVERSE order: xmlSchemaFreeValidCtxt → xmlFreeDoc → xmlSchemaFree → xmlSchemaFreeParserCtxt
+      Hardcoded XSD:  "<xs:schema xmlns:xs='http://www.w3.org/2001/XMLSchema'><xs:element name='root' type='xs:string'/></xs:schema>"
+    - Schema validation via Stream (xmlSchemaValidateStream):
+      1. Same schema setup: xmlSchemaNewMemParserCtxt → xmlSchemaParse → xmlSchemaNewValidCtxt
+      2. Create input buffer from fuzz data: xmlParserInputBufferCreateMem((const char*)buf, len, XML_CHAR_ENCODING_NONE)
+      3. xmlSchemaValidateStream(valid_ctxt, input, XML_CHAR_ENCODING_NONE, NULL, NULL) — target call
+      4. WARNING: xmlSchemaValidateStream() FREES the input buffer internally — do NOT call xmlFreeParserInputBuffer()
+      5. Cleanup: xmlSchemaFreeValidCtxt → xmlSchemaFree → xmlSchemaFreeParserCtxt
+      requires: #include <libxml/xmlschemas.h> and #include <libxml/parser.h> (for xmlParserInputBufferCreateMem)
+    - Schema validation via File (xmlSchemaValidateFile):
+      1. Same schema setup as above
+      2. Write fuzz input to temp file: char path[]="/tmp/fuzz_XXXXXX"; int fd=mkstemp(path); write(fd,buf,len); close(fd);
+      3. xmlSchemaValidateFile(valid_ctxt, path, 0) — target call (takes filename string, NOT fd)
+      4. unlink(path) to clean up the temp file
+      5. Cleanup schema objects as above
+    - Reader + Schema validation (xmlTextReaderSchemaValidateCtxt):
+      1. Same schema setup: xmlSchemaNewMemParserCtxt → xmlSchemaParse → xmlSchemaNewValidCtxt
+      2. Create reader from fuzz input: xmlReaderForMemory((const char*)buf, len, "fuzz.xml", NULL, 0)
+      3. Register validation: xmlTextReaderSchemaValidateCtxt(reader, valid_ctxt, 0) — target call
+      4. CRITICAL: MUST call while(xmlTextReaderRead(reader)==1){} — validation triggers DURING read
+      5. Cleanup: xmlFreeTextReader → xmlSchemaFreeValidCtxt → xmlSchemaFree → xmlSchemaFreeParserCtxt
+      requires: #include <libxml/xmlreader.h> and #include <libxml/xmlschemas.h>
+    - RelaxNG validation (relaxng.c): same pattern but with xmlRelaxNGNewMemParserCtxt() / xmlRelaxNGParse() / xmlRelaxNGNewValidCtxt() / xmlRelaxNGValidateDoc()
+      Hardcoded RNG: "<element name='root' xmlns='http://relaxng.org/ns/structure/1.0'><text/></element>"
+
+    FORBIDDEN PATTERNS:
+    - xmlGenericErrorDefault — INTERNAL SYMBOL, not public API. Use xmlSilenceErrors (your own static callback) instead.
+    - xmlParseMemory(ctxt, buf, len) — wrong signature (xmlParseMemory takes (char*, int) only)
+    - xmlParseDocument(ctxt) without calling xmlFreeDoc() — memory leak
+    - xmlCleanupParser() INSIDE __AFL_LOOP — destroys global state, crashes on next iteration
+    - No input size cap — causes ASAN OOM false positives
+    - C++ syntax (FuzzedDataProvider provider(buf, len)) — THIS IS C, NOT C++
+    - xmlC14NFreeCtx() / xmlC14NFreeContext() — DOES NOT EXIST in libxml2 API
+    - xmlNewTextReaderMemory() — DOES NOT EXIST, use xmlReaderForMemory() instead
+    - xmlSchemaNewValidCtxt(parser_ctxt) — WRONG type, must pass xmlSchemaPtr not parser ctxt
+    - ANY function not declared in libxml2 public headers — check #include availability first
+    - pipe() + write() + xmlCtxtReadFd() — DEADLOCK for inputs > 64KB. Use xmlCtxtReadMemory() instead,
+      or write to tmpfile() + lseek(0) + pass fd.
+    - memfd_create() without #define _GNU_SOURCE before ALL includes — causes compile error.
+      Prefer xmlCtxtReadMemory() which avoids fd entirely.
+
+    CORRECT API FUNCTIONS:
+    - XML parsing: xmlReadMemory(), xmlCtxtReadMemory(), xmlParseMemory()
+    - HTML parsing: htmlReadMemory(), htmlCtxtReadMemory()
+    - Reader API: xmlReaderForMemory() (NOT xmlNewTextReaderMemory)
+    - XPath: xmlXPathNewContext(), xmlXPathEvalExpression(), xmlXPathFreeObject(), xmlXPathFreeContext()
+    - Schema: xmlSchemaNewMemParserCtxt(), xmlSchemaParse(), xmlSchemaNewValidCtxt(schema), xmlSchemaValidateDoc(), xmlSchemaValidateStream(), xmlSchemaValidateFile()
+    - Reader+Schema: xmlReaderForMemory() → xmlTextReaderSchemaValidateCtxt(reader, vctxt, 0) → xmlTextReaderRead(reader) loop
+    - Stream input: xmlParserInputBufferCreateMem((const char*)buf, len, XML_CHAR_ENCODING_NONE)
+    - C14N: xmlC14NDocDumpMemory() (takes doc, NOT a separate context)
+    - fd-based: AVOID unless required. xmlCtxtReadFd() needs real file/memfd, NOT pipe().
+      Prefer xmlCtxtReadMemory(ctxt, (char*)buf, len, "fuzz.xml", NULL, flags) — no fd needed.
+    - Cleanup: xmlFreeDoc(), xmlFreeTextReader(), xmlSchemaFreeValidCtxt(), xmlSchemaFreeParserCtxt(), xmlSchemaFree()
+
+    Output ONLY valid JSON with:
+    {
+      "target_func": "function_name",
+      "input_format": "XML document",
+      "c_code": "complete C harness source code",
+      "seed_commands": ["echo '<root/>' > seed.xml"],
+      "compile_flags": "-g -O1 -fno-omit-frame-pointer -fsanitize=address,undefined",
+      "dictionary_entries": ["<?xml", "<!DOCTYPE", "<root>", "</root>", "encoding=", "version="]
+    }
+
+  api_func_fixes:
+    "xmlC14NFreeCtx": "/* xmlC14NFreeCtx does not exist */"
+    "xmlC14NFreeContext": "/* xmlC14NFreeContext does not exist */"
+    "xmlNewTextReaderMemory": "xmlReaderForMemory"
+    "xmlSchemaNewValidCtxt(parser_ctxt)": "xmlSchemaNewValidCtxt(schema)"
+    "FuzzedDataProvider provider(buf, len)": "FuzzDataProvider fdp; fdp_init(&fdp, buf, (size_t)len)"
+    # xmlGenericErrorDefault is an internal symbol, not public API — redirect to local silencer
+    "xmlGenericErrorDefault": "xmlSilenceErrors"
+
+  # Static C helper definitions to inject before main() if referenced but not defined.
+  # Key = function name token to detect, Value = full C definition to inject.
+  harness_helpers:
+    "xmlSilenceErrors": "static void xmlSilenceErrors(void *ctx, const char *msg, ...) { (void)ctx; (void)msg; }"
+
+  # Auto-inject missing libxml2 includes when their functions/types appear in harness code.
+  harness_conditional_includes:
+    "htmlReadMemory": "#include <libxml/HTMLparser.h>"
+    "htmlCtxtReadMemory": "#include <libxml/HTMLparser.h>"
+    "htmlParseDoc": "#include <libxml/HTMLparser.h>"
+    "htmlParseFile": "#include <libxml/HTMLparser.h>"
+    "HTML_PARSE_": "#include <libxml/HTMLparser.h>"
+    "xmlTextReaderPtr": "#include <libxml/xmlreader.h>"
+    "xmlReaderForMemory": "#include <libxml/xmlreader.h>"
+    "xmlReaderForFile": "#include <libxml/xmlreader.h>"
+    "xmlNewTextReader": "#include <libxml/xmlreader.h>"
+    "XML_READER_TYPE": "#include <libxml/xmlreader.h>"
+    "xmlXPathNewContext": "#include <libxml/xpath.h>"
+    "xmlXPathEvalExpression": "#include <libxml/xpath.h>"
+    "xmlXPathFreeContext": "#include <libxml/xpath.h>"
+    "xmlSchemaNewMemParserCtxt": "#include <libxml/xmlschemas.h>"
+    "xmlSchemaParse": "#include <libxml/xmlschemas.h>"
+    "xmlSchemaNewValidCtxt": "#include <libxml/xmlschemas.h>"
+    "xmlSchemaValidateDoc": "#include <libxml/xmlschemas.h>"
+    "xmlSchemaValidateStream": "#include <libxml/xmlschemas.h>"
+    "xmlSchemaValidateFile": "#include <libxml/xmlschemas.h>"
+    "xmlSchemaValidateOneElement": "#include <libxml/xmlschemas.h>"
+    "xmlSchemaFreeValidCtxt": "#include <libxml/xmlschemas.h>"
+    "xmlSchemaFreeParserCtxt": "#include <libxml/xmlschemas.h>"
+    "xmlSchemaFree": "#include <libxml/xmlschemas.h>"
+    "xmlSchemaPtr": "#include <libxml/xmlschemas.h>"
+    "xmlSchemaValidCtxtPtr": "#include <libxml/xmlschemas.h>"
+    "xmlSchemaParserCtxtPtr": "#include <libxml/xmlschemas.h>"
+    "xmlRelaxNGNewMemParserCtxt": "#include <libxml/relaxng.h>"
+    "xmlRelaxNGParse": "#include <libxml/relaxng.h>"
+    "xmlRelaxNGNewValidCtxt": "#include <libxml/relaxng.h>"
+    "xmlRelaxNGValidateDoc": "#include <libxml/relaxng.h>"
+    "xmlRelaxNGFreeValidCtxt": "#include <libxml/relaxng.h>"
+    "xmlRelaxNGFreeParserCtxt": "#include <libxml/relaxng.h>"
+    "xmlRelaxNGFree": "#include <libxml/relaxng.h>"
+    "xmlRelaxNGPtr": "#include <libxml/relaxng.h>"
+    "xmlRelaxNGValidCtxtPtr": "#include <libxml/relaxng.h>"
+    "xmlRelaxNGParserCtxtPtr": "#include <libxml/relaxng.h>"
+    "xmlTextReaderSchemaValidateCtxt": "#include <libxml/xmlreader.h>"
+    "xmlTextReaderSchemaValidate": "#include <libxml/xmlreader.h>"
+    "xmlTextReaderRelaxNGValidate": "#include <libxml/xmlreader.h>"
+    "xmlTextReaderRead": "#include <libxml/xmlreader.h>"
+    "xmlParserInputBufferCreateMem": "#include <libxml/parser.h>"
+    "xmlC14NDocDumpMemory": "#include <libxml/c14n.h>"
+
+  magic_bytes:
+    xml: ["<?xml", "<!", "<root"]
+    html: ["<!DOCTYPE html", "<html", "<HTML"]
+
+recon_scoring:
+  bonus_patterns:
+    "parser": 3.0
+    "SAX": 3.0
+    "HTMLparser": 3.0
+  bonus_func_patterns:
+    # Schema/validation — highest priority (0% OSS-Fuzz coverage, complex attack surface)
+    "xmlSchemaValidateDoc": 10.0
+    "xmlSchemaValidateStream": 10.0
+    "xmlSchemaValidateFile": 10.0
+    "xmlTextReaderSchemaValidate": 10.0
+    "xmlRelaxNGValidateDoc": 8.0
+    "xmlSchemaParse": 8.0
+    # Parser/reader — moderate (already fuzzed by OSS-Fuzz, diminishing returns)
+    "xmlReadMemory": 3.0
+    "xmlCtxtRead": 3.0
+    "htmlReadMemory": 3.0
+    "xmlReaderFor": 3.0
+    "xmlParse": 2.0
+    "htmlParse": 2.0
+    "xmlXPath": 3.0
+  penalty_dirs:
+    - "test"
+    - "tests"
+    - "doc"
+    - "example"
+    - "python"
+    - "fuzz"
+  penalty_files:
+    - "testapi.c"
+    - "runtest.c"
+    - "xmllint.c"
+    - "xmlcatalog.c"
+    - "c14n.c"
+    # xmlschemas.c and schematron.c removed — high-value schema validation targets
+    - "xmlregexp.c"
+    - "xmlunicode.c"
+  penalty_funcs:
+    - "Error"
+    - "Warning"
+    - "Debug"
+    # Internal SAX/schema callbacks — reached indirectly via xmlSchemaValidateDoc/Stream
+    - "startElementNsSplit"
+    - "xmlSchemaSAXHandleStartElementNs"
+    - "xmlSchemaSAXHandleEndElementNs"
+    - "xmlSchemaSAXHandleText"
+    - "xmlSchemaSAXPlug"
+    - "xmlSchemaValidateStreamInternal"
+    # Internal RelaxNG callbacks — not public API (not in relaxng.h)
+    - "xmlRelaxNGValidateProgressiveCallback"
+    - "xmlRelaxNGValidateCallback"
+    - "xmlRelaxNGValidatePush"
+    # Internal SAX/parser functions — not directly harness-able, called via public API
+    - "xmlParseContent"
+    - "xmlParsePEReference"
+    - "xmlParserHandlePEReference"
+    - "xmlParseElementChildrenContentDecl"
+    - "xmlParseCtxtExternalEntity"
+    - "xmlParseExtParsedEnt"
+    - "xmlParseInNodeContext"
+    - "xmlParseDoc"          # deprecated, takes xmlChar* not buffer
+    - "xmlParseExternalEntity"  # deprecated
+  low_value_files:
+    "error.c": 6.0
+    "globals.c": 8.0
+    "catalog.c": 4.0
+
+seeds:
+  # Alias→canonical format mapping (e.g. func "htmlReadMemory" → use "xml" seeds)
+  format_aliases:
+    html: "xml"
+    xpath: "xml"
+    schema: "xml"
+    relaxng: "xml"
+  formats:
+    xml: "$HOME/Nemesis/seeds/xml"
+  oss_fuzz_corpus: "$HOME/Nemesis/seeds/oss_fuzz_corpus_libxml2"
+  oss_fuzz_fuzzer_names:
+    - "xml"
+    - "html"
+    - "xpath"
+    - "reader"

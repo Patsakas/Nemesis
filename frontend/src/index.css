@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* NEMESIS dashboard — light theme, styling lives inline in the components. */
+@keyframes nemPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+
+.nem-row { transition: background .12s; }
+.nem-row:hover { background: #FBFBF9; }
+
+@layer base {
+  body {
+    background-color: #F6F6F4;
+    color: #1A1A18;
+    font-family: 'Hanken Grotesk', system-ui, sans-serif;
+  }
+
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: #F0F0EC; }
+  ::-webkit-scrollbar-thumb { background: #D4D4CC; border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: #B4B4AC; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

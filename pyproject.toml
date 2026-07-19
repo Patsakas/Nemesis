@@ -1,0 +1,90 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nemesis"
+version = "0.1.0"
+description = "Neuro-symbolic vulnerability discovery for C/C++ libraries: LLM-generated fuzzing harnesses, Z3 verification and AFL++"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "Georgios Patsakas", email = "giorgospatsakas@gmail.com" },
+]
+keywords = [
+    "fuzzing", "security", "vulnerability-research", "afl", "llm",
+    "static-analysis", "z3", "oss-fuzz", "cve",
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Security",
+    "Topic :: Software Development :: Testing",
+]
+
+dependencies = [
+    # Core
+    "pydantic>=2.5,<3",
+    "pydantic-settings>=2.1,<3",
+    "pyyaml>=6.0",
+    # Round-trip YAML: the dashboard writes pinned_funcs back into
+    # config/targets/*.yaml and must not destroy their comments.
+    "ruamel.yaml>=0.18",
+    "click>=8.1",
+    "rich>=13.0",
+    "structlog>=24.1",
+    # Neural (Stage 2)
+    "groq>=0.9",
+    # Symbolic (Stage 3)
+    "z3-solver>=4.12",
+    # Fuzzing support (Stage 4)
+    "psutil>=5.9",
+    # HTTP for Introspector API
+    "httpx>=0.27",
+    # Codebase Oracle (RAG) — Stage 2 context injection
+    "numpy>=1.24",
+    "faiss-cpu>=1.7.0",
+    "libclang>=18.1.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=4.1",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.3",
+    "mypy>=1.8",
+]
+angr = [
+    "angr>=9.2",
+]
+web = [
+    "fastapi>=0.111",
+    "uvicorn[standard]>=0.29",
+]
+
+[project.scripts]
+nemesis = "nemesis.cli:cli"
+
+[project.urls]
+Homepage = "https://github.com/Patsakas/Nemesis"
+Repository = "https://github.com/Patsakas/Nemesis"
+Issues = "https://github.com/Patsakas/Nemesis/issues"
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v --tb=short"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
