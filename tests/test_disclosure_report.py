@@ -1,5 +1,4 @@
 """Tests for the coordinated-disclosure package generator (reporter.py)."""
-from pathlib import Path
 
 from nemesis.reporter import (
     _hexdump,

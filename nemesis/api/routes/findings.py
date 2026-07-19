@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request
 
-from nemesis.api.models import FindingDetail, FindingSummary, ReproductionInfo, CVEAssessmentInfo
+from nemesis.api.models import CVEAssessmentInfo, FindingDetail, FindingSummary, ReproductionInfo
 from nemesis.reporter import load_findings
 
 router = APIRouter(prefix="/api/findings", tags=["findings"])
@@ -95,11 +95,11 @@ def _to_detail(f: dict[str, Any]) -> FindingDetail:
 @router.get("", response_model=list[FindingSummary])
 def list_findings(
     request: Request,
-    library: Optional[str] = Query(None),
-    severity: Optional[str] = Query(None),
-    cwe: Optional[str] = Query(None),
-    status: Optional[str] = Query(None),
-    cve_worthy: Optional[bool] = Query(None),
+    library: str | None = Query(None),
+    severity: str | None = Query(None),
+    cwe: str | None = Query(None),
+    status: str | None = Query(None),
+    cve_worthy: bool | None = Query(None),
 ) -> list[FindingSummary]:
     findings = load_findings(request.app.state.findings_yaml)
     result = []

@@ -27,7 +27,6 @@ import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
 
 MAX_DEPTH = 5  # levels of caller traversal
 MAX_CALLERS_PER_LEVEL = 8  # cap to keep grep cheap
@@ -53,7 +52,7 @@ class ReachPath:
     callers), not a chain — the architect sees both and picks one."""
     pinned: str
     hops: list[CallerHop] = field(default_factory=list)
-    gateway: Optional[CallerHop] = None  # first public caller encountered
+    gateway: CallerHop | None = None  # first public caller encountered
 
     def render_block(self) -> str:
         """Format as <reach_path> block for the architect prompt."""
@@ -241,7 +240,7 @@ _KEYWORDS_PREFIX = {
 
 def _enclosing_func(
     file_path: Path, call_line: int,
-) -> Optional[tuple[str, int, str]]:
+) -> tuple[str, int, str] | None:
     """Return (func_name, def_line, signature) for the function containing call_line.
 
     The heuristic: starting at `call_line` and walking UP, find the first

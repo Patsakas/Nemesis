@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import os
 import re
-from typing import Any, Optional
+from typing import Any
 
 from nemesis.logging import get_logger
 
@@ -88,7 +88,7 @@ def is_oss_fuzz_covered(name: str, oss_projects: set[str]) -> bool:
     return bool(variants & oss_projects) or bool(variants & _KNOWN_FUZZED)
 
 
-def _year_of(iso_ts: Optional[str]) -> Optional[int]:
+def _year_of(iso_ts: str | None) -> int | None:
     """Extract the year from an ISO timestamp like '2024-08-12T...'. None if absent."""
     if not iso_ts:
         return None
@@ -110,7 +110,7 @@ def _star_score(stars: int) -> tuple[float, str]:
     return -4.0, f"likely-audited ({stars}★)"
 
 
-def _recency_score(year: Optional[int], now_year: int) -> tuple[float, str]:
+def _recency_score(year: int | None, now_year: int) -> tuple[float, str]:
     """Maintained → a reported bug can get fixed/assigned; very stale → maybe
     abandoned (CVE harder to land)."""
     if year is None:
@@ -124,7 +124,7 @@ def _recency_score(year: Optional[int], now_year: int) -> tuple[float, str]:
 
 
 def score_candidate(repo: dict[str, Any], oss_projects: set[str],
-                    now_year: int = 2026) -> Optional[dict[str, Any]]:
+                    now_year: int = 2026) -> dict[str, Any] | None:
     """Score one GitHub repo as a fuzzing candidate.
 
     Returns a result dict, or None if the repo is disqualified (wrong language,
@@ -273,8 +273,8 @@ def search_github_candidates(queries=DEFAULT_QUERIES, per_query: int = 30,
 
 
 def scout(queries=DEFAULT_QUERIES, top_n: int = 25, now_year: int = 2026,
-          oss_projects: Optional[set[str]] = None,
-          candidates: Optional[list[dict[str, Any]]] = None) -> list[dict[str, Any]]:
+          oss_projects: set[str] | None = None,
+          candidates: list[dict[str, Any]] | None = None) -> list[dict[str, Any]]:
     """End-to-end: fetch exclusion set + candidates, score, rank, return top-N.
 
     `oss_projects` / `candidates` can be injected (e.g. for tests or to reuse a

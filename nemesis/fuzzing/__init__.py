@@ -11,23 +11,22 @@ import os
 import re
 import subprocess
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional
 
 from nemesis.config import NemesisConfig
 from nemesis.logging import get_logger
 from nemesis.models import (
+    CWE,
     AFLStats,
     AppReproStatus,
     CoverageDelta,
     CoverageSnapshot,
     CrashReport,
-    CWE,
     HarnessSpec,
     SanitizerClass,
     Severity,
 )
-
 
 # UBSan defaults to print-and-continue on diagnostics (halt_on_error=0). Triage
 # replays an AFL crash input against an instrumented binary and decides the
@@ -497,11 +496,11 @@ class AFLOrchestrator:
         if (not mutator_source and getattr(self.config.target, "magic_bytes", None)
                 and _fflag("mutator_synthesis")):
             try:
+                # Use the same LLM client as the rest of the pipeline.
+                from nemesis.neural import LLMClient
                 from nemesis.recon.mutator_synthesis import (
                     synthesize_and_compile_adapter,
                 )
-                # Use the same LLM client as the rest of the pipeline.
-                from nemesis.neural import LLMClient
                 _llm = LLMClient(self.config)
                 nemesis_root = Path(__file__).resolve().parents[2]
                 synth_path = synthesize_and_compile_adapter(
@@ -606,7 +605,7 @@ class AFLOrchestrator:
                 _resource.setrlimit(
                     _resource.RLIMIT_NPROC, (512, 512)
                 )
-            except (ValueError, _resource.error):
+            except (OSError, ValueError):
                 pass  # WSL / container environments may not support all limits
 
         # Capture AFL stderr to log files for debugging early exits
@@ -1320,7 +1319,8 @@ class AFLOrchestrator:
 
         Returns the minset directory path, or None if unavailable/failed.
         """
-        import shutil, tempfile
+        import shutil
+        import tempfile
 
         library_name = self.config.target.name
         minset_dir = self.workspace / "seeds_minset" / library_name
@@ -1515,8 +1515,8 @@ class AFLOrchestrator:
         self,
         file_path: str,
         dict_dir: Path,
-        llm_entries: Optional[list[str]] = None,
-    ) -> Optional[Path]:
+        llm_entries: list[str] | None = None,
+    ) -> Path | None:
         """Extract magic bytes and format tokens from source code for AFL dictionary.
 
         Scans the target source file for string literals used in memcmp, strcmp,
@@ -1761,12 +1761,12 @@ class CrashTriager:
         self.log = get_logger("fuzzing.triager")
         self.crashes_dir = Path(config.engine.work_dir) / "fuzzing" / "findings" / "default" / "crashes"
         # Set by SymbolicStage after build_unpatched_debug() succeeds
-        self.unpatched_binary: Optional[Path] = None
+        self.unpatched_binary: Path | None = None
         # Set by FuzzingStage.run() to the per-target asan_logs dir (Fix 85)
-        self.asan_log_dir: Optional[Path] = None
+        self.asan_log_dir: Path | None = None
         # Multi-build verification binaries (set by pipeline/symbolic stage)
-        self.ubsan_binary: Optional[Path] = None   # UBSan debug binary
-        self.clean_binary: Optional[Path] = None    # No-sanitizer binary (repro_binary)
+        self.ubsan_binary: Path | None = None   # UBSan debug binary
+        self.clean_binary: Path | None = None    # No-sanitizer binary (repro_binary)
 
     def triage_all(self) -> list[CrashReport]:
         """Process all crash files in the findings directory.
@@ -1986,7 +1986,7 @@ class CrashTriager:
     def triage_leaks(
         self,
         sample_size: int = 30,
-        func_name: Optional[str] = None,
+        func_name: str | None = None,
     ) -> list[CrashReport]:
         """Fix 136: post-fuzz leak detection (CWE-401).
 
@@ -2202,7 +2202,7 @@ class CrashTriager:
         self.log.info("triage.leaks_complete", unique_leaks=len(reports))
         return reports
 
-    def _build_reference_harness(self, func_name: str) -> Optional[Path]:
+    def _build_reference_harness(self, func_name: str) -> Path | None:
         """Fix 137: compile the saved reference harness for ``func_name``.
 
         The reference harness lives at
@@ -2340,7 +2340,7 @@ class CrashTriager:
         try:
             with open(hang_file, "rb") as inp:
                 # Fix 126: abort_on_error=1 so ASAN crash != false hang
-                result = _subprocess.run(
+                _subprocess.run(
                     [str(self.unpatched_binary)],
                     stdin=inp,
                     stdout=_subprocess.DEVNULL,
@@ -2514,7 +2514,7 @@ class CrashTriager:
         return result.returncode, (result.stderr or b"").decode("utf-8", errors="replace")
 
     @classmethod
-    def _crash_signature(cls, returncode: int, stderr: str) -> Optional[tuple[str, str]]:
+    def _crash_signature(cls, returncode: int, stderr: str) -> tuple[str, str] | None:
         """Fingerprint a crash by (sanitizer error class, first app fault frame).
 
         Returns None when the input did NOT crash (clean exit 0). The fault frame is
@@ -2566,7 +2566,7 @@ class CrashTriager:
                 n //= 2
         return data
 
-    def minimize_crash(self, crash_file: Path, report: CrashReport) -> Optional[Path]:
+    def minimize_crash(self, crash_file: Path, report: CrashReport) -> Path | None:
         """Delta-debug ``crash_file`` to a minimal same-site reproducer.
 
         Saves the reduced input under ``<findings>/minimized/`` and records its path
@@ -2735,7 +2735,7 @@ class CrashTriager:
 
         return crashes_dir
 
-    def _analyze_crash(self, crash_file: Path) -> Optional[CrashReport]:
+    def _analyze_crash(self, crash_file: Path) -> CrashReport | None:
         """Analyze a single crash file: ASAN run for CWE classification, GDB for backtrace.
 
         GDB intercepts SIGSEGV before ASAN can print its diagnostic, so we run

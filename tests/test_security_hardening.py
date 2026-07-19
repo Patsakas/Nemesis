@@ -1,7 +1,7 @@
 """Security hardening (audit Batch 1): the two dynamic-execution vectors that
 run LLM-generated content — predicate eval and seedgen scripts — are validated
 structurally (AST whitelist), and seedgen children get a secret-free env."""
-from nemesis.recon.predicate_synthesis import _predicate_expr_is_safe, _evaluate_predicate
+from nemesis.recon.predicate_synthesis import _evaluate_predicate, _predicate_expr_is_safe
 from nemesis.recon.seedgen import _script_ast_is_safe, _seedgen_child_env
 
 

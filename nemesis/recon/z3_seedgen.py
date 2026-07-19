@@ -48,12 +48,13 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from nemesis.models import PathConstraint
 
 if TYPE_CHECKING:
     import logging
+
     from nemesis.models import HarnessSpec, InputParam, InputSpec
 
 
@@ -64,7 +65,7 @@ _MUL_RE = re.compile(r"\b([A-Za-z_]\w*)\s*\*\s*([A-Za-z_]\w*)")
 _ALLOC_HINT = ("malloc", "alloc", "calloc", "realloc", "size", "len", "count", "n_", "_n")
 
 
-def _parse_int(tok: str) -> Optional[int]:
+def _parse_int(tok: str) -> int | None:
     try:
         return int(tok, 16) if tok.lower().startswith("0x") else int(tok)
     except ValueError:
@@ -146,7 +147,7 @@ def solve_mul_overflow(
     bits_b: int = 32,
     bpp: int = 1,
     small_alloc_max: int = 4096,
-) -> Optional[tuple[int, int]]:
+) -> tuple[int, int] | None:
     """Find (a, b), each >= 2, whose 32-bit product wraps to a small value.
 
     Models the classic under-allocation overflow: the logical size
@@ -156,7 +157,7 @@ def solve_mul_overflow(
     unavailable or the model is unsat.
     """
     try:
-        from z3 import BitVec, BitVecVal, Solver, ZeroExt, UGT, ULT, sat
+        from z3 import UGT, ULT, BitVec, BitVecVal, Solver, ZeroExt, sat
     except Exception:  # noqa: BLE001 — z3 optional
         return None
 
@@ -181,7 +182,7 @@ def solve_mul_overflow(
     return int(mdl[a].as_long()), int(mdl[b].as_long())
 
 
-def solve_constraint_value(con: PathConstraint, bits: int) -> Optional[int]:
+def solve_constraint_value(con: PathConstraint, bits: int) -> int | None:
     """Solve a single comparison for a concrete in-range value of `bits` width."""
     target = _parse_int(con.value)
     if target is None:
@@ -203,7 +204,7 @@ def solve_constraint_value(con: PathConstraint, bits: int) -> Optional[int]:
     return v
 
 
-def place_value(buf: bytearray, param: "InputParam", value: int, big_endian: bool = False) -> bool:
+def place_value(buf: bytearray, param: InputParam, value: int, big_endian: bool = False) -> bool:
     """Write `value` into buf at the parameter's offset, sized by param.size."""
     size = max(1, min(4, int(getattr(param, "size", 1) or 1)))
     off = int(getattr(param, "offset", 0) or 0)
@@ -217,7 +218,7 @@ def place_value(buf: bytearray, param: "InputParam", value: int, big_endian: boo
     return True
 
 
-def _param_by_name(spec: "InputSpec", name: str) -> Optional["InputParam"]:
+def _param_by_name(spec: InputSpec, name: str) -> InputParam | None:
     for p in getattr(spec, "params", []) or []:
         if p.name and p.name.lower() == name.lower():
             return p
@@ -226,10 +227,10 @@ def _param_by_name(spec: "InputSpec", name: str) -> Optional["InputParam"]:
 
 def build_seeds(
     base: bytes,
-    spec: "InputSpec",
+    spec: InputSpec,
     constraints: list[PathConstraint],
     overflow_pairs: list[tuple[str, str]],
-    log: "logging.Logger | None" = None,
+    log: logging.Logger | None = None,
 ) -> list[bytes]:
     """Produce seed variants by placing solved values at InputSpec offsets."""
     seeds: list[bytes] = []
@@ -307,10 +308,10 @@ def synthesize_seeds(
     *,
     config,
     seeds_dir: Path,
-    harness: "HarnessSpec",
+    harness: HarnessSpec,
     target_func: str = "",
-    nemesis_root: Optional[Path] = None,
-    log: "logging.Logger",
+    nemesis_root: Path | None = None,
+    log: logging.Logger,
 ) -> int:
     """Top-level entry for the SeedPipeline Z3 stage. Returns seeds written."""
     spec = getattr(harness, "input_spec", None)

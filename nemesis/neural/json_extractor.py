@@ -8,14 +8,14 @@ Install: Copy this file to ~/nemesis/nemesis/neural/json_extractor.py
 """
 
 import json
-import re
 import logging
-from typing import Any, Optional
+import re
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
-def extract_json(text: str) -> Optional[dict[str, Any]]:
+def extract_json(text: str) -> dict[str, Any] | None:
     if not text or not text.strip():
         return None
 
@@ -44,7 +44,7 @@ def extract_json(text: str) -> Optional[dict[str, Any]]:
     return None
 
 
-def _try_parse(candidate: str, source: str) -> Optional[dict[str, Any]]:
+def _try_parse(candidate: str, source: str) -> dict[str, Any] | None:
     # Attempt 1: direct parse
     obj = _safe_loads(candidate)
     if isinstance(obj, dict):
@@ -160,7 +160,7 @@ def _aggressive_clean(text: str) -> str:
     return ''.join(result)
 
 
-def _extract_balanced_braces(text: str) -> Optional[dict[str, Any]]:
+def _extract_balanced_braces(text: str) -> dict[str, Any] | None:
     start = text.find("{")
     if start == -1:
         return None
@@ -229,7 +229,7 @@ Explanation here.'''
 }
 ```'''
     r2 = extract_json(test2)
-    assert r2 is not None, f"Test 2 failed"
+    assert r2 is not None, "Test 2 failed"
     assert r2["target_func"] == "test", f"Test 2 wrong: {r2}"
     assert len(r2["seed_commands"]) == 2, f"Test 2 seeds: {r2['seed_commands']}"
     print("Test 2 PASS (literal \\n outside strings)")
@@ -242,7 +242,7 @@ Explanation here.'''
 }
 ```'''
     r3 = extract_json(test3)
-    assert r3 is not None, f"Test 3 failed"
+    assert r3 is not None, "Test 3 failed"
     print("Test 3 PASS (escaped quotes outside strings)")
 
     # Test 4: Clean JSON (no issues)

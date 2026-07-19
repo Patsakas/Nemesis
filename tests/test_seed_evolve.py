@@ -7,7 +7,6 @@ from pathlib import Path
 
 from nemesis.recon import seed_evolve as ev
 
-
 # ── pure operators ────────────────────────────────────────────────────────
 
 def test_mutate_changes_data_but_stays_bytes():

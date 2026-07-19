@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import os
 import stat
-import sys
 from pathlib import Path
 
 import pytest
@@ -18,7 +17,6 @@ import pytest
 from nemesis import feature_flags as ff
 from nemesis.fuzzing import _combine_adjacent_char_cmps
 from nemesis.recon import roundtrip_seedgen as rt
-
 
 # ── feature flags ─────────────────────────────────────────────────────────
 

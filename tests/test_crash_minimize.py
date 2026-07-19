@@ -8,8 +8,7 @@ from pathlib import Path
 
 from nemesis.config import NemesisConfig
 from nemesis.fuzzing import CrashTriager
-from nemesis.models import CrashReport, CWE, Severity
-
+from nemesis.models import CWE, CrashReport, Severity
 
 # ── _ddmin (pure delta-debug) ────────────────────────────────────────────────
 

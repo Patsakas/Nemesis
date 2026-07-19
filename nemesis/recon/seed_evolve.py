@@ -31,11 +31,13 @@ from __future__ import annotations
 
 import hashlib
 import random
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, Optional, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import logging
+
     from nemesis.models import HarnessSpec
 
 
@@ -140,10 +142,10 @@ def evolve(
     config,
     symbolic,
     seeds_dir: Path,
-    harness: "HarnessSpec",
+    harness: HarnessSpec,
     target_func: str = "",
-    log: "logging.Logger",
-    fitness_fn: Optional[Callable[[bytes], float]] = None,
+    log: logging.Logger,
+    fitness_fn: Callable[[bytes], float] | None = None,
     keep: int = 8,
     n_offspring: int = 40,
     rng_seed: int = 0xE7011E,

@@ -18,7 +18,6 @@ from __future__ import annotations
 import os
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from nemesis.config import NemesisConfig
 from nemesis.logging import get_logger
@@ -47,7 +46,7 @@ class OfflineCrashVerifier:
         self.source_root = Path(config.target.source_root)
         self.debug_build_dir = Path(config.target.debug_build_dir)
         self.findings_base = Path(config.engine.work_dir) / "fuzzing" / "findings"
-        self._unpatched_lib: Optional[str] = None  # path to unpatched libarchive.a
+        self._unpatched_lib: str | None = None  # path to unpatched libarchive.a
 
     # ── Public API ────────────────────────────────────────────
 
@@ -136,7 +135,7 @@ class OfflineCrashVerifier:
 
     # ── Per-target verification ───────────────────────────────
 
-    def _verify_target(self, target: CoverageTarget) -> "VerificationResult":
+    def _verify_target(self, target: CoverageTarget) -> VerificationResult:
         """Verify crashes for one target function."""
         crash_files = self._crash_files(target.func_name)
         result = VerificationResult(func_name=target.func_name, crash_files=crash_files)
@@ -167,12 +166,11 @@ class OfflineCrashVerifier:
 
         return result
 
-    def _get_harness(self, target: CoverageTarget) -> Optional[HarnessSpec]:
+    def _get_harness(self, target: CoverageTarget) -> HarnessSpec | None:
         """Re-run Stage 2 for this target (LLM cache hit → free)."""
         try:
-            from nemesis.recon import ReconStage
             from nemesis.neural import NeuralStage
-            from nemesis.models import AnalysisContext
+            from nemesis.recon import ReconStage
 
             recon = ReconStage(self.config)
             neural = NeuralStage(self.config)
@@ -211,7 +209,7 @@ static int     __afl_stub_called = 0;
 
     def _compile_debug_harness(
         self, harness: HarnessSpec, func_name: str
-    ) -> Optional[Path]:
+    ) -> Path | None:
         """Compile harness against unpatched libarchive.a using clang+ASAN.
 
         Prepends an AFL stub header so AFL persistent-mode macros work with
@@ -318,7 +316,7 @@ static int     __afl_stub_called = 0;
             pass
         return ""
 
-    def _print_result(self, result: "VerificationResult") -> None:
+    def _print_result(self, result: VerificationResult) -> None:
         real = len(result.real_crashes)
         induced = len(result.patch_induced)
         total = len(result.crash_files)

@@ -8,11 +8,8 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-import pytest
-
 from nemesis.models import InputParam, InputSpec
 from nemesis.recon import z3_seedgen as z
-
 
 # ── constraint extraction ─────────────────────────────────────────────────
 

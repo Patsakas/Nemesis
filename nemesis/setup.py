@@ -16,10 +16,8 @@ Usage:
 from __future__ import annotations
 
 import os
-import shutil
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from nemesis.config import NemesisConfig
 from nemesis.logging import get_logger
@@ -118,7 +116,7 @@ class LibrarySetup:
                 self.log.error(f"setup.configure_{label}_failed", error=msg)
                 return False, f"Configure failed: {msg}"
         except subprocess.TimeoutExpired:
-            return False, f"Configure timed out after 180s"
+            return False, "Configure timed out after 180s"
 
         # Make
         try:
@@ -133,12 +131,12 @@ class LibrarySetup:
                 self.log.error(f"setup.make_{label}_failed", error=msg)
                 return False, f"Make failed: {msg}"
         except subprocess.TimeoutExpired:
-            return False, f"Make timed out after 600s"
+            return False, "Make timed out after 600s"
 
         self.log.info(f"setup.build_{label}_ok")
         return True, ""
 
-    def verify_library(self, build_dir: Path) -> Optional[Path]:
+    def verify_library(self, build_dir: Path) -> Path | None:
         """Find the built .a or .so file in build_dir. Returns path or None."""
         lib_name = self.config.target.library_name
         # Search recursively in build_dir

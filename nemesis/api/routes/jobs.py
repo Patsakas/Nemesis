@@ -19,8 +19,8 @@ import sys
 import threading
 import uuid
 from collections import deque
-from datetime import datetime, timezone
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
@@ -69,7 +69,7 @@ class _Job:
         self.id = uuid.uuid4().hex[:12]
         self.kind = kind
         self.argv = argv
-        self.started_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        self.started_at = datetime.now(UTC).isoformat(timespec="seconds")
         self.finished_at: str | None = None
         self.exit_code: int | None = None
         self.stopped = False
@@ -87,7 +87,7 @@ class _Job:
         for line in self.proc.stdout:
             self.lines.append(line.rstrip("\n"))
         self.exit_code = self.proc.wait()
-        self.finished_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        self.finished_at = datetime.now(UTC).isoformat(timespec="seconds")
 
     @property
     def status(self) -> str:

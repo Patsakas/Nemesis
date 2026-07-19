@@ -3,9 +3,9 @@ CWE-125 instead of generic CWE-758 (an alignment-UB mis-classification)."""
 from types import SimpleNamespace
 
 from nemesis.config import load_config
+from nemesis.fuzzing import CrashTriager
 from nemesis.models import CWE
 from nemesis.symbolic import _resolve_sanitizer_flags
-from nemesis.fuzzing import CrashTriager
 
 
 def _cfg(profile="asan_ubsan"):

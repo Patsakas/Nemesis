@@ -4,12 +4,12 @@ Regression guard: merge_crash_reports previously deduped by function name
 ALONE, collapsing distinct bugs in the same function into a single finding.
 It now keys on (function, crash_location).
 """
-from nemesis.models import CrashReport, CWE, Severity
+from nemesis.models import CWE, CrashReport, Severity
 from nemesis.reporter import (
-    merge_crash_reports,
-    _derive_library,
     _crash_dedup_key,
+    _derive_library,
     _finding_dedup_key,
+    merge_crash_reports,
 )
 
 

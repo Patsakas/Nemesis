@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
 
 from nemesis.config import NemesisConfig
 from nemesis.logging import get_logger
@@ -694,7 +693,7 @@ class IntrospectorParser:
                 return i
         return -1
 
-    def _find_enclosing_function(self, lines: list[str], idx: int) -> Optional[str]:
+    def _find_enclosing_function(self, lines: list[str], idx: int) -> str | None:
         """Look backwards from idx to find the function name."""
         import re
         func_pattern = re.compile(r"^(\w+)\s*\(")
@@ -793,7 +792,7 @@ class CallChainTracer:
         self.log.info("trace.complete", func=func, depth=len(callers), chain=callers)
         return callers
 
-    def _extract_caller_from_line(self, line: str) -> Optional[str]:
+    def _extract_caller_from_line(self, line: str) -> str | None:
         """Extract function name from a line of code (heuristic)."""
         import re
         # Look for function call pattern before our target
@@ -881,7 +880,7 @@ class ContextExtractor:
             build_config=self.config.target.build.configure,
         )
 
-    def _extract_function_body(self, func: str, root: Path) -> Optional[str]:
+    def _extract_function_body(self, func: str, root: Path) -> str | None:
         """Extract a function body from source files."""
         import subprocess
         try:

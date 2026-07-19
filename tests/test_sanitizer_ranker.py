@@ -7,8 +7,6 @@ top-K picking with min-score floor, and threading detection.
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from nemesis.config import TargetConfig
 from nemesis.recon.sanitizer_ranker import (
     SanitizerRanking,
@@ -17,7 +15,6 @@ from nemesis.recon.sanitizer_ranker import (
     pick_top_k,
     rank_sanitizers,
 )
-
 
 # ── Threading detection ─────────────────────────────────────
 

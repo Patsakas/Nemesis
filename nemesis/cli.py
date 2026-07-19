@@ -16,19 +16,23 @@ import sys
 import time
 import uuid
 from pathlib import Path
-from typing import Optional
 
 import click
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from nemesis.config import load_config, NemesisConfig
-from nemesis.logging import setup_logging, get_logger
+from nemesis.config import NemesisConfig, load_config
+from nemesis.logging import get_logger, setup_logging
 from nemesis.models import PipelineRun, PipelineStatus
 from nemesis.reporter import (
-    load_findings, merge_crash_reports, save_findings, generate_report,
-    generate_cve_report, save_cve_report, update_finding_with_cve,
+    generate_cve_report,
+    generate_report,
+    load_findings,
+    merge_crash_reports,
+    save_cve_report,
+    save_findings,
+    update_finding_with_cve,
 )
 
 console = Console(stderr=True)
@@ -49,8 +53,8 @@ BANNER = r"""
 
 
 def _resolve_config(
-    config_path: Optional[str],
-    target: Optional[str],
+    config_path: str | None,
+    target: str | None,
 ) -> NemesisConfig:
     """Resolve and merge configuration files."""
     default = Path("config/default.yaml")
@@ -125,7 +129,7 @@ def cli() -> None:
 def run(
     target: str,
     targets: str,
-    config_path: Optional[str],
+    config_path: str | None,
     dry_run: bool,
     stages: str,
     max_targets: int,
@@ -135,7 +139,7 @@ def run(
     deep_hours: float,
     timeout_hours: float,
     resume: bool,
-    strategy: Optional[str],
+    strategy: str | None,
     auto_sanitizer: bool,
     auto_sanitizer_top: int,
 ) -> None:
@@ -164,7 +168,6 @@ def run(
     # Multi-library loop
     if len(target_list) > 1:
         console.print(f"[cyan]Multi-library scan:[/cyan] {', '.join(target_list)}")
-        all_runs = []
         for lib_target in target_list:
             console.print(f"\n[bold cyan]{'='*60}[/bold cyan]")
             console.print(f"[bold cyan]  Library: {lib_target}[/bold cyan]")
@@ -191,7 +194,7 @@ def run(
 
 def _run_single_target(
     target: str,
-    config_path: Optional[str],
+    config_path: str | None,
     dry_run: bool,
     stages: str,
     max_targets: int,
@@ -201,7 +204,7 @@ def _run_single_target(
     deep_hours: float,
     timeout_hours: float,
     resume: bool,
-    strategy: Optional[str],
+    strategy: str | None,
     auto_sanitizer: bool = False,
     auto_sanitizer_top: int = 2,
 ) -> None:
@@ -346,7 +349,8 @@ def _resolve_auto_sanitizer_profiles(
     ['asan_ubsan'] so at least one sanitizer pass runs.
     """
     import os
-    from nemesis.recon.sanitizer_ranker import rank_sanitizers, pick_top_k
+
+    from nemesis.recon.sanitizer_ranker import pick_top_k, rank_sanitizers
 
     pinned = cfg.target.pinned_funcs or []
     if not pinned:
@@ -415,7 +419,7 @@ def onboard(
     oss_fuzz_project: str,
     work_root: str,
     output: str,
-    config_path: Optional[str],
+    config_path: str | None,
 ) -> None:
     """Auto-generate a NEMESIS target config for a new C library."""
     console.print(BANNER)
@@ -474,7 +478,8 @@ def scout(top: int, round_trip_only: bool, out_path: str, year: int) -> None:
     from nemesis.config import load_dotenv_file
     load_dotenv_file()
 
-    from nemesis.recon.target_scout import scout as run_scout, render_report
+    from nemesis.recon.target_scout import render_report
+    from nemesis.recon.target_scout import scout as run_scout
 
     console.print("[cyan]Scouting GitHub for un-fuzzed C/C++ parser libraries…[/cyan]")
     results = run_scout(top_n=max(top, 1), now_year=year)
@@ -501,7 +506,7 @@ def scout(top: int, round_trip_only: bool, out_path: str, year: int) -> None:
 @click.option("--config", "-c", "config_path", default=None, help="Custom config file path")
 @click.option("--url", default="", help="Git URL to clone (if source doesn't exist)")
 @click.option("--skip-build", is_flag=True, help="Only clone + rsync, skip builds")
-def setup(target: str, config_path: Optional[str], url: str, skip_build: bool) -> None:
+def setup(target: str, config_path: str | None, url: str, skip_build: bool) -> None:
     """Auto-setup a target library: clone, prepare workspace, and verify builds."""
     console.print(BANNER)
     cfg = _resolve_config(config_path, target)
@@ -543,7 +548,7 @@ def setup(target: str, config_path: Optional[str], url: str, skip_build: bool) -
             style = "[green]OK[/green]"
         elif status is False:
             err = results.get(f"{step}_error", "")
-            style = f"[red]FAILED[/red]"
+            style = "[red]FAILED[/red]"
             if err:
                 style += f"\n[dim]{str(err)[:80]}[/dim]"
         else:
@@ -571,7 +576,7 @@ def setup(target: str, config_path: Optional[str], url: str, skip_build: bool) -
 @cli.command("verify-crashes")
 @click.option("--target", "-t", required=True, help="Target project name (e.g., libarchive)")
 @click.option("--config", "-c", "config_path", default=None)
-def verify_crashes(target: str, config_path: Optional[str]) -> None:
+def verify_crashes(target: str, config_path: str | None) -> None:
     """
     Offline crash verification: determine which crashes are real bugs vs patch-induced.
 
@@ -583,9 +588,10 @@ def verify_crashes(target: str, config_path: Optional[str]) -> None:
     cfg = _resolve_config(config_path, target)
     setup_logging(level=cfg.engine.log_level, fmt=cfg.engine.log_format)
 
+    from rich.table import Table
+
     from nemesis.recon import ReconStage
     from nemesis.verifier import OfflineCrashVerifier
-    from rich.table import Table
 
     console.print("[cyan]Phase 1:[/cyan] Running recon to enumerate targets...")
     recon = ReconStage(cfg)
@@ -644,7 +650,7 @@ def verify_crashes(target: str, config_path: Optional[str]) -> None:
 @click.option("--target", "-t", required=True, help="Target project name")
 @click.option("--config", "-c", "config_path", default=None)
 @click.option("--output", "-o", default=None, help="Output JSON file for targets")
-def recon(target: str, config_path: Optional[str], output: Optional[str]) -> None:
+def recon(target: str, config_path: str | None, output: str | None) -> None:
     """Run Stage 1 (Recon) only — identify low-coverage targets."""
     console.print(BANNER)
 
@@ -692,8 +698,8 @@ def recon(target: str, config_path: Optional[str], output: Optional[str]) -> Non
 @click.option("--show", is_flag=True, help="Show resolved configuration")
 @click.option("--validate", is_flag=True, help="Validate configuration only")
 def config_cmd(
-    target: Optional[str],
-    config_path: Optional[str],
+    target: str | None,
+    config_path: str | None,
     show: bool,
     validate: bool,
 ) -> None:
@@ -794,11 +800,11 @@ def report(run_id: str, fmt: str, output: str, findings_path: str) -> None:
 )
 def benchmark_ab(
     target: str,
-    configs_path: Optional[str],
+    configs_path: str | None,
     preset: str,
     out_dir: str,
     duration: float,
-    write_preset: Optional[str],
+    write_preset: str | None,
 ) -> None:
     """Run an A/B benchmark over NEMESIS feature flags.
 
@@ -810,6 +816,8 @@ def benchmark_ab(
     """
     from nemesis.benchmark import (
         run_ab,
+    )
+    from nemesis.benchmark import (
         write_preset as _write_preset,
     )
 
@@ -1084,7 +1092,7 @@ def _extract_source_context(config: NemesisConfig, file_path: str, crash_locatio
         return ""
 
 
-def _update_findings(run: PipelineRun, config: Optional[NemesisConfig] = None) -> None:
+def _update_findings(run: PipelineRun, config: NemesisConfig | None = None) -> None:
     """
     Merge pipeline crashes into findings.yaml, run CVE analysis, and print report.
 
@@ -1131,7 +1139,6 @@ def _update_findings(run: PipelineRun, config: Optional[NemesisConfig] = None) -
 
     # -- CVE analysis for new or upgraded CVE-worthy crashes ----------------------------
     if config and (new_entries > 0 or upgraded_funcs):
-        from nemesis.models import CWE
         from nemesis.neural import NeuralStage
 
         log = get_logger("cli")

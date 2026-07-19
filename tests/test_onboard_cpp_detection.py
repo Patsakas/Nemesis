@@ -15,7 +15,6 @@ from nemesis.onboard import (
     _format_findpackage_comment,
 )
 
-
 # ── _detect_cpp_project ─────────────────────────────────────
 
 

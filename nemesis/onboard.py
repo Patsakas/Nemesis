@@ -13,13 +13,11 @@ from __future__ import annotations
 
 import re
 from pathlib import Path
-from typing import Optional
 
 import yaml
 
 from nemesis.config import NemesisConfig
 from nemesis.logging import get_logger
-
 
 # ── YAML block-scalar helpers ────────────────────────────────
 
@@ -244,7 +242,8 @@ def _system_has_lib(linker_flag: str) -> bool:
     package may be uninstalled (.so symlink missing → linking fails). We probe
     `gcc -print-file-name=lib<name>.so` and check the result actually exists.
     """
-    import subprocess, os
+    import os
+    import subprocess
     for token in linker_flag.split():
         if not token.startswith("-l"):
             continue
@@ -429,7 +428,7 @@ def _format_oracle_hints_comment(hints: dict) -> str:
 class TargetOnboarder:
     """Auto-detect library metadata and write a NEMESIS target YAML config."""
 
-    def __init__(self, config: Optional[NemesisConfig] = None) -> None:
+    def __init__(self, config: NemesisConfig | None = None) -> None:
         self.config = config
         self.log = get_logger("onboard")
 
@@ -479,9 +478,9 @@ class TargetOnboarder:
         onboard time than discover at build time that an experimental
         CMakeLists.txt is broken.
         """
+        import shutil
         import subprocess
         import tempfile
-        import shutil
 
         cmake_bin = shutil.which("cmake")
         if not cmake_bin:
@@ -626,7 +625,7 @@ class TargetOnboarder:
         # subdirectory CMakeLists.txt, not the top-level one (e.g. libtiff/CMakeLists.txt
         # has `add_library(tiff ...)`). Some repos also have helper sublibs (port/,
         # tools/) — we collect ALL matches and rank them by relevance to project_name.
-        cmake_match_path: Optional[Path] = None
+        cmake_match_path: Path | None = None
         cmake_match_target: str = ""
 
         # Compute "base name" variants: strip common decorations from project_name
@@ -989,7 +988,7 @@ class TargetOnboarder:
         build_system: str = "cmake",
         extra_cmake_flags: str = "",
         is_cpp: bool = False,
-        autotools_disable_flags: Optional[list[str]] = None,
+        autotools_disable_flags: list[str] | None = None,
         source_subdir: str = "",
     ) -> dict:
         """
@@ -1461,7 +1460,7 @@ class TargetOnboarder:
             nemesis_root = Path.cwd()
         seeds_root = nemesis_root / "seeds"
         if magic_bytes and seeds_root.exists():
-            for fmt_name in magic_bytes.keys():
+            for fmt_name in magic_bytes:
                 # Try lower-case, original case, and "tiff" → "tiff" (already lower) variants
                 for candidate in (fmt_name.lower(), fmt_name, fmt_name.lower().rstrip("12345")):
                     cand_dir = seeds_root / candidate
@@ -1486,7 +1485,7 @@ class TargetOnboarder:
 
                 # Pick a sample seed (first file from any linked seed dir)
                 # to ground the LLM in the actual on-wire layout.
-                sample_seed_path: Optional[Path] = None
+                sample_seed_path: Path | None = None
                 for seed_dir_str in seeds_formats.values():
                     seed_dir = Path(seed_dir_str.replace("$HOME", str(Path.home())))
                     if seed_dir.is_dir():

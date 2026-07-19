@@ -77,10 +77,28 @@ Issues = "https://github.com/Patsakas/Nemesis/issues"
 
 [tool.ruff]
 target-version = "py311"
-line-length = 100
+line-length = 120
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM"]
+# CI gates on this configuration, so every entry below is a deliberate decision
+# rather than a way to silence noise. The correctness rules (F, E9, B) are all
+# enforced — they are what caught a real `NameError` in the predicate canary.
+ignore = [
+    "E501",   # line length: prompts and ASCII tables read worse when wrapped
+    "E712",   # `x == True` builds a Z3 constraint here, it is not a truth test
+    "N806",   # locals mirror the C symbols under analysis (CWE, IDAT, ...)
+    "UP042",  # migrating to StrEnum changes serialization; separate change
+    "SIM102", "SIM103", "SIM105", "SIM108", "SIM113", "SIM114",  # style preferences
+    "SIM115", # a few file handles are intentionally long-lived
+    "E402",   # heavy deps are imported lazily, after the module docstring
+    "E741",   # `l` survives in two parser loops
+    "B007",   # unused loop vars document what is being iterated
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests favour readability over import hygiene.
+"tests/*" = ["N802", "N803"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

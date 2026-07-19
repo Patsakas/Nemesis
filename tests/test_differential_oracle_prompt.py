@@ -7,10 +7,10 @@ configured, alone or alongside the existing Fix 135 round-trip oracle.
 """
 
 from nemesis.models import (
+    CWE,
     AnalysisContext,
     CallChain,
     CoverageTarget,
-    CWE,
     VulnerabilityAnalysis,
 )
 from nemesis.neural import PromptBuilder

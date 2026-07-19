@@ -9,12 +9,11 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
-
 
 # ── Sub-models ──────────────────────────────────────────────
 
@@ -74,9 +73,9 @@ class RoleModelConfig(BaseModel):
 
 class LLMConfig(BaseModel):
     providers: list[ProviderConfig] = Field(default_factory=list)
-    architect: Optional[RoleModelConfig] = None   # iteration 0: initial harness gen
-    debugger: Optional[RoleModelConfig] = None     # iterations 1+: repair & refinement
-    onboarder: Optional[RoleModelConfig] = None    # one-shot per library (nemesis onboard)
+    architect: RoleModelConfig | None = None   # iteration 0: initial harness gen
+    debugger: RoleModelConfig | None = None     # iterations 1+: repair & refinement
+    onboarder: RoleModelConfig | None = None    # one-shot per library (nemesis onboard)
     # Legacy fields (used if providers list is empty)
     provider: str = "anthropic"
     model: str = "claude-sonnet-4-20250514"
@@ -152,7 +151,7 @@ class GroundTruthBug(BaseModel):
 class KnownBlocker(BaseModel):
     condition: str
     file: str
-    line: Optional[int] = None
+    line: int | None = None
     type: str  # "macro", "runtime_check", "format_requirement"
     description: str = ""
 
@@ -427,7 +426,7 @@ def _deep_merge(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any
 
 
 def load_dotenv_file(
-    path: Optional[Path] = None,
+    path: Path | None = None,
     *,
     override: bool = False,
 ) -> int:
@@ -480,7 +479,7 @@ def load_dotenv_file(
 
 def load_config(
     default_path: Path = Path("config/default.yaml"),
-    target_path: Optional[Path] = None,
+    target_path: Path | None = None,
 ) -> NemesisConfig:
     """
     Load and merge configuration from YAML files.

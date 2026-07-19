@@ -54,11 +54,13 @@ import re
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable, TYPE_CHECKING
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import logging
+
     from nemesis.neural import LLMClient
 
 
@@ -216,8 +218,8 @@ def synthesize_producer_source(
     api_decls: list[str],
     format_spec: str,
     cve_records: list[dict],
-    client: "LLMClient",
-    log: "logging.Logger | None" = None,
+    client: LLMClient,
+    log: logging.Logger | None = None,
 ) -> str:
     """Ask the architect LLM for a C seed-producer program. "" on failure."""
     from nemesis.neural import ModelRole
@@ -293,7 +295,7 @@ def run_producer(
     rng_seed_base: int = 0x5EED_C0DE,
     per_seed_timeout_s: float = 5.0,
     max_seed_bytes: int = 1 << 18,
-    log: "logging.Logger | None" = None,
+    log: logging.Logger | None = None,
 ) -> int:
     """Run a compiled producer N times; copy unique non-empty seeds into out_dir.
 
@@ -352,9 +354,9 @@ def synthesize_and_run(
     config,
     seeds_dir: Path,
     compile_fn: Callable[[Path, Path], bool],
-    client: "LLMClient",
+    client: LLMClient,
     nemesis_root: Path,
-    log: "logging.Logger",
+    log: logging.Logger,
     n_seeds: int = 100,
 ) -> int:
     """Top-level entry: extract API → synthesise producer → compile → run.

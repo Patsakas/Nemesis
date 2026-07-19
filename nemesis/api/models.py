@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional
-
 from pydantic import BaseModel
-
 
 # ── Findings ─────────────────────────────────────────────────
 
@@ -15,7 +12,7 @@ class FindingSummary(BaseModel):
     status: str
     cve_worthy: bool
     cve_status: str
-    cve_id: Optional[str]
+    cve_id: str | None
     library: str
     function: str
     file: str
@@ -24,9 +21,9 @@ class FindingSummary(BaseModel):
     severity: str
     crash_type: str
     discovered_date: str
-    run_id: Optional[str]
-    patch_induced: Optional[bool]
-    cvss_estimate: Optional[float] = None
+    run_id: str | None
+    patch_induced: bool | None
+    cvss_estimate: float | None = None
 
 
 class ReproductionInfo(BaseModel):
@@ -50,7 +47,7 @@ class FindingDetail(BaseModel):
     status: str
     cve_worthy: bool
     cve_status: str
-    cve_id: Optional[str]
+    cve_id: str | None
     library: str
     function: str
     file: str
@@ -67,14 +64,14 @@ class FindingDetail(BaseModel):
     trigger: str = ""
     discovered_date: str
     discovered_by: str = ""
-    run_id: Optional[str]
-    patch_induced: Optional[bool]
+    run_id: str | None
+    patch_induced: bool | None
     patch_verdict: str = ""
     crash_files: list[str] = []
     notes: str = ""
-    reproduction: Optional[ReproductionInfo] = None
-    cve_assessment: Optional[CVEAssessmentInfo] = None
-    cvss_estimate: Optional[float] = None
+    reproduction: ReproductionInfo | None = None
+    cve_assessment: CVEAssessmentInfo | None = None
+    cvss_estimate: float | None = None
 
 
 # ── Runs ─────────────────────────────────────────────────────
@@ -83,7 +80,7 @@ class FindingDetail(BaseModel):
 class RunSummary(BaseModel):
     run_id: str
     started_at: str
-    finished_at: Optional[str]
+    finished_at: str | None
     targets_processed: int
     targets_successful: int
     total_crashes: int
@@ -105,7 +102,7 @@ class TargetResultSummary(BaseModel):
 class RunDetail(BaseModel):
     run_id: str
     started_at: str
-    finished_at: Optional[str]
+    finished_at: str | None
     targets_processed: int
     targets_successful: int
     total_crashes: int

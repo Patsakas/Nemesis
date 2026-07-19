@@ -33,11 +33,11 @@ class OracleWarning:
     suggestion: str     # how to fix it
 
 
-def _pinned_funcs(config: "NemesisConfig") -> list:
+def _pinned_funcs(config: NemesisConfig) -> list:
     return list(getattr(config.target, "pinned_funcs", None) or [])
 
 
-def _check_tsan_profile_without_threaded_oracle(config: "NemesisConfig") -> list[OracleWarning]:
+def _check_tsan_profile_without_threaded_oracle(config: NemesisConfig) -> list[OracleWarning]:
     profile = (getattr(config.target, "sanitizer_profile", "") or "").strip()
     if profile != "tsan":
         return []
@@ -60,7 +60,7 @@ def _check_tsan_profile_without_threaded_oracle(config: "NemesisConfig") -> list
     )]
 
 
-def _check_threaded_oracle_without_tsan(config: "NemesisConfig") -> list[OracleWarning]:
+def _check_threaded_oracle_without_tsan(config: NemesisConfig) -> list[OracleWarning]:
     profile = (getattr(config.target, "sanitizer_profile", "") or "asan_ubsan").strip()
     if profile == "tsan":
         return []
@@ -88,7 +88,7 @@ def _check_threaded_oracle_without_tsan(config: "NemesisConfig") -> list[OracleW
     )]
 
 
-def _check_differential_reference_visible(config: "NemesisConfig") -> list[OracleWarning]:
+def _check_differential_reference_visible(config: NemesisConfig) -> list[OracleWarning]:
     """Best-effort: warn if differential_reference symbol is not findable in source."""
     refs = [(pf.func_name, getattr(pf, "differential_reference", "") or "")
             for pf in _pinned_funcs(config)]
@@ -152,7 +152,7 @@ _CHECKS = (
 )
 
 
-def validate_oracle_config(config: "NemesisConfig") -> list[OracleWarning]:
+def validate_oracle_config(config: NemesisConfig) -> list[OracleWarning]:
     """Run every cross-config oracle check and collect non-fatal warnings.
 
     Hard failures (msan/tsan profile without _supported flag) are raised by

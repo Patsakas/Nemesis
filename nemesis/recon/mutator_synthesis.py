@@ -34,13 +34,10 @@ so a synthesis failure never regresses the pipeline.
 
 from __future__ import annotations
 
-import os
 import re
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
-
 
 SCAFFOLD_REL = Path("nemesis/templates/mutator/mutator_scaffold.h")
 BITSTREAM_REL = Path("nemesis/templates/mutator/mutator_bitstream.h")
@@ -279,7 +276,7 @@ def synthesize_adapter_source(
     llm_client,
     log,
     nemesis_root: Path,
-) -> Optional[tuple[str, _SynthInputs]]:
+) -> tuple[str, _SynthInputs] | None:
     """Ask the architect LLM to synthesise an adapter .c source.
 
     Returns (source_text, inputs) on success, or None on failure
@@ -524,7 +521,7 @@ def synthesize_and_compile_adapter(
     llm_client,
     log,
     nemesis_root: Path,
-) -> Optional[Path]:
+) -> Path | None:
     """Top-level entry: synthesise + compile + smoke-test. Returns path to
     the compiled .c source on success (set as `custom_mutator_source` in
     config.fuzzing), or None on any failure.

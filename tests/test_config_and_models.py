@@ -1,18 +1,16 @@
 """Basic tests for NEMESIS configuration and models."""
 
-from pathlib import Path
 
 from nemesis.config import NemesisConfig, load_config
 from nemesis.models import (
+    CWE,
     AppReproStatus,
     CoverageTarget,
-    CallChain,
-    PatchProposal,
     CrashReport,
-    CWE,
-    Severity,
-    RiskLevel,
+    PatchProposal,
     PipelineRun,
+    RiskLevel,
+    Severity,
 )
 
 

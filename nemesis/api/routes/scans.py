@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import subprocess
 import sys
-from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/scans", tags=["scans"])

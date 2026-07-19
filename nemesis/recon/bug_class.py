@@ -37,7 +37,7 @@ from __future__ import annotations
 import json
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import logging
@@ -201,7 +201,7 @@ def _build_user_prompt(
     )
 
 
-def _parse_response(text: str) -> Optional[BugClass]:
+def _parse_response(text: str) -> BugClass | None:
     """Extract the first JSON object in `text` and validate the schema."""
     text = text.strip()
     # Strip optional ```json fences
@@ -238,8 +238,8 @@ def classify_bug_class(
     func_name: str,
     func_source: str,
     caller_names: list[str],
-    client: "LLMClient",
-    log: "logging.Logger | None" = None,
+    client: LLMClient,
+    log: logging.Logger | None = None,
 ) -> BugClass:
     """Run the classifier. Returns BugClass(label='other', ...) on any failure."""
     from nemesis.neural import ModelRole

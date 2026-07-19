@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     import logging
+
     from nemesis.neural import LLMClient
 
 
@@ -184,8 +185,8 @@ def synthesize_fieldspec(
     target_func: str,
     format_spec: str,
     cve_records: list[dict],
-    client: "LLMClient",
-    log: "logging.Logger | None" = None,
+    client: LLMClient,
+    log: logging.Logger | None = None,
 ) -> dict:
     """Ask the LLM for a field spec. Returns {} on any failure."""
     from nemesis.neural import ModelRole
@@ -225,11 +226,11 @@ def produce_seeds_from_spec(
     out_dir,
     n_seeds: int = 100,
     rng_seed_base: int = 0xF1E1D5,
-    log: "logging.Logger | None" = None,
+    log: logging.Logger | None = None,
 ) -> int:
     """Render `n_seeds` unique seeds from a validated spec into out_dir."""
-    from pathlib import Path
     import hashlib
+    from pathlib import Path
 
     out_dir = Path(out_dir)
     fields = spec.get("fields", []) if isinstance(spec, dict) else []

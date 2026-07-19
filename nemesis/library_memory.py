@@ -24,7 +24,6 @@ import json
 import math
 import re
 from pathlib import Path
-from typing import Optional
 
 from nemesis.logging import get_logger
 

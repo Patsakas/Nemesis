@@ -12,10 +12,10 @@ import pytest
 
 from nemesis.config import NemesisConfig, PinnedFunc, TargetConfig
 from nemesis.models import (
+    CWE,
     AnalysisContext,
     CallChain,
     CoverageTarget,
-    CWE,
     SanitizerClass,
     VulnerabilityAnalysis,
 )

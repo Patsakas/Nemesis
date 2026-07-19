@@ -10,11 +10,8 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from pathlib import Path
-from typing import Optional
 
 from pydantic import BaseModel, Field, computed_field, field_validator
-
 
 # ── Enums ───────────────────────────────────────────────────
 
@@ -238,7 +235,7 @@ class InputSpec(BaseModel):
     data_type: str = "raw"        # raw | compressed | text | dictionary | structured
     min_size: int = 1
     max_size: int = 262144
-    magic_bytes: Optional[dict] = None  # {"offset": 0, "value": "504b0304"}
+    magic_bytes: dict | None = None  # {"offset": 0, "value": "504b0304"}
     interesting_sizes: list[int] = Field(default_factory=list)
 
 
@@ -262,10 +259,10 @@ class HarnessSpec(BaseModel):
     direct_internal: bool = False
     # Fix C: path to CMPLOG-instrumented binary (AFL_LLVM_CMPLOG=1).
     # When set, AFL main instance uses -c {cmplog_binary} for RedQueen auto-solving.
-    cmplog_binary: Optional[str] = None
+    cmplog_binary: str | None = None
     # Fix 122: structured input layout spec for deterministic seed synthesis.
     # When set, SeedSynthesizer generates ~25 targeted seeds from param boundaries.
-    input_spec: Optional[InputSpec] = None
+    input_spec: InputSpec | None = None
 
 
 class LLMCallRecord(BaseModel):
@@ -297,8 +294,8 @@ class VerificationResult(BaseModel):
     """Result of Z3 path satisfiability check."""
 
     is_satisfiable: bool
-    model: Optional[dict[str, str]] = None
-    unsat_core: Optional[list[str]] = None
+    model: dict[str, str] | None = None
+    unsat_core: list[str] | None = None
     solve_time_ms: float = 0.0
     constraints_count: int = 0
 
@@ -345,19 +342,19 @@ class CrashReport(BaseModel):
     # NOT_TESTABLE is the default because most fuzz-target-only libraries have no
     # app wrapper — that is "unverified", not "disproven".
     app_repro: AppReproStatus = AppReproStatus.NOT_TESTABLE
-    minimized_input: Optional[str] = None
+    minimized_input: str | None = None
     proposed_fix: str = ""
     timestamp: datetime = Field(default_factory=datetime.now)
     # Unpatched verification: True = patch created the bug (false positive),
     # False = bug exists in original code (real CVE candidate), None = not checked
-    patch_induced: Optional[bool] = None
-    cve_assessment: Optional[CVEAssessment] = None
+    patch_induced: bool | None = None
+    cve_assessment: CVEAssessment | None = None
     # Sanitizer classification: which sanitizer detected this crash
     detected_by: SanitizerClass = SanitizerClass.UNKNOWN
     # Multi-build verification: crash reproducibility across build configurations
-    reproduces_clean: Optional[bool] = None   # crashes in normal build (no sanitizer)?
-    reproduces_asan: Optional[bool] = None    # crashes under ASAN?
-    reproduces_ubsan: Optional[bool] = None   # crashes under UBSan?
+    reproduces_clean: bool | None = None   # crashes in normal build (no sanitizer)?
+    reproduces_asan: bool | None = None    # crashes under ASAN?
+    reproduces_ubsan: bool | None = None   # crashes under UBSan?
     # Upstream freshness of the fuzzed checkout (nemesis/upstream.py):
     # "up_to_date" = bug reproduces on the latest upstream code (candidate novel);
     # "behind" = checkout is stale, bug may already be fixed upstream; "unknown".
@@ -431,7 +428,7 @@ class HarnessExecutionDiagnostics(BaseModel):
 class FeedbackContext(BaseModel):
     """Context sent back from Stage 4 to Stage 2 for refinement."""
 
-    original_proposal: Optional[PatchProposal] = None
+    original_proposal: PatchProposal | None = None
     coverage_delta: CoverageDelta
     afl_stats: AFLStats
     error_log: str = ""
@@ -439,7 +436,7 @@ class FeedbackContext(BaseModel):
     failure_reason: str = ""  # "no_coverage" | "build_failed" | "timeout" | "low_function_coverage"
     harness_code: str = ""  # The C harness that was compiled and run
     # Structured execution diagnostics (replaces free-text for LLM interpretation)
-    diagnostics: Optional[HarnessExecutionDiagnostics] = None
+    diagnostics: HarnessExecutionDiagnostics | None = None
     # gcov line-level coverage annotation around target function (Feature B)
     gcov_annotation: str = ""
 
@@ -452,11 +449,11 @@ class TargetResult(BaseModel):
 
     target: CoverageTarget
     status: PipelineStatus = PipelineStatus.PENDING
-    analysis: Optional[VulnerabilityAnalysis] = None
-    patch: Optional[PatchProposal] = None
-    harness: Optional[HarnessSpec] = None
-    verification: Optional[VerificationResult] = None
-    afl_stats: Optional[AFLStats] = None
+    analysis: VulnerabilityAnalysis | None = None
+    patch: PatchProposal | None = None
+    harness: HarnessSpec | None = None
+    verification: VerificationResult | None = None
+    afl_stats: AFLStats | None = None
     crashes: list[CrashReport] = Field(default_factory=list)
     feedback_iterations: int = 0
     total_llm_cost_usd: float = 0.0
@@ -481,7 +478,7 @@ class PipelineRun(BaseModel):
     # newest one globally. Empty on legacy runs written before this field existed.
     target_name: str = ""
     started_at: datetime = Field(default_factory=datetime.now)
-    finished_at: Optional[datetime] = None
+    finished_at: datetime | None = None
     config_hash: str = ""
     status: PipelineStatus = PipelineStatus.PENDING
     # Non-fatal degradations (oracle/context/recon failures etc.) — surfaced so a

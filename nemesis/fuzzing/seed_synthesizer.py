@@ -16,7 +16,7 @@ from __future__ import annotations
 import struct
 from pathlib import Path
 
-from nemesis.models import InputSpec, InputParam
+from nemesis.models import InputParam, InputSpec
 
 
 class SeedSynthesizer:

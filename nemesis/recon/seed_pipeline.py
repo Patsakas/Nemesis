@@ -36,12 +36,13 @@ Deferred by design
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from nemesis.feature_flags import is_enabled
 
 if TYPE_CHECKING:
     import logging
+
     from nemesis.models import HarnessSpec
 
 
@@ -53,8 +54,8 @@ class SeedPipeline:
         config,
         symbolic,
         llm_client,
-        log: "logging.Logger",
-        nemesis_root: Optional[Path] = None,
+        log: logging.Logger,
+        nemesis_root: Path | None = None,
     ) -> None:
         self.config = config
         self.symbolic = symbolic
@@ -68,7 +69,7 @@ class SeedPipeline:
 
     def augment(
         self,
-        harness: "HarnessSpec",
+        harness: HarnessSpec,
         seeds_dir: Path,
         target_func: str = "",
     ) -> int:

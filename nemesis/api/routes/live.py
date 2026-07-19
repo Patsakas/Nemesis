@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import APIRouter, Request, WebSocket, WebSocketDisconnect
@@ -95,7 +95,7 @@ def _get_live_snapshot(workspace: str) -> LiveSnapshot:
                 targets.append(stats)
 
     active = sum(1 for t in targets if t.is_running)
-    now = datetime.now(timezone.utc).isoformat()
+    now = datetime.now(UTC).isoformat()
 
     return LiveSnapshot(
         timestamp=now,

@@ -1,11 +1,11 @@
 """Target Scout scoring (CVE-discovery candidate finder). Pure-function tests —
 no network. Validates the OSS-Fuzz exclusion + the candidate ranking heuristics."""
 from nemesis.recon.target_scout import (
-    normalize_oss_fuzz_set,
     is_oss_fuzz_covered,
+    normalize_oss_fuzz_set,
+    render_report,
     score_candidate,
     scout,
-    render_report,
 )
 
 

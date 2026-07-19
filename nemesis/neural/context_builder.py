@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import os
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING
 
 from nemesis.config import NemesisConfig
 from nemesis.logging import get_logger
@@ -18,6 +18,9 @@ from nemesis.recon.validation_gates import (
     extract_validation_gates,
     render_validation_gates_block,
 )
+
+if TYPE_CHECKING:  # forward refs only — these are imported lazily at runtime
+    from nemesis.models import AnalysisContext, CoverageTarget
 
 # Directories to skip when scanning source trees
 _SKIP_DIRS = {"build", "build_fuzz", "build_debug", "build_ubsan", ".git", "__pycache__"}
@@ -61,7 +64,7 @@ class ContextBuilder:
         self._used_chars = 0
         self._oracle = oracle
 
-    def build(self, target: "CoverageTarget", context: "AnalysisContext") -> str:
+    def build(self, target: CoverageTarget, context: AnalysisContext) -> str:
         """Return a <codebase_context>...</codebase_context> XML string.
 
         Sections are added in priority order; each section is skipped
@@ -209,7 +212,7 @@ class ContextBuilder:
 
         return "\n".join(parts) if parts else ""
 
-    def _build_target_source(self, source_root: Path, target: "CoverageTarget") -> str:
+    def _build_target_source(self, source_root: Path, target: CoverageTarget) -> str:
         """Full content of the file containing the target function."""
         if not target.file_path:
             return ""
@@ -232,14 +235,13 @@ class ContextBuilder:
         return self._add_if_budget(text)
 
     def _build_call_chain_sources(
-        self, source_root: Path, context: "AnalysisContext"
+        self, source_root: Path, context: AnalysisContext
     ) -> str:
         """Files from context.call_chain entries."""
         if not context.call_chain or not context.call_chain.chain:
             return ""
 
         parts: list[str] = []
-        seen_files: set[str] = set()
 
         for func_name in context.call_chain.chain:
             # Try to find the file for this function from source_snippets
@@ -289,7 +291,7 @@ class ContextBuilder:
                 result.append(kw)
         return result
 
-    def _build_test_suite(self, source_root: Path, target: "CoverageTarget") -> str:
+    def _build_test_suite(self, source_root: Path, target: CoverageTarget) -> str:
         """Find .c test files relevant to the target function.
 
         Fix 101 (FUDGE/UTopia-inspired): search in source_subdir/test/ too,
@@ -434,7 +436,7 @@ class ContextBuilder:
         return "\n".join(parts) if parts else ""
 
     def _build_oracle_ranked_sources(
-        self, target: "CoverageTarget", context: "AnalysisContext"
+        self, target: CoverageTarget, context: AnalysisContext
     ) -> str:
         """Use FAISS oracle to rank remaining relevant source files."""
         if not hasattr(self._oracle, "query") or not self._oracle.is_built():

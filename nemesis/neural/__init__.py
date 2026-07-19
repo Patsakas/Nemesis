@@ -10,32 +10,33 @@ Multi-provider LLM client (Groq → Cerebras → Gemini → Groq-8b) for:
 
 from __future__ import annotations
 
+import enum
 import hashlib
 import json
 import os
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING
 
 from nemesis.config import NemesisConfig
 from nemesis.logging import get_logger
 from nemesis.models import (
+    CWE,
     AnalysisContext,
     CrashReport,
     CVEAssessment,
-    CWE,
     FeedbackContext,
     HarnessSpec,
-    InputParam,
     InputSpec,
     LLMCallRecord,
     PatchProposal,
     RiskLevel,
     VulnerabilityAnalysis,
 )
-
 from nemesis.neural.json_extractor import extract_json
 
-import enum
+if TYPE_CHECKING:  # forward refs only — these are imported lazily at runtime
+    from nemesis.neural.context_builder import ContextBuilder
+    from nemesis.neural.oracle import CodebaseOracle
 
 
 class ModelRole(str, enum.Enum):
@@ -130,14 +131,14 @@ class NeuralStage:
         self.log = get_logger("neural")
         self.client = LLMClient(config)
         self.session_cost = 0.0
-        self._oracle: Optional["CodebaseOracle"] = None  # type: ignore[type-arg]
-        self._context_builder: Optional["ContextBuilder"] = None  # type: ignore[type-arg]
+        self._oracle: CodebaseOracle | None = None  # type: ignore[type-arg]
+        self._context_builder: ContextBuilder | None = None  # type: ignore[type-arg]
 
-    def set_oracle(self, oracle: "CodebaseOracle") -> None:  # type: ignore[type-arg]
+    def set_oracle(self, oracle: CodebaseOracle) -> None:  # type: ignore[type-arg]
         """Wire in the codebase oracle for RAG-based context injection."""
         self._oracle = oracle
 
-    def set_context_builder(self, builder: "ContextBuilder") -> None:  # type: ignore[type-arg]
+    def set_context_builder(self, builder: ContextBuilder) -> None:  # type: ignore[type-arg]
         """Wire in the context builder for Two-Brain Architect model."""
         self._context_builder = builder
 
@@ -578,11 +579,11 @@ class NeuralStage:
 
     def generate_harness_variants(
         self,
-        analysis: "VulnerabilityAnalysis",
-        context: "AnalysisContext",
+        analysis: VulnerabilityAnalysis,
+        context: AnalysisContext,
         n: int = 3,
         library_memory_snippet: str = "",
-    ) -> "list[HarnessSpec]":
+    ) -> list[HarnessSpec]:
         """Generate N harness variants with increasing temperature (Fix D).
 
         Each variant uses a different temperature to explore the harness design space.
@@ -673,7 +674,7 @@ class NeuralStage:
         self,
         target_func: str,
         callers: list,
-        context: "AnalysisContext",
+        context: AnalysisContext,
         previous_harness_code: str = "",
     ) -> HarnessSpec:
         """Generate a harness that reaches target_func via a higher-level caller (Fix E).
@@ -1224,10 +1225,10 @@ class LLMClient:
         self,
         prompt: str,
         system: str = "",
-        model_override: Optional[str] = None,
+        model_override: str | None = None,
         stage: str = "",
         target_func: str = "",
-        temperature: Optional[float] = None,
+        temperature: float | None = None,
         role: ModelRole = ModelRole.DEFAULT,
     ) -> str:
         """
@@ -1680,7 +1681,7 @@ class LLMClient:
         return text.strip()
 
     @staticmethod
-    def _recover_failed_json(exc: Exception) -> Optional[str]:
+    def _recover_failed_json(exc: Exception) -> str | None:
         """Extract usable JSON from a json_validate_failed error.
 
         When small models (8b) produce almost-valid JSON (e.g. markdown fences
@@ -1743,7 +1744,7 @@ class LLMClient:
         content = f"{model}:{system}:{prompt}"
         return hashlib.sha256(content.encode()).hexdigest()[:32]
 
-    def _cache_get(self, key: str) -> Optional[str]:
+    def _cache_get(self, key: str) -> str | None:
         """Retrieve from file-based cache (None on any read error)."""
         cache_file = self.cache_dir / f"{key}.json"
         try:
@@ -2477,7 +2478,7 @@ If you cannot determine the format, provide generic minimal seeds:
         target_func: str,
         callers: list,
         oracle_context: str,
-        context: "AnalysisContext",
+        context: AnalysisContext,
         harness_template: str = "",
         previous_harness_code: str = "",
     ) -> str:
@@ -2571,7 +2572,7 @@ If you cannot determine the format, provide generic minimal seeds:
 
     @staticmethod
     def build_cve_analysis_prompt(
-        crash: "CrashReport",
+        crash: CrashReport,
         library_name: str,
         source_file: str = "",
         source_context: str = "",
@@ -2638,7 +2639,8 @@ If you cannot determine the format, provide generic minimal seeds:
         Falls back to archive_read_support_format_all(a) for libarchive targets,
         or empty string for non-libarchive targets (no format enforcement).
         """
-        import os, re
+        import os
+        import re
         basename = os.path.basename(file_path)
 
         # Feature D2: Config-driven regex takes priority
@@ -2665,7 +2667,7 @@ If you cannot determine the format, provide generic minimal seeds:
     def _read_internal_declarations(
         target_func: str,
         file_path: str,
-        source_root: "Path",
+        source_root: Path,
         internal_include_dirs: list[str],
     ) -> str:
         """Fix 123+130: Read internal header declarations for direct function harnessing.
@@ -2706,9 +2708,7 @@ If you cannot determine the format, provide generic minimal seeds:
             stripped = ln.strip()
             if stripped.startswith("#include"):
                 includes.append(stripped)
-            elif any(kw in stripped for kw in ("typedef ", "struct ", "enum ", target_func)):
-                declarations.append(stripped)
-            elif stripped.startswith("BROTLI_INTERNAL") or stripped.startswith("BROTLI_"):
+            elif any(kw in stripped for kw in ("typedef ", "struct ", "enum ", target_func)) or stripped.startswith("BROTLI_INTERNAL") or stripped.startswith("BROTLI_"):
                 declarations.append(stripped)
 
         if not declarations:
@@ -2857,7 +2857,7 @@ If you cannot determine the format, provide generic minimal seeds:
     def _extract_caller_context(
         target_func: str,
         file_path: str,
-        source_root: "Path",
+        source_root: Path,
     ) -> str:
         """Fix 128: Extract how the public API calls a direct_internal function.
 
@@ -2926,7 +2926,7 @@ If you cannot determine the format, provide generic minimal seeds:
 
         # Read context: 50 lines before call, 10 lines after call
         try:
-            with open(best_file, "r", errors="replace") as fh:
+            with open(best_file, errors="replace") as fh:
                 all_lines = fh.readlines()
         except OSError:
             return ""
@@ -2943,7 +2943,7 @@ If you cannot determine the format, provide generic minimal seeds:
         result_parts = [
             f"// Caller: {rel}:{best_line}",
             f"// This is how the public API calls {target_func}().",
-            f"// Follow the SAME buffer allocation and parameter patterns.",
+            "// Follow the SAME buffer allocation and parameter patterns.",
             "",
         ]
         for i, ln in enumerate(snippet_lines, start=start + 1):
@@ -3144,7 +3144,7 @@ If you cannot determine the format, provide generic minimal seeds:
         analysis: VulnerabilityAnalysis,
         context: AnalysisContext,
         oracle_context: str = "",
-        config: "NemesisConfig | None" = None,
+        config: NemesisConfig | None = None,
         caller_context: str = "",
     ) -> str:
         """Build the harness generation prompt."""
@@ -3471,8 +3471,8 @@ If you cannot determine the format, provide generic minimal seeds:
                             caller_names = [
                                 h.func_name for h in rp.hops
                             ][:8]
-                            from nemesis.neural import LLMClient as _LC
-                            _client = _LC(config)
+                            from nemesis.neural import LLMClient as _LlmClient
+                            _client = _LlmClient(config)
                             bc = classify_bug_class(
                                 func_name=context.target.func_name,
                                 func_source=func_src,
@@ -3615,7 +3615,7 @@ If you cannot determine the format, provide generic minimal seeds:
                             f"the library's own glue code.\n"
                             if other_exposed else ""
                         )
-                        + f"</exposed_function>"
+                        + "</exposed_function>"
                     )
         # Fix 134: allow harness_hint + internal_declarations coexistence.
         # (Fix 123 originally suppressed hints for direct_internal, but complex
@@ -3826,7 +3826,6 @@ If you cannot determine the format, provide generic minimal seeds:
             magic_bytes_map = getattr(context.target._config, "magic_bytes", {})
         if magic_bytes_map:
             # Pick the most relevant format based on target file path
-            import re as _re
             fmt_guess = ""
             for fmt in magic_bytes_map:
                 if fmt.lower() in context.target.file_path.lower():

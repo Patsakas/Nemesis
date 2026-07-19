@@ -12,7 +12,6 @@ from __future__ import annotations
 import re
 import subprocess
 from pathlib import Path
-from typing import Optional
 
 from nemesis.config import NemesisConfig
 from nemesis.logging import get_logger
@@ -22,15 +21,15 @@ from nemesis.models import (
     PatchProposal,
     VerificationResult,
 )
-from nemesis.recon.validation_gates import (
-    extract_validation_gates,
-    inject_setter_calls,
-)
 from nemesis.recon.predicate_synthesis import (
     canary_filter_predicates,
     inject_predicates,
     load_canary_seeds,
     synthesize_predicates,
+)
+from nemesis.recon.validation_gates import (
+    extract_validation_gates,
+    inject_setter_calls,
 )
 
 
@@ -201,7 +200,7 @@ class SymbolicStage:
         self.verifier = Z3Verifier(config)
         self.applicator = PatchApplicator(config)
         self.builder = InstrumentedBuilder(config)
-        self._neural: Optional[object] = None  # Injected by pipeline for LLM harness repair
+        self._neural: object | None = None  # Injected by pipeline for LLM harness repair
 
     @staticmethod
     def _resolve_link_libs(libs: str, build_dir: Path) -> str:
@@ -279,7 +278,7 @@ class SymbolicStage:
         self.log.info("unpatched.build_library.done", lib=lib)
         return True
 
-    def build_unpatched_debug(self, harness: Optional[HarnessSpec]) -> bool:
+    def build_unpatched_debug(self, harness: HarnessSpec | None) -> bool:
         """
         Compile the harness against the pre-built unpatched ASAN library.
 
@@ -410,7 +409,7 @@ class SymbolicStage:
         self.log.info("ubsan.build_library.done", lib=lib)
         return True
 
-    def build_ubsan_debug(self, harness: Optional[HarnessSpec]) -> bool:
+    def build_ubsan_debug(self, harness: HarnessSpec | None) -> bool:
         """Compile the harness against the pre-built UBSan library.
 
         Similar to build_unpatched_debug() but uses UBSan flags instead of ASAN.
@@ -529,7 +528,7 @@ class SymbolicStage:
         self.log.info("coverage.build_library.done", lib=lib)
         return True
 
-    def build_coverage_harness(self, harness: Optional[HarnessSpec]) -> bool:
+    def build_coverage_harness(self, harness: HarnessSpec | None) -> bool:
         """Compile the harness against the coverage-instrumented library.
 
         Uses clang with -fprofile-instr-generate -fcoverage-mapping (NO sanitizers,
@@ -804,7 +803,7 @@ class SymbolicStage:
             f.unlink(missing_ok=True)
         return -1.0
 
-    def build_harness_only(self, harness: Optional[HarnessSpec]) -> bool:
+    def build_harness_only(self, harness: HarnessSpec | None) -> bool:
         """Compile the harness without applying any patch.
 
         Used when has_blocker=False (force_no_blocker=True): no patch needed,
@@ -1062,7 +1061,6 @@ class SymbolicStage:
 
         Returns (passed, list_of_failure_reasons).
         """
-        import re as _re
         reasons = []
         warnings = []
 
@@ -1289,16 +1287,12 @@ class SymbolicStage:
                 score = 0
                 esc = _re133.escape(name)
                 # Function / macro-like declaration (strongest)
-                if _re133.search(rf"\b{esc}\s*\(", content):
-                    score = 3
-                elif _re133.search(rf"#define\s+{esc}\b", content):
+                if _re133.search(rf"\b{esc}\s*\(", content) or _re133.search(rf"#define\s+{esc}\b", content):
                     score = 3
                 # typedef / struct / enum containing the name
                 elif _re133.search(
                     rf"(?:typedef|struct|enum)\s+[^;]*\b{esc}\b", content,
-                ):
-                    score = 2
-                elif _re133.search(rf"extern\b[^;]*\b{esc}\b", content):
+                ) or _re133.search(rf"extern\b[^;]*\b{esc}\b", content):
                     score = 2
                 else:
                     continue
@@ -1580,8 +1574,6 @@ class SymbolicStage:
         )
         for m in call_re.finditer(clean):
             line_start = clean.rfind("\n", 0, m.start()) + 1
-            line = clean[line_start : m.end()]
-            stripped = line.strip()
             # Forward decl heuristic: starts with a return-type token
             # (uppercase/lowercase identifier + maybe `*` or `void`) and
             # ends in `;`. We look at the WHOLE statement: from line
@@ -1784,18 +1776,18 @@ class SymbolicStage:
 
     def profile_harness_variant(
         self,
-        harness: "HarnessSpec",
-        build_dir: "Path",
+        harness: HarnessSpec,
+        build_dir: Path,
         timeout_sec: int = 120,
-    ) -> "tuple[bool, float, int]":
+    ) -> tuple[bool, float, int]:
         """Fix D: Delegate to InstrumentedBuilder.profile_harness_variant()."""
         return self.builder.profile_harness_variant(harness, build_dir, timeout_sec)
 
     def collect_gcov_around_function(
         self,
-        harness: "HarnessSpec",
+        harness: HarnessSpec,
         target_func: str,
-        corpus_files: "list[Path]",
+        corpus_files: list[Path],
         n_samples: int = 5,
     ) -> str:
         """Delegate to InstrumentedBuilder.collect_gcov_around_function()."""
@@ -1807,7 +1799,7 @@ class SymbolicStage:
     def apply_and_build(
         self,
         patch: PatchProposal,
-        harness: Optional[HarnessSpec],
+        harness: HarnessSpec | None,
     ) -> bool:
         """Apply patch, write harness, and build instrumented binary."""
         # Patches always go into work_root (the patched copy) — NEVER source_root
@@ -1917,7 +1909,7 @@ class Z3Verifier:
         start = time.monotonic()
 
         try:
-            from z3 import Bool, Solver, sat
+            from z3 import Bool, Solver
 
             s = Solver()
             s.set("timeout", self.config.symbolic.timeout_seconds * 1000)
@@ -2205,7 +2197,6 @@ class InstrumentedBuilder:
         for the very first target (before any full build has run).
         Safe to call even if build_dir already has a valid cmake cache.
         """
-        work_root = Path(self.config.target.effective_work_root)
         build_dir = Path(self.config.target.build_dir)
         configure_cmd = self.config.target.build.configure
         if not configure_cmd:
@@ -2260,7 +2251,6 @@ class InstrumentedBuilder:
 
         # Locate the cmake flags.make for this source file.
         # Convention: build_dir/{subdir}/CMakeFiles/{target}.dir/flags.make
-        stem = src_file.stem  # e.g. archive_read_support_format_7zip
         flags_candidates = list(build_dir.glob("**/flags.make"))
         if not flags_candidates:
             self.log.debug("syntax_check.no_flags_make")
@@ -2557,8 +2547,10 @@ class InstrumentedBuilder:
                     # syntax. `expanduser` only handles `~`, NOT `$HOME` —
                     # earlier version returned $HOME/Nemesis/... unchanged
                     # which never existed → 0 canary seeds → no-op filter.
+                    import os as _os  # noqa: PLC0415 (module keeps os imports local)
+
                     def _expand(p: str) -> Path:
-                        return Path(os.path.expandvars(os.path.expanduser(p))).resolve()
+                        return Path(_os.path.expandvars(_os.path.expanduser(p))).resolve()
 
                     canary_dirs: list[Path] = []
                     seeds_cfg = getattr(self.config.target, "seeds", None)
@@ -2584,7 +2576,7 @@ class InstrumentedBuilder:
                         match_keys: set[str] = {lib_lower, bare}
                         magic = getattr(self.config.target, "magic_bytes", {}) or {}
                         if isinstance(magic, dict):
-                            match_keys.update(k.lower() for k in magic.keys())
+                            match_keys.update(k.lower() for k in magic)
                         for sub in nemesis_seeds_root.iterdir():
                             if not sub.is_dir():
                                 continue
@@ -2798,7 +2790,7 @@ class InstrumentedBuilder:
 
     def compile_harness_cmplog(
         self, harness: HarnessSpec, build_dir: Path
-    ) -> Optional[str]:
+    ) -> str | None:
         """Fix C: Compile a CMPLOG-instrumented binary for AFL++ RedQueen.
 
         AFL++ CMPLOG requires a SEPARATE binary compiled with AFL_LLVM_CMPLOG=1.
@@ -2909,7 +2901,7 @@ class InstrumentedBuilder:
 
     def _build_profile_debug_binary(
         self, harness: HarnessSpec, build_dir: Path,
-    ) -> Optional[Path]:
+    ) -> Path | None:
         """Build a non-AFL debug binary for gdb breakpoint checking.
 
         Compiles the harness with plain clang + ASAN (no AFL instrumentation)
@@ -3029,7 +3021,7 @@ class InstrumentedBuilder:
 
     # ── gcov coverage for refinement prompt (Feature B) ───
 
-    def build_gcov_binary(self, harness: HarnessSpec, build_dir: Path) -> Optional[Path]:
+    def build_gcov_binary(self, harness: HarnessSpec, build_dir: Path) -> Path | None:
         """Build a coverage-instrumented binary for gcov line-level analysis.
 
         Compiles harness with --coverage (no ASAN — incompatible with gcov).
@@ -3245,8 +3237,6 @@ class InstrumentedBuilder:
         - function_coverage_pct: 100.0 if function reached, 0.0 if not, -1.0 if not measurable
         - corpus_paths: AFL corpus_count after timeout_sec
         """
-        import time as _time
-        import shutil as _shutil
         import tempfile as _tempfile
 
         # Build the variant
@@ -3442,7 +3432,7 @@ class InstrumentedBuilder:
         # Strip any path prefix that matches an internal_include_dir.
         internal_dirs = self.config.target.internal_include_dirs
         if internal_dirs:
-            def _strip_internal_prefix(m: '_re_inc.Match') -> str:
+            def _strip_internal_prefix(m: _re_inc.Match) -> str:
                 inc_path = m.group(1)
                 # Remove leading ../ sequences
                 stripped = _re_inc.sub(r'^(?:\.\./)+', '', inc_path)

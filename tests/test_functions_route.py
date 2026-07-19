@@ -1,6 +1,5 @@
 """Pinning from the dashboard must not damage hand-written target configs, and
 the Introspector payload must be normalized into real source symbol names."""
-import os
 
 import pytest
 from fastapi.testclient import TestClient

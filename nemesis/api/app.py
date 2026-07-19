@@ -10,7 +10,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from nemesis.api.routes import (
-    findings, runs, reports, live, targets, scans, coverage, functions, jobs,
+    coverage,
+    findings,
+    functions,
+    jobs,
+    live,
+    reports,
+    runs,
+    scans,
+    targets,
 )
 
 

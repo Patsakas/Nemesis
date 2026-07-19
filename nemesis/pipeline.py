@@ -14,17 +14,14 @@ import time
 import uuid
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import TYPE_CHECKING
 
 from nemesis.config import NemesisConfig
 from nemesis.logging import get_logger
 from nemesis.models import (
-    AFLStats,
-    AnalysisContext,
-    CoverageDelta,
-    CoverageSnapshot,
-    CrashReport,
     CWE,
+    AnalysisContext,
+    CrashReport,
     FeedbackContext,
     HarnessExecutionDiagnostics,
     HarnessSpec,
@@ -33,6 +30,9 @@ from nemesis.models import (
     Severity,
     TargetResult,
 )
+
+if TYPE_CHECKING:  # forward ref only — imported lazily at runtime
+    from nemesis.library_memory import LibraryMemory
 
 
 # Directory name segments that typically hold valid sample inputs in a source
@@ -150,7 +150,7 @@ class NemesisPipeline:
         self.workspace.mkdir(parents=True, exist_ok=True)
 
         # Cross-run library memory (lazy — only loaded when first used)
-        self._library_memory: Optional["LibraryMemory"] = None  # type: ignore[type-arg]
+        self._library_memory: LibraryMemory | None = None  # type: ignore[type-arg]
 
         # Codebase oracle (RAG) — lazy, built once per run
         self._oracle = None
@@ -165,7 +165,7 @@ class NemesisPipeline:
         self._fuzzing = None
 
     @property
-    def library_memory(self) -> "LibraryMemory":
+    def library_memory(self) -> LibraryMemory:
         """Lazy-load cross-run library memory for the current target library."""
         if self._library_memory is None:
             from nemesis.library_memory import LibraryMemory
@@ -361,7 +361,10 @@ class NemesisPipeline:
         if not fuzzer_names:
             fuzzer_names = [f"{project}_fuzzer"]
 
-        import urllib.request, urllib.error, zipfile, tempfile
+        import tempfile
+        import urllib.error
+        import urllib.request
+        import zipfile
 
         corpus_dir.mkdir(parents=True, exist_ok=True)
 
@@ -1693,7 +1696,7 @@ class NemesisPipeline:
         self,
         target,
         result: TargetResult,
-    ) -> Optional[bool]:
+    ) -> bool | None:
         """Run the debug harness once with a seed to check if target function is reached.
 
         Uses gdb with a breakpoint on the target function. If the breakpoint is hit,
@@ -1814,7 +1817,7 @@ class NemesisPipeline:
         )
         return reaches
 
-    def _resolve_afl_queue_dir(self, slug: str) -> Optional[Path]:
+    def _resolve_afl_queue_dir(self, slug: str) -> Path | None:
         """Resolve the AFL queue directory for a given target slug.
 
         Fix 105: AFL writes to ``fuzzing/findings/{run_id}/{slug}/main/queue/``
@@ -1923,7 +1926,7 @@ class NemesisPipeline:
         )
         return pct
 
-    def _measure_source_coverage(self, target, result: "TargetResult") -> float:
+    def _measure_source_coverage(self, target, result: TargetResult) -> float:
         """Measure real source-line coverage of target function using LLVM source coverage.
 
         Lazily builds the coverage library on first call. Uses LLVM profdata/cov
@@ -1965,7 +1968,7 @@ class NemesisPipeline:
             return -1.0
 
     @staticmethod
-    def _compute_harness_quality_score(result: "TargetResult") -> float:
+    def _compute_harness_quality_score(result: TargetResult) -> float:
         """Composite harness quality score [0.0–1.0].
 
         Four observable signals, no LLM interpretation needed:
@@ -1996,7 +1999,7 @@ class NemesisPipeline:
         )
         return round(score, 4)
 
-    def _build_diagnostics(self, result: "TargetResult") -> "HarnessExecutionDiagnostics":
+    def _build_diagnostics(self, result: TargetResult) -> HarnessExecutionDiagnostics:
         """Build a structured HarnessExecutionDiagnostics from current result state."""
         afl = result.afl_stats
         return HarnessExecutionDiagnostics(
@@ -2500,7 +2503,6 @@ class NemesisPipeline:
             analysis, context, n=n_variants,
             library_memory_snippet=library_memory_snippet,
         )
-        self.neural.session_cost  # already accumulated inside generate_harness_variants
 
         if not variants:
             # Fall back to single-variant

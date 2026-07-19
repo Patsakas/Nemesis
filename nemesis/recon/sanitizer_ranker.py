@@ -14,9 +14,8 @@ default that strongly favours `asan_ubsan` (the historical NEMESIS default).
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from nemesis.neural.json_extractor import extract_json
 
@@ -47,7 +46,7 @@ def _scan_for_threading(source_snippet: str) -> bool:
 
 def _apply_hard_rules(
     scores: dict[str, float],
-    target: "TargetConfig",
+    target: TargetConfig,
     source_snippet: str,
 ) -> dict[str, float]:
     """Zero out profiles that cannot run on this target regardless of LLM verdict."""
@@ -138,8 +137,8 @@ def _fallback_ranking(reason: str) -> SanitizerRanking:
 def rank_sanitizers(
     target_func: str,
     source_snippet: str,
-    target: "TargetConfig",
-    llm_client: Optional["LLMClient"] = None,
+    target: TargetConfig,
+    llm_client: LLMClient | None = None,
     log=None,
 ) -> SanitizerRanking:
     """Return ranked sanitizer scores for this target.
