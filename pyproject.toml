@@ -13,8 +13,9 @@ authors = [
     { name = "Georgios Patsakas", email = "giorgospatsakas@gmail.com" },
 ]
 keywords = [
-    "fuzzing", "security", "vulnerability-research", "afl", "llm",
-    "static-analysis", "z3", "oss-fuzz", "cve",
+    "llm", "agentic-ai", "fuzzing", "security", "cybersecurity",
+    "symbolic-execution", "z3", "aflplusplus", "program-analysis",
+    "vulnerability-research", "oss-fuzz", "cve",
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
