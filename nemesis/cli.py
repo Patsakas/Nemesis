@@ -1002,12 +1002,22 @@ def _show_config_summary(
     stage_names = {1: "Recon", 2: "Neural", 3: "Symbolic", 4: "Fuzzing"}
     active = ", ".join(f"{s}:{stage_names.get(s, '?')}" for s in stages)
 
+    # Report the provider that will actually be tried first. `llm.model` only
+    # feeds the legacy single-provider path, so printing it was misleading
+    # whenever a provider chain is configured — which is the normal case.
+    providers = getattr(cfg.llm, "providers", None) or []
+    if providers:
+        extra = len(providers) - 1
+        llm_desc = providers[0].model + (f"  (+{extra} fallback{'s' if extra != 1 else ''})" if extra else "")
+    else:
+        llm_desc = cfg.llm.model
+
     lines = [
         f"[cyan]Run ID:[/cyan]        {run_id}",
         f"[cyan]Target:[/cyan]        {cfg.target.name or 'generic'}",
         f"[cyan]Source:[/cyan]        {cfg.target.source_root}",
         f"[cyan]Stages:[/cyan]        {active}",
-        f"[cyan]LLM:[/cyan]           {cfg.llm.model}",
+        f"[cyan]LLM:[/cyan]           {llm_desc}",
         f"[cyan]Strategy:[/cyan]      {cfg.fuzzing.strategy}",
         f"[cyan]Fuzzer:[/cyan]        {cfg.fuzzing.fuzzer} × {cfg.fuzzing.instances}",
         f"[cyan]Solver:[/cyan]        {cfg.symbolic.solver}",
