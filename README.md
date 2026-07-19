@@ -1,5 +1,11 @@
 # NEMESIS
 
+[![CI](https://github.com/Patsakas/Nemesis/actions/workflows/ci.yml/badge.svg)](https://github.com/Patsakas/Nemesis/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://www.python.org/downloads/)
+[![Fuzzer: AFL++](https://img.shields.io/badge/fuzzer-AFL%2B%2B-orange.svg)](https://github.com/AFLplusplus/AFLplusplus)
+[![Solver: Z3](https://img.shields.io/badge/solver-Z3-8A2BE2.svg)](https://github.com/Z3Prover/z3)
+
 **Neuro-Symbolic Exploit Mining Engine for Software Insecurities**
 
 NEMESIS is an automated vulnerability-discovery engine for C/C++ libraries. It chains
