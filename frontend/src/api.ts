@@ -1,6 +1,7 @@
 import type {
   ActiveScan,
   CoverageSummary,
+  CurrentRun,
   FindingDetail,
   FindingSummary,
   FunctionsResponse,
@@ -91,6 +92,11 @@ export function fetchFinding(id: string): Promise<FindingDetail> {
 
 export function fetchRuns(): Promise<RunSummary[]> {
   return get<RunSummary[]>('/runs')
+}
+
+/** What the engine is doing right now — works for CLI-started runs too. */
+export function fetchCurrentRun(): Promise<CurrentRun> {
+  return get<CurrentRun>('/runs/current')
 }
 
 export function fetchRun(runId: string): Promise<RunDetail> {

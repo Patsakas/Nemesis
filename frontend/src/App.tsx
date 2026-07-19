@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
-import { fetchTargets } from './api'
+import { fetchCurrentRun, fetchTargets } from './api'
+import type { CurrentRun } from './types'
 import { LivePage } from './pages/Live'
 import { OpsPage } from './pages/Ops'
 import { ReportsPage } from './pages/Reports'
 import { RunsPage } from './pages/Runs'
 import { TargetsPage } from './pages/Targets'
-import { ACCENT, CARD, MONO, useHashRoute } from './ui'
+import { ACCENT, CARD, MONO, RunBanner, useHashRoute } from './ui'
 
 type View = 'targets' | 'ops' | 'runs' | 'reports' | 'live'
 
@@ -24,9 +25,20 @@ export default function App() {
   const view: View = (VIEWS.has(route[0]) ? route[0] : 'targets') as View
   const setView = (v: View) => navigate([v])
   const [engine, setEngine] = useState<'checking' | 'online' | 'offline'>('checking')
+  const [run, setRun] = useState<CurrentRun | null>(null)
 
   const ping = useCallback(() => {
     fetchTargets().then(() => setEngine('online')).catch(() => setEngine('offline'))
+  }, [])
+
+  // Poll often enough that stage changes feel live without hammering the API.
+  useEffect(() => {
+    const tick = () => fetchCurrentRun()
+      .then((r) => setRun(r.active ? r : null))
+      .catch(() => setRun(null))
+    void tick()
+    const id = setInterval(tick, 3000)
+    return () => clearInterval(id)
   }, [])
 
   useEffect(() => {
@@ -68,6 +80,8 @@ export default function App() {
           {engine === 'online' ? 'engine online' : engine === 'checking' ? 'connecting…' : 'engine offline'}
         </div>
       </header>
+
+      {run && <RunBanner run={run} />}
 
       {engine === 'offline' ? (
         <div style={{ maxWidth: 1060, margin: '0 auto', padding: '46px 28px' }}>

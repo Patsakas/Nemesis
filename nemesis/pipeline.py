@@ -145,6 +145,11 @@ class NemesisPipeline:
         self.config = config
         self.log = get_logger("pipeline")
 
+        # Replaced with a real writer in execute(); this keeps every other
+        # entry point safe from an AttributeError.
+        from nemesis.run_status import NullRunStatus  # noqa: PLC0415
+        self.status = NullRunStatus()
+
         # Create workspace directory
         self.workspace = Path(config.engine.work_dir)
         self.workspace.mkdir(parents=True, exist_ok=True)
@@ -550,6 +555,12 @@ class NemesisPipeline:
         run = PipelineRun(run_id=run_id, target_name=self.config.target.name)
         self.log.info("execute.start", run_id=run_id, resume=resume)
 
+        # Heartbeat so the dashboard can show progress while the run is still
+        # in flight — results.json only lands at the very end.
+        from nemesis.run_status import RunStatusWriter  # noqa: PLC0415
+        self.status = RunStatusWriter(
+            self.config.engine.work_dir, run_id, self.config.target.name)
+
         # Fix 151: cross-config oracle validation. Warns about combinations that
         # are individually valid but jointly waste a run (e.g. TSan profile with
         # no threaded_oracle pinned_func). Hard gates already live in
@@ -665,6 +676,7 @@ class NemesisPipeline:
         targets = []
         if 1 in stage_list:
             self.log.info("stage.start", stage=1, name="recon")
+            self.status.stage(1, "recon", detail="scoring candidate functions")
             targets = self.recon.run()
             # Filter out Introspector-derived targets that don't actually exist
             # in the local source. OSS-Fuzz Introspector indexes wrappers from
@@ -740,7 +752,7 @@ class NemesisPipeline:
         _completed_funcs: list[str] = []
 
         # ── Process each target through stages 2-4 ─────────
-        for target in targets:
+        for idx, target in enumerate(targets, start=1):
             # Fix 124: skip targets already completed in checkpoint
             if resume and target.func_name in _checkpoint_done:
                 self.log.info("checkpoint.skip", func=target.func_name)
@@ -812,6 +824,7 @@ class NemesisPipeline:
                     continue
 
             self.log.info("target.start", func=target.func_name, file=target.file_path)
+            self.status.target_started(target.func_name, idx, len(targets))
 
             # Reset work_root to clean state before each target (replaces git stash approach)
             # Strategy A: no rsync needed — library is never patched
@@ -882,6 +895,7 @@ class NemesisPipeline:
                              reasons=run.degraded_reasons)
 
         self._save_run(run)
+        self.status.finish(status=run.status.value, crashes=run.total_crashes)
         self._clear_checkpoint()  # Fix 124: clean up on successful completion
         return run
 
@@ -1319,6 +1333,8 @@ class NemesisPipeline:
                 "stage.start", stage=2, name="neural",
                 func=target.func_name, strategy=self.config.fuzzing.strategy,
             )
+            self.status.stage(2, "neural", func=target.func_name,
+                              detail="generating a harness with the LLM")
 
             if is_harness:
                 # Strategy A: harness-driven analysis (no blockers, no patches)
@@ -1410,6 +1426,8 @@ class NemesisPipeline:
         # ── Stage 3: Symbolic verification ──────────────────
         if 3 in stage_list:
             self.log.info("stage.start", stage=3, name="symbolic", func=target.func_name)
+            self.status.stage(3, "symbolic", func=target.func_name,
+                              detail="verifying and building the instrumented harness")
 
             # Fix 95: propagate is_static to harness so preflight skips direct-call check
             if result.harness and target.is_static:
@@ -2181,6 +2199,8 @@ class NemesisPipeline:
             self.symbolic.build_harness_only(result.harness)
 
         for iteration in range(max_iter + 1):
+            self.status.stage(4, "fuzzing", func=target.func_name,
+                              detail=f"fuzzing with AFL++ (iteration {iteration})")
             self.log.info(
                 "fuzz_a.start",
                 func=target.func_name,

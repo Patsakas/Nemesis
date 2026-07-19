@@ -81,6 +81,23 @@ export interface RunDetail extends RunSummary {
   results: TargetResultSummary[]
 }
 
+/** Live progress of the run currently in flight (heartbeat from the pipeline). */
+export interface CurrentRun {
+  active: boolean
+  run_id: string
+  target: string
+  stage: string
+  stage_num: number | string
+  func: string
+  detail: string
+  targets_done: number
+  targets_total: number
+  crashes: number
+  status: string
+  started_at: string
+  updated_at: string
+}
+
 // ── Reports ─────────────────────────────────────────────────
 
 export interface ReportMeta {

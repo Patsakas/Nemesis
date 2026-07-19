@@ -106,6 +106,57 @@ export function Loading({ what }: { what: string }) {
   return <div style={{ padding: 22, color: '#A3A39C', fontSize: 13.5 }}>Loading {what}…</div>
 }
 
+/** Sticky strip showing the run in flight. The pipeline spends its first
+ *  several minutes in recon/LLM/build, where there are no AFL statistics yet —
+ *  without this the dashboard looks idle while the engine is busy. */
+export function RunBanner({ run }: { run: { target: string; stage: string; stage_num: number | string; func: string; detail: string; targets_done: number; targets_total: number; started_at: string } }) {
+  const stages = ['recon', 'neural', 'symbolic', 'fuzzing']
+  const current = typeof run.stage_num === 'number' ? run.stage_num : parseInt(String(run.stage_num), 10) || 0
+
+  return (
+    <div style={{ background: accentSofter, borderBottom: `1px solid ${accentBorder}`, padding: '10px 28px' }}>
+      <div style={{ maxWidth: 1060, margin: '0 auto', display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+        <span style={{ width: 8, height: 8, borderRadius: '50%', background: ACCENT, animation: 'nemPulse 1.6s ease-in-out infinite', flexShrink: 0 }} />
+        <span style={{ fontSize: 13.5, fontWeight: 700 }}>{run.target}</span>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+          {stages.map((name, i) => {
+            const n = i + 1
+            const state = n < current ? 'done' : n === current ? 'now' : 'todo'
+            return (
+              <span key={name} title={`Stage ${n}: ${name}`}
+                style={{
+                  ...MONO, fontSize: 10.5, fontWeight: 600, padding: '3px 8px', borderRadius: 6,
+                  background: state === 'now' ? ACCENT : state === 'done' ? accentSoft : '#F1F1EE',
+                  color: state === 'now' ? '#FFF' : state === 'done' ? ACCENT : '#B4B4AC',
+                }}>
+                {name}
+              </span>
+            )
+          })}
+        </div>
+
+        {run.func && (
+          <span style={{ ...MONO, fontSize: 12, color: '#66665F', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 260 }}>
+            {run.func}()
+          </span>
+        )}
+        {run.detail && <span style={{ fontSize: 12.5, color: '#77776F' }}>{run.detail}</span>}
+
+        <span style={{ flex: 1 }} />
+        {run.targets_total > 0 && (
+          <span style={{ ...MONO, fontSize: 11.5, color: '#85857D' }}>
+            target {run.targets_done}/{run.targets_total}
+          </span>
+        )}
+        <span style={{ ...MONO, fontSize: 11.5, color: '#A3A39C' }}>
+          {fmtDuration((Date.now() - new Date(run.started_at).getTime()) / 1000)} elapsed
+        </span>
+      </div>
+    </div>
+  )
+}
+
 export function ErrorBox({ children }: { children: ReactNode }) {
   return (
     <div style={{ padding: '10px 13px', borderRadius: 9, background: '#FEECEC', border: '1px solid #F3D9D2', color: '#8A2E1C', fontSize: 12.5 }}>

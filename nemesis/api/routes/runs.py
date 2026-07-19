@@ -6,10 +6,60 @@ import json
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
+from pydantic import BaseModel
 
 from nemesis.api.models import RunDetail, RunSummary, TargetResultSummary
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
+
+
+class CurrentRun(BaseModel):
+    """What the engine is doing right now. `active` is False when no run has
+    started, when the last one finished, or when its heartbeat went stale."""
+
+    active: bool = False
+    run_id: str = ""
+    target: str = ""
+    stage: str = ""
+    stage_num: int | str = 0
+    func: str = ""
+    detail: str = ""
+    targets_done: int = 0
+    targets_total: int = 0
+    crashes: int = 0
+    status: str = ""
+    started_at: str = ""
+    updated_at: str = ""
+
+
+@router.get("/current", response_model=CurrentRun)
+def get_current_run(request: Request) -> CurrentRun:
+    """Live progress for the run in flight.
+
+    Reads the heartbeat the pipeline writes, so this works for runs started
+    from the CLI as well as from the dashboard — and it reports the stages
+    that happen long before AFL produces any statistics.
+    """
+    from nemesis.run_status import read_status  # noqa: PLC0415
+
+    data = read_status(request.app.state.workspace)
+    if not data:
+        return CurrentRun()
+    return CurrentRun(
+        active=not data.get("finished") and data.get("status") != "stale",
+        run_id=data.get("run_id", ""),
+        target=data.get("target", ""),
+        stage=data.get("stage", ""),
+        stage_num=data.get("stage_num", 0),
+        func=data.get("func", ""),
+        detail=data.get("detail", ""),
+        targets_done=int(data.get("targets_done", 0)),
+        targets_total=int(data.get("targets_total", 0)),
+        crashes=int(data.get("crashes", 0)),
+        status=data.get("status", ""),
+        started_at=data.get("started_at", ""),
+        updated_at=data.get("updated_at", ""),
+    )
 
 
 def _load_run(run_dir: Path) -> dict:
