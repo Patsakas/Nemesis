@@ -197,8 +197,15 @@ nemesis recon --target libfoo
 nemesis config --target libfoo --show
 ```
 
-Useful flags: `--max-targets N`, `--auto-sanitizer` (let the LLM pick which sanitizers to
-run), `--stages 1,2` (run a subset of stages).
+Useful flags:
+
+| Flag | What it does |
+|------|--------------|
+| `--timeout-hours N` | Fuzzing budget per target (`0.5` = 30 min). Overrides the 15 minutes `--scan` uses. |
+| `--max-targets N` | Stop after N functions. |
+| `--auto-sanitizer` | Let an LLM rank the sanitizer profiles and run the top ones as separate passes. |
+| `--stages 1,2` | Run only some stages. |
+| `--resume` | Skip functions a previous run already processed. |
 
 ---
 
@@ -384,11 +391,23 @@ findings database, run results and live AFL stats the CLI produces:
 
 - **Targets** — every function in a library with its OSS-Fuzz coverage next to the coverage
   NEMESIS achieved; tick one to pin it (written into `config/targets/<t>.yaml`, comments
-  intact) and open a pinned row for the oracle and harness knobs.
+  intact) and open a pinned row for the oracle and harness knobs. Launch a run from here and
+  pick the fuzzing budget per target.
 - **Live** — AFL++ stats streamed over a websocket: execs/sec, corpus, crashes, hangs.
 - **Operations** — run `onboard`, `setup`, `recon`, `scout` and `verify-crashes` and follow
-  their output. These shell out to the same CLI, from a fixed server-side whitelist.
+  their output. These shell out to the same CLI, from a fixed server-side whitelist, and
+  every field is passed as a separate argv entry rather than a shell string.
 - **Runs / Reports** — run history with per-function results, and the disclosure drafts.
+
+A run spends its first several minutes in recon, harness generation and the instrumented
+build — long before AFL produces any statistics. The pipeline writes a heartbeat as it goes,
+so a banner shows which stage is active, the function being worked on and progress through
+the target list. It works for runs started from the CLI too, and reports a run whose process
+died as stale rather than leaving it "running" forever.
+
+![Run progress](docs/screenshots/dashboard-runbanner.png)
+
+![Choosing a fuzzing budget](docs/screenshots/dashboard-budget.png)
 
 ![Operations](docs/screenshots/dashboard-ops.png)
 
