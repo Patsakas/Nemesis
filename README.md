@@ -330,6 +330,10 @@ See `config/targets/libarchive.yaml` for a complete, real-world example.
 
 ## Architecture
 
+[ARCHITECTURE.md](ARCHITECTURE.md) goes deeper: the invariants that keep the pipeline
+library-agnostic, how harness generation and crash triage work, and the failure modes that
+shaped them.
+
 ```
 nemesis/
 ├── config/
