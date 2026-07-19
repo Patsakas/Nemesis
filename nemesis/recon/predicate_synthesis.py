@@ -264,6 +264,46 @@ def synthesize_predicates(
 _NEMESIS_PREDICATES_SENTINEL = "/* nemesis: progress predicates (Locus-style)"
 
 
+_AFL_LEN = "((size_t)__AFL_FUZZ_TESTCASE_LEN)"
+_AFL_BUF = "((const uint8_t *)__AFL_FUZZ_TESTCASE_BUF)"
+
+# Names models reach for when they mean "the fuzz input" or "its length".
+# The predicates are injected at the very top of the __AFL_LOOP body, where the
+# harness's own aliases do not exist yet, so every one of these has to be
+# rewritten to the macros — which are the only things reliably in scope there.
+_INPUT_ALIASES: dict[str, str] = {
+    "input_len": _AFL_LEN, "input_size": _AFL_LEN, "data_len": _AFL_LEN,
+    "data_size": _AFL_LEN, "buf_len": _AFL_LEN, "buffer_len": _AFL_LEN,
+    "size": _AFL_LEN, "length": _AFL_LEN, "len": _AFL_LEN, "n": _AFL_LEN,
+    "input": _AFL_BUF, "data": _AFL_BUF, "buf": _AFL_BUF,
+    "buffer": _AFL_BUF, "bytes": _AFL_BUF, "ptr": _AFL_BUF,
+}
+# Longest first so `input_len` is consumed before `input`; one pass, so a
+# replacement can never be re-matched by a later alias.
+_ALIAS_RE = re.compile(
+    r"\b(" + "|".join(sorted(_INPUT_ALIASES, key=len, reverse=True)) + r")\b"
+)
+
+# Everything a condition may legitimately mention once aliases are rewritten.
+_ALLOWED_IDENTIFIERS = frozenset({
+    "__AFL_FUZZ_TESTCASE_LEN", "__AFL_FUZZ_TESTCASE_BUF",
+    "size_t", "uint8_t", "uint16_t", "uint32_t", "uint64_t",
+    "int", "unsigned", "char", "const", "void", "sizeof", "NULL",
+    "memchr", "memcmp", "memmem", "strncmp", "strncasecmp", "strchr", "strstr",
+})
+_IDENT_RE = re.compile(r"\b[A-Za-z_][A-Za-z0-9_]*\b")
+
+
+def _rewrite_condition(cond: str) -> str:
+    """Map whatever the model called the input onto the AFL macros."""
+    return _ALIAS_RE.sub(lambda m: _INPUT_ALIASES[m.group(1)], cond)
+
+
+def _unresolved_identifiers(cond: str) -> set[str]:
+    """Identifiers that would not compile at the top of the loop body."""
+    return {t for t in _IDENT_RE.findall(cond) if t not in _ALLOWED_IDENTIFIERS}
+
+
 def inject_predicates(
     harness_source: str,
     predicates: list[ProgressPredicate],
@@ -347,20 +387,29 @@ def inject_predicates(
     # (Fix 139 heap-copy renames it to _nfx_buf, some harnesses don't alias
     # at all, etc.). Word-boundary regex avoids touching `__AFL_FUZZ_TESTCASE_LEN`
     # or other tokens that happen to contain "input".
-    def _rewrite(cond: str) -> str:
-        cond = re.sub(r"\binput_len\b",
-                      "((size_t)__AFL_FUZZ_TESTCASE_LEN)", cond)
-        cond = re.sub(r"\binput\b",
-                      "((const uint8_t *)__AFL_FUZZ_TESTCASE_BUF)", cond)
-        return cond
-
     block_lines = [
         f"{indent}{_NEMESIS_PREDICATES_SENTINEL} for `{target_func}` */",
     ]
+    kept = 0
     for p in predicates:
+        cond = _rewrite_condition(p.condition)
+        unresolved = _unresolved_identifiers(cond)
+        if unresolved:
+            # Emitting this would not compile: at the top of the loop body the
+            # only things in scope are the two AFL macros. Drop the predicate
+            # rather than hand the builder a broken harness.
+            if log:
+                log.warning("predicate_synthesis.dropped_unresolved",
+                            name=p.name, identifiers=sorted(unresolved))
+            continue
         comment = p.rationale.replace("*/", "* /")[:160] if p.rationale else p.name
         block_lines.append(f"{indent}/* {p.name}: {comment} */")
-        block_lines.append(f"{indent}if (!({_rewrite(p.condition)})) continue;")
+        block_lines.append(f"{indent}if (!({cond})) continue;")
+        kept += 1
+
+    if not kept:
+        return harness_source
+
     block_lines.append(
         f"{indent}/* nemesis: end progress predicates */"
     )
