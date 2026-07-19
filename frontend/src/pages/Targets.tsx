@@ -5,12 +5,12 @@
  */
 import { useCallback, useEffect, useState, type CSSProperties } from 'react'
 import {
-  fetchActiveScans, fetchCoverage, fetchFinding, fetchFindings,
-  fetchFunctions, fetchTargets, launchScan, savePins, stopScan,
+  fetchCoverage, fetchFinding, fetchFindings, fetchFunctions, fetchJob,
+  fetchJobs, fetchTargets, launchJob, savePins, stopJob,
 } from '../api'
 import type {
-  ActiveScan, CoverageSummary, FindingDetail, FindingSummary,
-  FunctionInfo, FunctionsResponse, PinEntry, PinOptions, TargetInfo,
+  CoverageSummary, FindingDetail, FindingSummary, FunctionInfo,
+  FunctionsResponse, JobInfo, PinEntry, PinOptions, TargetInfo,
 } from '../types'
 import { PIN_DEFAULTS } from '../types'
 import {
@@ -175,10 +175,15 @@ function RepoScreen(p: {
   const t = p.target
   const [cov, setCov] = useState<CoverageSummary | null>(null)
   const [covState, setCovState] = useState<'loading' | 'ready' | 'none'>('loading')
-  const [active, setActive] = useState<ActiveScan | null>(null)
+  // Runs go through the jobs API so a failure is visible: it keeps the exit
+  // code and the tail of the output instead of the process vanishing silently.
+  const [job, setJob] = useState<JobInfo | null>(null)
   const [busy, setBusy] = useState(false)
+  const [launchError, setLaunchError] = useState<string | null>(null)
   const [mode, setMode] = useState<'scan' | 'deep'>('scan')
   const [budget, setBudget] = useState(0)   // hours per target; 0 = mode default
+
+  const running = job?.status === 'running'
 
   useEffect(() => {
     let alive = true
@@ -189,33 +194,43 @@ function RepoScreen(p: {
     return () => { alive = false }
   }, [t.name])
 
+  // Adopt a run for this target that is already in flight (e.g. after a reload),
+  // then follow whichever job we are tracking.
   useEffect(() => {
     let alive = true
-    const tick = () => fetchActiveScans()
-      .then((l) => { if (alive) setActive(l.find((s) => s.target === t.name && s.is_running) ?? null) })
-      .catch(() => {})
+    const tick = async () => {
+      try {
+        const id = job?.id ?? (await fetchJobs())
+          .find((j) => j.kind === 'run' && j.argv.includes(t.name))?.id
+        if (id) {
+          const fresh = await fetchJob(id)
+          if (alive) setJob(fresh)
+        }
+      } catch { /* transient */ }
+    }
     void tick()
-    const id = setInterval(tick, 4000)
-    return () => { alive = false; clearInterval(id) }
-  }, [t.name])
+    const timer = setInterval(tick, 3000)
+    return () => { alive = false; clearInterval(timer) }
+  }, [t.name, job?.id])
 
   const start = async () => {
-    setBusy(true)
+    setBusy(true); setLaunchError(null)
     try {
-      await launchScan({
-        target: t.name, scan: mode === 'scan', deep: mode === 'deep',
+      setJob(await launchJob({
+        kind: 'run', target: t.name,
+        scan: mode === 'scan', deep: mode === 'deep',
         strategy: t.strategy,
-        // 0 = keep the mode's preset (15 min for scan)
-        timeout_hours: budget,
-        ...(mode === 'deep' && budget ? { deep_hours: budget } : {}),
-      })
-      setActive((await fetchActiveScans()).find((s) => s.target === t.name) ?? null)
-    } catch { /* reflected by the active-scan poll */ } finally { setBusy(false) }
+        timeout_hours: budget,        // 0 = keep the mode's preset
+      }))
+    } catch (e) {
+      setLaunchError(String(e).replace(/^Error:\s*/, ''))
+    } finally { setBusy(false) }
   }
 
   const stop = async () => {
+    if (!job) return
     setBusy(true)
-    try { await stopScan(t.name); setActive(null) } catch { /* ignore */ } finally { setBusy(false) }
+    try { setJob(await stopJob(job.id)) } catch { /* ignore */ } finally { setBusy(false) }
   }
 
   const avg = cov?.avg_source_coverage ?? 0
@@ -232,10 +247,10 @@ function RepoScreen(p: {
           <div style={{ ...MONO, fontSize: 12.5, color: '#A3A39C' }}>{repoLabel(t)}</div>
         </div>
         {t.oss_fuzz_project && <Pill bg={accentSoft} color={ACCENT}>OSS-Fuzz integrated</Pill>}
-        {active && (
+        {running && (
           <Pill bg={accentSoft} color={ACCENT}>
             <span style={{ width: 6, height: 6, borderRadius: '50%', background: ACCENT, animation: 'nemPulse 1.6s ease-in-out infinite' }} />
-            running · PID {active.pid}
+            run in progress
           </Pill>
         )}
       </div>
@@ -266,7 +281,7 @@ function RepoScreen(p: {
                 </button>
               ))}
             </div>
-            {active ? (
+            {running ? (
               <button onClick={() => void stop()} disabled={busy}
                 style={{ height: 40, padding: '0 20px', borderRadius: 10, border: '1px solid #F3D9D2', background: '#FFF', color: '#C42B2B', fontSize: 14, fontWeight: 600, cursor: busy ? 'default' : 'pointer' }}>
                 {busy ? '…' : 'Stop run'}
@@ -289,14 +304,14 @@ function RepoScreen(p: {
             {BUDGETS.map(([hours, label]) => {
               const on = budget === hours
               return (
-                <button key={label} onClick={() => setBudget(hours)} disabled={!!active}
-                  style={{ ...MONO, padding: '5px 12px', borderRadius: 8, border: `1px solid ${on ? ACCENT : '#E4E4DE'}`, background: on ? ACCENT : '#FFF', color: on ? '#FFF' : '#66665F', fontSize: 12.5, fontWeight: 600, cursor: active ? 'default' : 'pointer', opacity: active ? 0.55 : 1 }}>
+                <button key={label} onClick={() => setBudget(hours)} disabled={running}
+                  style={{ ...MONO, padding: '5px 12px', borderRadius: 8, border: `1px solid ${on ? ACCENT : '#E4E4DE'}`, background: on ? ACCENT : '#FFF', color: on ? '#FFF' : '#66665F', fontSize: 12.5, fontWeight: 600, cursor: running ? 'default' : 'pointer', opacity: running ? 0.55 : 1 }}>
                   {label}
                 </button>
               )
             })}
           </div>
-          <input type="number" min="0" step="0.25" value={budget || ''} disabled={!!active}
+          <input type="number" min="0" step="0.25" value={budget || ''} disabled={running}
             onChange={(e) => setBudget(Math.max(0, Number(e.target.value) || 0))}
             placeholder="custom h"
             style={{ ...MONO, width: 96, height: 30, padding: '0 10px', fontSize: 12, color: '#1A1A18', background: '#FBFBF9', border: '1px solid #E4E4DE', borderRadius: 8, outline: 'none' }} />
@@ -304,6 +319,10 @@ function RepoScreen(p: {
             per target{budget ? '' : ` · default for ${mode}`}
           </span>
         </div>
+
+        {launchError && <div style={{ marginTop: 14 }}><ErrorBox>{launchError}</ErrorBox></div>}
+
+        {job && <RunStatus job={job} />}
       </div>
 
       <FunctionsPanel target={t.name} />
@@ -321,6 +340,49 @@ function RepoScreen(p: {
         <span style={{ ...MONO, fontSize: 13, color: crashCount ? '#B07460' : '#85857D' }}>view →</span>
       </div>
     </main>
+  )
+}
+
+/** Outcome of the current run: status, and on failure the output that explains it. */
+function RunStatus({ job }: { job: JobInfo }) {
+  const [open, setOpen] = useState(false)
+  const failed = job.status === 'failed'
+  const done = job.status !== 'running'
+  // Auto-reveal the log when a run dies — that is exactly when you need it.
+  useEffect(() => { if (failed) setOpen(true) }, [failed])
+
+  const tone = failed
+    ? { bg: '#FEECEC', border: '#F3D9D2', fg: '#8A2E1C' }
+    : job.status === 'succeeded'
+      ? { bg: accentSofter, border: accentBorder, fg: '#33332E' }
+      : { bg: '#FBFBF9', border: '#EAEAE6', fg: '#55554E' }
+
+  return (
+    <div style={{ marginTop: 14, borderRadius: 10, background: tone.bg, border: `1px solid ${tone.border}`, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '11px 14px', flexWrap: 'wrap' }}>
+        <span style={{ fontSize: 13, fontWeight: 700, color: tone.fg }}>
+          {job.status === 'running' ? 'Run in progress'
+            : failed ? `Run failed${job.exit_code != null ? ` (exit ${job.exit_code})` : ''}`
+              : job.status === 'stopped' ? 'Run stopped'
+                : 'Run finished'}
+        </span>
+        <span style={{ ...MONO, fontSize: 11.5, color: '#A3A39C', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {job.argv.join(' ')}
+        </span>
+        <span style={{ flex: 1 }} />
+        {done && job.output.length > 0 && (
+          <button onClick={() => setOpen((v) => !v)}
+            style={{ ...MONO, border: '1px solid #E4E4DE', background: '#FFF', color: '#66665F', fontSize: 11.5, fontWeight: 600, padding: '4px 10px', borderRadius: 7, cursor: 'pointer' }}>
+            {open ? 'hide log' : 'show log'}
+          </button>
+        )}
+      </div>
+      {open && (
+        <pre style={{ ...MONO, margin: 0, padding: '12px 14px', background: '#FBFAF7', borderTop: `1px solid ${tone.border}`, fontSize: 11.5, lineHeight: 1.55, color: '#55554E', whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 260, overflowY: 'auto' }}>
+          {job.output.slice(-40).join('\n') || 'no output captured'}
+        </pre>
+      )}
+    </div>
   )
 }
 

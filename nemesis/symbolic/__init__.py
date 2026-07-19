@@ -494,16 +494,24 @@ class SymbolicStage:
         Only builds if coverage_configure is non-empty.
         Returns True on success.
         """
-        cov_build_dir = Path(self.config.target.coverage_build_dir)
         cov_configure = self.config.target.build.coverage_configure
         cov_make = (
             self.config.target.build.coverage_make
             or self.config.target.build.debug_make
         )
 
-        if not cov_configure or not str(cov_build_dir):
-            self.log.info("coverage.no_config — skipping coverage build")
+        # `Path("")` is `Path(".")`, so an unset coverage_build_dir used to pass
+        # the emptiness check and cmake ran against whatever the cwd happened to
+        # be — failing with "does not contain CMakeLists.txt" and leaving
+        # line_cov unmeasured. Test the configured value, not the Path.
+        raw_build_dir = str(self.config.target.coverage_build_dir or "").strip()
+        if not cov_configure or raw_build_dir in ("", "."):
+            self.log.info("coverage.not_configured",
+                          note="set target.coverage_build_dir + build.coverage_configure "
+                               "to measure line coverage")
             return False
+
+        cov_build_dir = Path(raw_build_dir)
 
         cov_build_dir.mkdir(parents=True, exist_ok=True)
         full_cmd = (

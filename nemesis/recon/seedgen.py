@@ -90,8 +90,8 @@ Output STRICT JSON with one field:
     {"script": "<full Python source as one string with literal \\n line breaks>"}
 
 The script's source MUST:
-* Begin with `import sys, random` (and any other stdlib imports
-  needed; NO third-party packages).
+* Begin with `import sys, random`. You may ONLY import from this
+  list: {allowed_imports}. No third-party packages.
 * End with the file write — no global side effects on import beyond
   function/constant definitions.
 * Be self-contained — no relative imports, no environment lookups
@@ -205,11 +205,24 @@ import ast
 _SCRIPT_ALLOWED_IMPORTS = {
     "struct", "random", "sys", "math", "binascii", "array",
     "io", "string", "itertools", "base64",
+    # Pure data transforms — no filesystem, network or process surface.
+    # `json` matters for JSON parsers, `zlib` for the many container formats
+    # that embed deflate streams, `hashlib` for the checksums they carry.
+    "json", "zlib", "hashlib",
 }
 _SCRIPT_FORBIDDEN_CALLS = {
     "eval", "exec", "__import__", "compile",
     "getattr", "setattr", "delattr", "globals", "locals", "vars",
 }
+
+
+def _render_system_prompt() -> str:
+    """Fill the allowed-import list in from the whitelist, so the prompt can
+    never promise something the sandbox will then reject. A plain replace —
+    the prompt contains literal JSON braces, so str.format is out."""
+    return _SYSTEM_PROMPT.replace(
+        "{allowed_imports}", ", ".join(sorted(_SCRIPT_ALLOWED_IMPORTS))
+    )
 
 
 def _script_ast_is_safe(script: str) -> tuple[bool, str]:
@@ -334,7 +347,7 @@ def synthesize_generator_script(
     try:
         response = client.complete(
             prompt=prompt,
-            system=_SYSTEM_PROMPT,
+            system=_render_system_prompt(),
             stage="seedgen.synth",
             target_func=target_func or library_name,
             role=ModelRole.ARCHITECT,

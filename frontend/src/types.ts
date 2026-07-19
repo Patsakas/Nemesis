@@ -202,6 +202,7 @@ export interface JobRequest {
   scan?: boolean
   deep?: boolean
   max_targets?: number
+  timeout_hours?: number      // fuzzing budget per target; 0 = mode preset
   strategy?: string
   auto_sanitizer?: boolean
 }

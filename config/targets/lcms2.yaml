@@ -131,30 +131,15 @@ target:
     # Top Introspector candidate (2026-05-10): file-format parser, 0% fuzz cov,
     # 438 cyclomatic complexity, 140 reachable lines. CUBE 3D LUT files are
     # attacker-controlled file content via cmsCreateDeviceLinkFromCubeFile.
-    - func_name: ParseCube
-      file_path: src/cmscgats.c
-      line: 3087
-      direct_internal: true
+  - func_name: ParseCube
+    file_path: src/cmscgats.c
+    line: 3087
+    direct_internal: true
       # Demoted: harder harness (direct_internal). After cmsOpenProfileFromMem.
-      priority_score: 180.0
-      harness_hint: 'CUBE 3D LUT parser. Internal function — call via cmsCreateDeviceLinkFromCubeFile(path) after writing fuzz buffer to a temp file. cube file format: ASCII text with TITLE / DOMAIN_MIN / DOMAIN_MAX / LUT_3D_SIZE N / triplets. Cap input 64KB.'
+    priority_score: 180.0
+    harness_hint: 'CUBE 3D LUT parser. Internal function â€” call via cmsCreateDeviceLinkFromCubeFile(path) after writing fuzz buffer to a temp file. cube file format: ASCII text with TITLE / DOMAIN_MIN / DOMAIN_MAX / LUT_3D_SIZE N / triplets. Cap input 64KB.'
     # Public entry that internally calls ParseCube — exercises the file→cube→lut
     # path end-to-end with attacker-controlled file content.
-    - func_name: cmsCreateDeviceLinkFromCubeFile
-      file_path: src/cmscgats.c
-      line: 3309
-      priority_score: 220.0
-      harness_hint: 'Public CUBE-to-DeviceLink converter. Write fuzz buffer to temp file with mkstemp, call this API, cmsCloseProfile on success, unlink the temp.'
-    # Main public ICC profile parser. Even if OSS-Fuzz covers this, the auto-
-    # sanitizer multi-pass with strict UBSan often surfaces signed/unsigned
-    # overflow paths the existing harness misses.
-    - func_name: cmsOpenProfileFromMem
-      file_path: src/cmsio0.c
-      line: 1383
-      # Promoted to 1st: public API, single-buffer, no temp file machinery.
-      # Most reliable harness pattern — LLM produces clean code consistently.
-      priority_score: 250.0
-      harness_hint: 'Public ICC profile parser. Pass fuzz buffer + len directly. Reject inputs <128 bytes (header size). Free with cmsCloseProfile every iteration.'
 recon_scoring:
   bonus_patterns: {}
   bonus_func_patterns: {}

@@ -567,9 +567,15 @@ class NemesisPipeline:
         current_link = findings_root / "current"
         run_findings = findings_root / run_id
         run_findings.mkdir(parents=True, exist_ok=True)
-        if current_link.is_symlink() or current_link.exists():
-            current_link.unlink()
-        current_link.symlink_to(run_findings.resolve())
+        # Convenience pointer for the dashboard — never worth failing a run
+        # over. Windows refuses symlinks without developer mode or elevation,
+        # which used to abort the whole pipeline before Stage 1 even started.
+        try:
+            if current_link.is_symlink() or current_link.exists():
+                current_link.unlink()
+            current_link.symlink_to(run_findings.resolve())
+        except OSError as exc:
+            self.log.debug("findings.current_symlink_skipped", error=str(exc))
 
         # ── One-time setup: sync work repo + build unpatched debug library ──
         is_harness_strategy = self.config.fuzzing.strategy == "harness"
