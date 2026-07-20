@@ -24,34 +24,41 @@ a length prefix for a later region, an element count, or a checksum cannot be
 derived from control flow alone, and inventing that relationship would be
 worse than leaving it out. Semantic labelling is the LLM's job downstream.
 
-BLOCKER: does not work with NEMESIS's own harnesses yet
--------------------------------------------------------
-Measured against a real target (cJSON, 2026-07-20) and it recovered nothing —
-0 of 11 bytes influential. The cause is not this algorithm.
+Requires a probe binary, not the fuzzing binary
+-----------------------------------------------
+The fuzzing binary cannot be probed. NEMESIS harnesses are AFL++ persistent
+mode with shared-memory test cases (`__AFL_FUZZ_INIT()` sets
+`__afl_sharedmem_fuzzing = 1`); run outside afl-fuzz the runtime reports
+"disabling shared memory testcases" and the harness then receives no input at
+all. Every input produces the same handful of edges — valid JSON, deep nesting
+and pure garbage alike — so no byte can ever look influential. Measured on
+cJSON: identical 9-edge map for all six probes, 0 of 11 bytes influential.
 
-NEMESIS harnesses are AFL++ persistent mode with shared-memory test cases
-(`__AFL_FUZZ_INIT()` sets `__afl_sharedmem_fuzzing = 1`). Outside afl-fuzz the
-runtime prints "running not inside afl-fuzz, disabling shared memory testcases"
-and the harness then sees no input at all. Every input therefore produces the
-identical 9-edge map — valid JSON, deep nesting and pure garbage alike — so no
-byte can ever look influential.
+What works is a *probe binary*: the same harness source compiled with the AFL
+persistent macros `#undef`'d and replaced by a stub that reads stdin (the
+`_AFL_STUB_HEADER` shape already used for standalone crash reproduction), built
+with `afl-clang-fast` for instrumentation and linked with the same sanitizer
+flags as the library. On cJSON that turns a flat 9 edges into 4-93 edges
+depending on input, and 0% influential bytes into 100%.
 
-The same limitation silently affects `afl-cmin`: on that binary it reports
-"Found 0 unique tuples across 5 files" and keeps none of them, which means the
-pre-fuzz seed minimisation in `fuzzing/__init__.py` is already a no-op for
-these harnesses. That is a pre-existing bug, not one this module introduced.
+The same blindness affects `afl-cmin` on these binaries ("Found 0 unique tuples
+across 5 files", keeps none), so the pre-fuzz seed minimisation is already a
+no-op for persistent harnesses. Pre-existing, unrelated to this module, and
+fixable the same way.
 
-So this module is verified against targets that read their input normally
-(argv or stdin), and is effectively inert on NEMESIS's own harnesses until one
-of these is done:
-  * build a probe binary from the harness source with shared-memory fuzzing
-    disabled, so afl-showmap can feed it via stdin (attempted; the AFL macros
-    fight a naive source patch, needs the harness generator to emit a probe
-    variant instead);
-  * or drive probing through source-based coverage from the existing
-    `build_coverage` variant rather than the AFL bitmap.
-`infer_fieldspec` returns None in this situation, so the caller falls back to
-the LLM-synthesised spec and nothing breaks — it just never engages.
+Input delivery is the other half of that trap: a target that reads stdin, given
+a path on argv, parses nothing and looks exactly like a target whose bytes do
+not matter. `ShowmapRunner` therefore detects the mode rather than assuming it.
+
+Seed quality bounds everything
+------------------------------
+Probing can only see fields the seed actually reaches. An LZ4 frame seed that
+failed the frame-magic check produced exactly one influential byte — the magic
+itself — because parsing stopped there. That is not a failure of the method; it
+is the method correctly reporting that nothing past byte 0 was ever executed.
+Read a shallow result as "this seed does not exercise the parser" before
+reading it as "this format has no structure", and check `baseline_edges` in the
+artifacts to tell the two apart.
 
 Known limitation, measured not assumed
 --------------------------------------
@@ -160,13 +167,25 @@ class ShowmapRunner:
 
     Isolated behind a class so tests can substitute a fake without needing AFL
     installed, and so the subprocess details stay in one place.
+
+    `input_mode` decides how the test case reaches the target: "stdin" pipes it,
+    "argv" passes a path as the first argument, "auto" (the default) works it
+    out by trying both once. Getting this wrong is silent and total — a target
+    that reads stdin, handed a path on argv, parses nothing and reports the
+    same handful of edges for every input, so no byte ever looks influential.
+    NEMESIS's own stub harnesses read stdin; many standalone parsers take a
+    path. Guessing either way would break half the targets.
     """
 
     def __init__(self, binary: str | Path, timeout: int = 5,
-                 showmap_bin: str = "afl-showmap") -> None:
+                 showmap_bin: str = "afl-showmap",
+                 input_mode: str = "auto",
+                 env: dict[str, str] | None = None) -> None:
         self.binary = str(binary)
         self.timeout = timeout
         self.showmap_bin = showmap_bin
+        self.input_mode = input_mode
+        self.env = env
         self.log = get_logger("recon.byte_influence")
 
     def edges_for(self, input_path: str | Path) -> frozenset[str]:
@@ -176,17 +195,43 @@ class ShowmapRunner:
         a normal outcome here — we are deliberately feeding malformed input —
         and must not abort the sweep.
         """
+        if self.input_mode == "auto":
+            self.input_mode = self._detect_input_mode(input_path)
+        return self._run(input_path, self.input_mode)
+
+    def _detect_input_mode(self, input_path: str | Path) -> str:
+        """Pick whichever of stdin/argv actually gets the input into the target.
+
+        More edges means more of the program ran, which means the input was
+        read. Ties go to stdin: it is what the project's own harnesses use, and
+        an argv-reading target handed nothing on stdin still runs its startup
+        path, so a tie is far more likely to be argv doing nothing.
+        """
+        by_stdin = len(self._run(input_path, "stdin"))
+        by_argv = len(self._run(input_path, "argv"))
+        mode = "argv" if by_argv > by_stdin else "stdin"
+        self.log.info(
+            "showmap.input_mode_detected",
+            mode=mode, stdin_edges=by_stdin, argv_edges=by_argv,
+        )
+        return mode
+
+    def _run(self, input_path: str | Path, mode: str) -> frozenset[str]:
         with tempfile.NamedTemporaryFile(suffix=".map", delete=False) as tmp:
             map_path = Path(tmp.name)
+        cmd = [self.showmap_bin, "-o", str(map_path), "-q", "--", self.binary]
+        if mode == "argv":
+            cmd.append(str(input_path))
         try:
-            subprocess.run(
-                [self.showmap_bin, "-o", str(map_path), "-q", "--",
-                 self.binary, str(input_path)],
-                capture_output=True, timeout=self.timeout,
-            )
+            with open(input_path, "rb") as fh:
+                subprocess.run(
+                    cmd,
+                    stdin=fh if mode == "stdin" else subprocess.DEVNULL,
+                    capture_output=True, timeout=self.timeout, env=self.env,
+                )
             return self._parse_map(map_path)
         except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
-            self.log.debug("showmap.failed", error=str(exc))
+            self.log.debug("showmap.failed", error=str(exc), mode=mode)
             return frozenset()
         finally:
             try:

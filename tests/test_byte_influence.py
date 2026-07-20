@@ -476,6 +476,79 @@ def test_parse_map_missing_file(tmp_path):
     assert ShowmapRunner._parse_map(tmp_path / "nope.map") == frozenset()
 
 
+# ── Input-mode detection ────────────────────────────────────
+#
+# Getting this wrong is silent and total: a stdin-reading target handed a path
+# on argv parses nothing and reports the same few edges for every input, which
+# is indistinguishable from "no byte matters". Measured on cJSON: argv gave 4
+# edges, stdin gave 91.
+
+
+class ModeRunner(ShowmapRunner):
+    """Records which mode was used; reports edges only for the mode it accepts."""
+
+    def __init__(self, accepts: str):
+        self.accepts = accepts
+        self.modes_tried: list[str] = []
+        self.input_mode = "auto"
+        self.log = ShowmapRunner("x").log
+
+    def _run(self, input_path, mode):
+        self.modes_tried.append(mode)
+        if mode == self.accepts:
+            return frozenset({"1", "2", "3", "4", "5"})
+        return frozenset({"1"})        # startup path only — input never read
+
+
+def test_detects_stdin_target(tmp_path):
+    p = tmp_path / "in.bin"
+    p.write_bytes(b"data")
+    runner = ModeRunner(accepts="stdin")
+    assert len(runner.edges_for(p)) == 5
+    assert runner.input_mode == "stdin"
+
+
+def test_detects_argv_target(tmp_path):
+    p = tmp_path / "in.bin"
+    p.write_bytes(b"data")
+    runner = ModeRunner(accepts="argv")
+    assert len(runner.edges_for(p)) == 5
+    assert runner.input_mode == "argv"
+
+
+def test_mode_detection_runs_once_then_sticks(tmp_path):
+    """Detection costs two extra executions. Paying that per probe would double
+    the cost of the whole sweep."""
+    p = tmp_path / "in.bin"
+    p.write_bytes(b"data")
+    runner = ModeRunner(accepts="stdin")
+    runner.edges_for(p)
+    n_after_first = len(runner.modes_tried)
+    runner.edges_for(p)
+    runner.edges_for(p)
+    assert n_after_first == 3          # stdin probe, argv probe, real run
+    assert len(runner.modes_tried) == n_after_first + 2
+
+
+def test_tie_prefers_stdin(tmp_path):
+    """When neither mode reads the input, stdin is the safer default: it is what
+    the project's own stub harnesses use."""
+    p = tmp_path / "in.bin"
+    p.write_bytes(b"data")
+    runner = ModeRunner(accepts="neither")
+    runner.edges_for(p)
+    assert runner.input_mode == "stdin"
+
+
+def test_explicit_mode_skips_detection(tmp_path):
+    p = tmp_path / "in.bin"
+    p.write_bytes(b"data")
+    runner = ModeRunner(accepts="argv")
+    runner.input_mode = "argv"
+    runner.edges_for(p)
+    assert runner.modes_tried == ["argv"]
+
+
 # ── Wiring into the seed pipeline ───────────────────────────
 #
 # The measured spec is worth nothing if the orchestrator never asks for it, or
