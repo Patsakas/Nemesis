@@ -652,29 +652,60 @@ def test_probe_build_failure_does_not_raise(tmp_path, monkeypatch):
     assert _orchestrator(tmp_path, build)._measured_fieldspec(seeds) is None
 
 
-def test_smallest_seed_is_chosen(tmp_path, monkeypatch):
-    """Probing costs one exec per byte per probe value, so the small seed is
-    the cheap one — and yields the same layout if it covers the parser."""
+def test_deepest_seed_is_chosen_not_the_smallest(tmp_path, monkeypatch):
+    """REGRESSION: this used to pick the smallest file to keep probing cheap.
+    Measured on the OSS-Fuzz libtiff corpus, size does not predict depth — the
+    smallest seed (166 B) reached 297 edges while the deepest (637) was 8258 B
+    — so that heuristic picked close to the worst candidate available."""
     build = _build_with_harness(tmp_path)
     seeds = tmp_path / "seeds"
     seeds.mkdir()
-    (seeds / "big.bin").write_bytes(b"X" * 5000)
-    (seeds / "small.bin").write_bytes(b"XY")
-    (seeds / "empty.bin").write_bytes(b"")
+    (seeds / "shallow_small.bin").write_bytes(b"XY")          # small, shallow
+    (seeds / "deep_big.bin").write_bytes(b"D" * 500)          # big, deep
     _stub_probe(monkeypatch, tmp_path / "probe_bin")
+
+    class DepthRunner(ShowmapRunner):
+        def __init__(self, *a, **k):
+            self.input_mode = "stdin"
+        def edges_for(self, path):
+            data = Path(path).read_bytes()
+            return frozenset(str(i) for i in range(50)) if b"D" in data \
+                else frozenset({"1"})
 
     captured = {}
 
     import nemesis.recon.byte_influence as bi_mod
+    monkeypatch.setattr(bi_mod, "ShowmapRunner", DepthRunner)
 
-    def capture(*, probe_binary, seed, work_dir):
+    def capture(*, probe_binary, seed, work_dir, runner=None):
         captured["seed"] = seed
         return {"fields": [{"kind": "int", "size": 1}]}
     monkeypatch.setattr(bi_mod, "infer_fieldspec", capture)
 
     spec = _orchestrator(tmp_path, build)._measured_fieldspec(seeds)
     assert spec is not None
-    assert captured["seed"] == b"XY"     # not the 5000-byte one, not the empty
+    assert captured["seed"] == b"D" * 500     # the deep one, despite being larger
+
+
+def test_returns_none_when_no_seed_reaches_the_target(tmp_path, monkeypatch):
+    """Zero edges for every candidate says more about the binary than about the
+    format — reporting "no byte matters" from that would be a lie."""
+    build = _build_with_harness(tmp_path)
+    seeds = tmp_path / "seeds"
+    seeds.mkdir()
+    (seeds / "a.bin").write_bytes(b"AAAA")
+    _stub_probe(monkeypatch, tmp_path / "probe_bin")
+
+    class DeadRunner(ShowmapRunner):
+        def __init__(self, *a, **k):
+            self.input_mode = "stdin"
+        def edges_for(self, path):
+            return frozenset()
+
+    import nemesis.recon.byte_influence as bi_mod
+    monkeypatch.setattr(bi_mod, "ShowmapRunner", DeadRunner)
+
+    assert _orchestrator(tmp_path, build)._measured_fieldspec(seeds) is None
 
 
 def test_cmin_uses_the_analysis_binary_not_the_fuzz_binary(tmp_path, monkeypatch):
@@ -734,7 +765,14 @@ def test_probe_binary_is_used_not_the_fuzz_binary(tmp_path, monkeypatch):
 
     import nemesis.recon.byte_influence as bi_mod
 
-    def capture(*, probe_binary, seed, work_dir):
+    class LiveRunner(ShowmapRunner):
+        def __init__(self, *a, **k):
+            self.input_mode = "stdin"
+        def edges_for(self, path):
+            return frozenset({"1", "2"})
+    monkeypatch.setattr(bi_mod, "ShowmapRunner", LiveRunner)
+
+    def capture(*, probe_binary, seed, work_dir, runner=None):
         captured["binary"] = probe_binary
         return {"fields": []}
     monkeypatch.setattr(bi_mod, "infer_fieldspec", capture)

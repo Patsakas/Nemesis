@@ -1341,9 +1341,9 @@ class AFLOrchestrator:
         optimisation over the LLM path, and a failure here must not cost the
         run its seeds.
 
-        The seed chosen is the smallest available. Probing costs one execution
-        per byte per probe value, and a small seed that still covers the parser
-        yields the same field layout as a large one for a fraction of the work.
+        The seed is chosen by measured parser depth, not by size — probing only
+        finds fields the seed actually reaches, and size does not predict depth
+        (see select_probe_seed).
         """
         from nemesis.feature_flags import is_enabled as _fflag
         if not _fflag("byte_influence"):
@@ -1362,14 +1362,27 @@ class AFLOrchestrator:
         if not candidates:
             self.log.debug("byte_influence.no_seeds", dir=str(seeds_dir))
             return None
-        seed_file = min(candidates, key=lambda f: f.stat().st_size)
 
         try:
-            from nemesis.recon.byte_influence import infer_fieldspec
+            from nemesis.recon.byte_influence import (
+                ShowmapRunner,
+                infer_fieldspec,
+                select_probe_seed,
+            )
+            runner = ShowmapRunner(str(probe_binary))
+            seed_file = select_probe_seed(runner, candidates)
+        except Exception as exc:
+            self.log.warning("byte_influence.seed_select_failed", error=str(exc))
+            return None
+        if seed_file is None:
+            return None
+
+        try:
             spec = infer_fieldspec(
                 probe_binary=probe_binary,
                 seed=seed_file.read_bytes(),
                 work_dir=Path(self.workspace) / "byte_influence",
+                runner=runner,
             )
         except Exception as exc:
             self.log.warning("byte_influence.failed", error=str(exc))

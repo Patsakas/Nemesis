@@ -256,6 +256,50 @@ class ShowmapRunner:
 # ── Probing ─────────────────────────────────────────────────
 
 
+def select_probe_seed(
+    runner: ShowmapRunner,
+    candidates: list[Path],
+    max_candidates: int = 40,
+) -> Path | None:
+    """Pick the seed that drives the parser deepest, not the smallest one.
+
+    Probing can only discover fields the seed actually reaches, so the seed
+    choice bounds the result before any analysis happens. Depth is measured
+    directly — edge count for that input — because nothing cheaper predicts it.
+
+    Size in particular does not. Measured across the OSS-Fuzz libtiff corpus:
+    the smallest seed (166 bytes) reached 297 edges while the deepest (637)
+    was 8258 bytes, and the largest available (106 KB) reached only 349. An
+    earlier version of this picked the smallest file to keep probing cheap and
+    would have chosen close to the worst candidate.
+
+    Ties break toward the smaller file, since probing costs one execution per
+    byte per probe value. Only the first `max_candidates` are measured — this
+    costs one execution each, and corpora run to tens of thousands of files.
+    """
+    log = get_logger("recon.byte_influence")
+    usable = [c for c in candidates if c.is_file() and c.stat().st_size > 0]
+    if not usable:
+        return None
+
+    scored: list[tuple[int, int, Path]] = []
+    for path in usable[:max_candidates]:
+        depth = len(runner.edges_for(path))
+        scored.append((depth, -path.stat().st_size, path))
+
+    depth, neg_size, best = max(scored)
+    log.info(
+        "probe.seed_selected", seed=best.name, edges=depth, bytes=-neg_size,
+        considered=len(scored),
+    )
+    if depth == 0:
+        # Nothing ran for any candidate — probing would report that no byte
+        # matters, which says more about the binary than about the format.
+        log.warning("probe.no_seed_reaches_target", considered=len(scored))
+        return None
+    return best
+
+
 def measure_baseline(runner: ShowmapRunner, seed: bytes, work_dir: Path,
                      runs: int = DEFAULT_BASELINE_RUNS) -> tuple[frozenset[str], frozenset[str]]:
     """Return (stable_edges, flaky_edges) for the unmodified seed.
