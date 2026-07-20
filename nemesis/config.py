@@ -360,6 +360,14 @@ class ReconScoringConfig(BaseModel):
     penalty_funcs: list[str] = Field(default_factory=list)
     # High-complexity but low-value files (e.g. text serialization)
     low_value_files: dict[str, float] = Field(default_factory=dict)  # filename → penalty
+    # Git-history signals: recently-churned files and files with past bug fixes
+    # rank higher (bugs cluster where bugs were fixed before). No-ops silently
+    # when source_root isn't a git checkout, so it is safe to leave enabled.
+    git_history_enabled: bool = True
+    git_history_months: int = 24     # how far back the log window reaches
+    git_recency_bonus: float = 3.0   # changed <=90d; halved for <=365d
+    git_fix_bonus: float = 1.5       # per past bug-fix commit touching the file
+    git_fix_bonus_cap: float = 4.5   # ceiling on the accumulated fix bonus
 
 
 class SeedsConfig(BaseModel):

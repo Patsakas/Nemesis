@@ -19,6 +19,7 @@ from nemesis.models import (
     CallChain,
     CoverageTarget,
 )
+from nemesis.recon.git_history import GitHistoryIndex
 
 
 def find_sibling_functions(func_name: str, source_root: Path) -> list[str]:
@@ -128,6 +129,38 @@ class IntrospectorParser:
         self.log = get_logger("recon.introspector")
         self.api_url = config.introspector.api_url
         self.threshold = config.introspector.coverage_threshold_pct
+        self._git_index: GitHistoryIndex | None = None
+
+    @property
+    def git_history(self) -> GitHistoryIndex:
+        """Lazily-built git index, shared across every scored candidate.
+
+        Built once per parser instance: the index is one `git log` pass, and
+        scoring runs over hundreds of functions that mostly live in a handful
+        of files.
+        """
+        if self._git_index is None:
+            scoring = self.config.recon_scoring
+            if not scoring.git_history_enabled:
+                self._git_index = GitHistoryIndex()  # empty → scores 0.0
+            else:
+                self._git_index = GitHistoryIndex.build(
+                    self.config.target.source_root,
+                    months=scoring.git_history_months,
+                )
+        return self._git_index
+
+    def _git_history_bonus(self, rel_path: str) -> float:
+        """Ranking bonus from churn + past fixes for the file a candidate is in."""
+        scoring = self.config.recon_scoring
+        if not scoring.git_history_enabled:
+            return 0.0
+        return self.git_history.score_bonus(
+            rel_path,
+            recency_bonus=scoring.git_recency_bonus,
+            fix_bonus=scoring.git_fix_bonus,
+            fix_bonus_cap=scoring.git_fix_bonus_cap,
+        )
 
     def fetch_and_parse(self) -> list[CoverageTarget]:
         """
@@ -308,6 +341,7 @@ class IntrospectorParser:
                     break
 
             score += self._vuln_pattern_score(signature, [])
+            score += self._git_history_bonus(rel_path)
 
             is_static = self._is_static_function(name, rel_path)
             if is_static:
@@ -623,6 +657,9 @@ class IntrospectorParser:
                 if any(s in func_name for s in ("Free", "Init", "Clear", "Reset", "Destroy")):
                     score -= 4.0
 
+                # Churn + past-fix history for the file (see recon/git_history.py)
+                score += self._git_history_bonus(rel_path)
+
                 targets.append(CoverageTarget(
                     func_name=func_name,
                     file_path=rel_path,
@@ -843,6 +880,21 @@ class ContextExtractor:
     def __init__(self, config: NemesisConfig) -> None:
         self.config = config
         self.log = get_logger("recon.context")
+        self._git_index: GitHistoryIndex | None = None
+
+    @property
+    def git_history(self) -> GitHistoryIndex:
+        """Lazily-built git index (see IntrospectorParser.git_history)."""
+        if self._git_index is None:
+            scoring = self.config.recon_scoring
+            if not scoring.git_history_enabled:
+                self._git_index = GitHistoryIndex()
+            else:
+                self._git_index = GitHistoryIndex.build(
+                    self.config.target.source_root,
+                    months=scoring.git_history_months,
+                )
+        return self._git_index
 
     def extract(self, chain: CallChain) -> AnalysisContext:
         """Extract full source context for a call chain."""
@@ -872,12 +924,22 @@ class ContextExtractor:
         # Extract macro environment
         macro_env = self._extract_macros(target_file)
 
+        # Past fixes to this file are a direct hint about what goes wrong here —
+        # "previously fixed an OOB read in the chunk loop" tells the analysis
+        # where to look far more cheaply than re-deriving it from the source.
+        git_lines = self.git_history.context_lines(target.file_path)
+        if git_lines:
+            self.log.debug(
+                "context.git_history", func=target.func_name, lines=len(git_lines),
+            )
+
         return AnalysisContext(
             target=target,
             call_chain=chain,
             source_snippets=snippets,
             macro_env=macro_env,
             build_config=self.config.target.build.configure,
+            git_history=git_lines,
         )
 
     def _extract_function_body(self, func: str, root: Path) -> str | None:

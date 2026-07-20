@@ -3027,6 +3027,17 @@ If you cannot determine the format, provide generic minimal seeds:
         if context.build_config:
             sections.append(f"<build_config>\n{context.build_config}\n</build_config>")
 
+        # Past bug fixes to this file say what has historically gone wrong here,
+        # which is a strong prior on what is still wrong. Recency says how much
+        # review exposure the code has had.
+        if context.git_history:
+            sections.append("<git_history>")
+            sections.append(
+                "Recent commits touching this file (bug-fix commits first):"
+            )
+            sections.extend(context.git_history)
+            sections.append("</git_history>")
+
         sections.append("<task>")
         sections.append(
             "Analyze this function and its call chain for potential vulnerabilities.\n"
