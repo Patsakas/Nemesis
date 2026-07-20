@@ -457,10 +457,44 @@ def fields_from_groups(
 # ── Fieldspec emission ──────────────────────────────────────
 
 
+def fieldspec_variants(
+    fields: list[MeasuredField],
+    seed: bytes,
+    max_variants: int = 64,
+    method: str = "jaccard-snap",
+) -> list[dict]:
+    """One spec per field, each varying that field alone.
+
+    Rendering every field as boundary values at once — which is what a single
+    spec does — destroys the input. The first measured field on a TIFF is
+    bytes 0-7, the `II` magic plus the 42 version marker; replace that with
+    0xFFFFFFFF and nothing downstream is ever parsed. With dozens of fields
+    varying simultaneously, essentially no rendered seed survives, which is
+    why 40 generated seeds collapsed to 8 distinct behaviours: they were not
+    duplicates of each other so much as duplicates of "rejected immediately".
+
+    Varying one field at a time keeps the rest at their observed values, so
+    each seed is a valid input with exactly one thing wrong — which is both
+    what reaches deep code and what isolates the effect of that field.
+
+    Fields are ordered by descending confidence so that when `max_variants`
+    truncates, the measurements we are surest of are the ones kept.
+    """
+    ordered = sorted(
+        range(len(fields)),
+        key=lambda i: (-fields[i].confidence, fields[i].offset),
+    )
+    return [
+        fields_to_fieldspec(fields, seed, method=method, vary_only=idx)
+        for idx in ordered[:max_variants]
+    ]
+
+
 def fields_to_fieldspec(
     fields: list[MeasuredField],
     seed: bytes,
     method: str = "jaccard-snap",
+    vary_only: int | None = None,
 ) -> dict:
     """Render measured fields as the fieldspec JSON `fieldspec_seedgen` reads.
 
@@ -480,18 +514,31 @@ def fields_to_fieldspec(
     """
     spec_fields: list[dict] = []
     cursor = 0
+    order = sorted(range(len(fields)), key=lambda i: fields[i].offset)
 
-    for f in sorted(fields, key=lambda x: x.offset):
+    def _literal(data: bytes, name: str) -> dict:
+        """A const field — reproduces these bytes exactly."""
+        return {"kind": "const", "hex": data.hex(), "name": name,
+                "source": "coverage"}
+
+    for idx in order:
+        f = fields[idx]
         if f.offset > cursor:
-            spec_fields.append({
-                "kind": "bytes",
-                "name": f"gap_{cursor}",
-                "min": f.offset - cursor,
-                "max": f.offset - cursor,
-                "fill": "random",
-                "source": "coverage",
-            })
+            # Gaps are the inert regions between measured fields. Filling them
+            # with random bytes would corrupt payload the parser does read
+            # (compressed data, string tables) even though no single byte of it
+            # steers control flow. Reproduce them instead.
+            spec_fields.append(_literal(seed[cursor:f.offset], f"gap_{cursor}"))
+
         chunk = seed[f.offset:f.offset + f.size]
+        varying = vary_only is None or idx == vary_only
+
+        if not varying:
+            # Held at its observed value so this variant differs in one place.
+            spec_fields.append(_literal(chunk, f"fixed_{f.offset}"))
+            cursor = f.offset + f.size
+            continue
+
         entry: dict = {
             "kind": "int" if f.size in SNAP_WIDTHS else "bytes",
             "source": "coverage",
@@ -516,14 +563,7 @@ def fields_to_fieldspec(
         cursor = f.offset + f.size
 
     if cursor < len(seed):
-        spec_fields.append({
-            "kind": "bytes",
-            "name": "tail",
-            "min": len(seed) - cursor,
-            "max": len(seed) - cursor,
-            "fill": "random",
-            "source": "coverage",
-        })
+        spec_fields.append(_literal(seed[cursor:], "tail"))
 
     return {"fields": spec_fields}
 

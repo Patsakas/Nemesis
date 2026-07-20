@@ -34,6 +34,7 @@ from nemesis.recon.byte_influence import (
     cluster_fields,
     fields_from_groups,
     fields_to_fieldspec,
+    fieldspec_variants,
     infer_fieldspec,
     jaccard,
     snap_width,
@@ -376,6 +377,8 @@ def test_infer_recovers_the_known_layout(seed, tmp_path):
         if f["kind"] == "int":
             offsets.append((cursor, f["size"]))
             cursor += f["size"]
+        elif f["kind"] == "const":
+            cursor += len(bytes.fromhex(f["hex"]))
         else:
             cursor += f["max"]
     assert offsets == [(0, 4), (4, 4), (8, 1), (9, 2)]
@@ -386,7 +389,82 @@ def test_infer_ignores_payload_bytes(seed, tmp_path):
     would send mutation budget at bytes that do nothing."""
     spec = infer_fieldspec("dummy", seed, tmp_path, runner=FakeRunner(seed))
     tail = [f for f in spec["fields"] if f.get("name") == "tail"]
-    assert tail and tail[0]["min"] == 16
+    assert tail and len(bytes.fromhex(tail[0]["hex"])) == 16
+
+
+def test_inert_regions_are_reproduced_not_randomised(seed, tmp_path):
+    """Gaps and tail are bytes no single byte of which steers control flow —
+    but the parser still READS them (compressed data, string tables). Filling
+    them with random bytes corrupts input that was valid, so they are emitted
+    as const."""
+    spec = infer_fieldspec("dummy", seed, tmp_path, runner=FakeRunner(seed))
+    tail = next(f for f in spec["fields"] if f.get("name") == "tail")
+    assert tail["kind"] == "const"
+    assert bytes.fromhex(tail["hex"]) == seed[11:]
+
+
+# ── fieldspec_variants ──────────────────────────────────────
+
+
+def test_variants_vary_one_field_each(seed):
+    """REGRESSION: a single spec varies every field at once, which destroys the
+    input — on TIFF the first measured field is the `II` magic, so replacing it
+    means nothing downstream is ever parsed. Measured effect: 40 generated
+    seeds collapsed to 8 distinct behaviours, most of them "rejected"."""
+    fields = [
+        MeasuredField(offset=0, size=4, observed_size=4, confidence=1.0),
+        MeasuredField(offset=4, size=4, observed_size=4, confidence=1.0),
+        MeasuredField(offset=8, size=1, observed_size=1, confidence=1.0),
+    ]
+    variants = fieldspec_variants(fields, seed)
+    assert len(variants) == 3
+    for spec in variants:
+        n_varying = sum(1 for f in spec["fields"] if f["kind"] != "const")
+        assert n_varying == 1, "each variant must vary exactly one field"
+
+
+def test_variants_preserve_the_magic_in_all_but_one(seed):
+    """The variant that does not touch field 0 must reproduce those bytes
+    exactly, or every seed it renders is rejected at the magic check."""
+    fields = [
+        MeasuredField(offset=0, size=4, observed_size=4, confidence=1.0),
+        MeasuredField(offset=4, size=4, observed_size=4, confidence=1.0),
+    ]
+    variants = fieldspec_variants(fields, seed)
+    magic_kept = [v for v in variants
+                  if v["fields"][0]["kind"] == "const"
+                  and bytes.fromhex(v["fields"][0]["hex"]) == seed[:4]]
+    assert len(magic_kept) == 1
+
+
+def test_variants_render_to_the_original_length(seed):
+    import random as _r
+
+    from nemesis.recon.fieldspec_seedgen import build_from_fieldspec
+    fields = [
+        MeasuredField(offset=0, size=4, observed_size=4, confidence=1.0),
+        MeasuredField(offset=4, size=4, observed_size=4, confidence=1.0),
+    ]
+    for spec in fieldspec_variants(fields, seed):
+        assert len(build_from_fieldspec(spec["fields"], _r.Random(0))) == len(seed)
+
+
+def test_variants_ordered_by_confidence(seed):
+    """When max_variants truncates, keep the measurements we are surest of."""
+    fields = [
+        MeasuredField(offset=0, size=4, observed_size=3, confidence=0.5),
+        MeasuredField(offset=4, size=4, observed_size=4, confidence=1.0),
+    ]
+    first = fieldspec_variants(fields, seed, max_variants=1)[0]
+    # The high-confidence field (offset 4) is the one left varying.
+    assert first["fields"][0]["kind"] == "const"
+    assert first["fields"][1]["kind"] != "const"
+
+
+def test_variants_capped(seed):
+    fields = [MeasuredField(offset=i, size=1, observed_size=1, confidence=1.0)
+              for i in range(20)]
+    assert len(fieldspec_variants(fields, seed, max_variants=5)) == 5
 
 
 def test_infer_returns_none_without_baseline_coverage(seed, tmp_path):

@@ -50,6 +50,7 @@ from nemesis.recon.byte_influence import (  # noqa: E402
     cluster_fields,
     fields_from_groups,
     fields_to_fieldspec,
+    fieldspec_variants,
     measure_baseline,
     probe_bytes,
     select_probe_seed,
@@ -80,12 +81,20 @@ def corpus_stats(runner: ShowmapRunner, files: list[Path]) -> dict:
     }
 
 
-def render_arm(spec: dict, n: int, out_dir: Path, tag: str) -> list[Path]:
-    """Render n seeds from a fieldspec into out_dir/tag/."""
+def render_arm(specs: list[dict], n: int, out_dir: Path, tag: str) -> list[Path]:
+    """Render n seeds spread across the given specs, round-robin.
+
+    A list rather than one spec because varying every field simultaneously
+    destroys the input (see fieldspec_variants). Round-robin so the budget is
+    spread across fields rather than exhausting the first.
+    """
     d = out_dir / tag
     d.mkdir(parents=True, exist_ok=True)
     written: list[Path] = []
+    if not specs:
+        return written
     for i in range(n):
+        spec = specs[i % len(specs)]
         data = build_from_fieldspec(spec.get("fields", []), random.Random(1000 + i))
         if not data:
             continue
@@ -140,15 +149,19 @@ def main() -> int:
     infl = probe_bytes(runner, seed, work, base, flaky)
     n_infl = sum(1 for i in infl if i.influential)
     fields = fields_from_groups(cluster_fields(infl, **kw))
-    measured = fields_to_fieldspec(fields, seed)
-    ok, err = validate_fieldspec(measured)
+    # all-at-once (the original approach) vs one-field-at-a-time
+    whole = fields_to_fieldspec(fields, seed)
+    variants = fieldspec_variants(fields, seed)
+    ok, err = validate_fieldspec(whole)
     print(f"influential: {n_infl}/{len(seed)} "
-          f"({100 * n_infl / len(seed):.1f}%)  fields: {len(fields)}  valid: {ok} {err}")
+          f"({100 * n_infl / len(seed):.1f}%)  fields: {len(fields)}  "
+          f"variants: {len(variants)}  valid: {ok} {err}")
 
     arms: dict[str, list[Path]] = {
         "original": [seed_path],
         "random": random_arm(len(seed), args.n_seeds, work),
-        "measured": render_arm(measured, args.n_seeds, work, "measured"),
+        "all-at-once": render_arm([whole], args.n_seeds, work, "whole"),
+        "measured": render_arm(variants, args.n_seeds, work, "measured"),
     }
 
     print()
