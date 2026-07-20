@@ -118,6 +118,33 @@ pre-sized the raster buffer — crashes appeared within 60 s of fuzzing.
 the automatic findings entry failed on unrelated LLM noise around libtiff's callback
 signatures, so this one is not a clean end-to-end automatic result like the other two.
 
+### Inferred input structure
+
+NEMESIS works out which input bytes steer the program by measuring, not by reading a
+format spec or asking a model to recall one: probe each byte offset against an
+instrumented build and see which coverage edges move. Adjacent bytes whose edge sets
+overlap are one field. ([details](docs/benchmarks/fieldspec_seed_quality.md))
+
+Seeds generated from that inferred structure, against 40 uniform-random seeds of the
+same length and against the single real seed the structure was measured from:
+
+| Target | Inputs bytes that steer control flow | vs random | Reaches, vs the real seed |
+|--------|------|-----------|------------|
+| **libtiff** | 294 / 2504 — 11.7 % | 3 → 237 edges | 63 % |
+| **libpng** | 296 / 325 — 91.1 % | 91 → 280 edges | 92 % |
+| **cJSON** | 27 / 27 — 100 % | 29 → 112 edges | 108 % |
+
+No format spec, no hand-written adapter, no grammar — on libpng that reaches 92 % of the
+coverage of a genuine PNG using seeds it generated itself.
+
+The middle column is the honest caveat: **the benefit tracks how much of the input is
+inert.** A container format with a large compressed payload has plenty of bytes worth
+skipping; a character-by-character JSON parser has none, and there the measured structure
+buys little. The libtiff ratio (79×) is arithmetically true and practically misleading —
+random reached 3 edges there, so almost anything divides large.
+
+Reproduce with `scripts/bench_fieldspec.py`. Deterministic, no LLM call, minutes not hours.
+
 ### Where it does not work yet
 
 Backtesting is only honest if the misses are reported too.
@@ -133,6 +160,15 @@ Backtesting is only honest if the misses are reported too.
   out-of-bounds read via `TIFFFetchNormalTag`, but the upstream fix patches argv handling
   in `tools/tiffset.c` — the bug is in the CLI tool, not the library, and is unreachable
   from any in-memory file harness. Reports name the crash site, not the bug site.
+- **Better seeds are not yet shown to be better fuzzing.** The structure-inference numbers
+  above measure seed coverage, which is a leading indicator (Rebert 2014) and not a result.
+  Nothing here demonstrates finding bugs faster — that needs a campaign with the same
+  corpus, budget and repeats, and it has not been run. Treat the table as evidence about
+  input structure, not about bug discovery.
+- **Structure inference needs a probe binary.** The AFL fuzzing harness is persistent-mode
+  with shared-memory test cases and receives no input outside `afl-fuzz`, so it reports
+  identical coverage for every seed. NEMESIS builds a separate probe binary for offline
+  analysis; targets where that build fails fall back to the LLM-guessed field spec.
 
 ---
 
