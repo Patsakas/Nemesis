@@ -120,6 +120,45 @@ The same index fills `AnalysisContext.git_history`, so prior fix commits reach t
 prompt. Both are file-granular by design: recon ranks hundreds of candidates and a
 per-function `git log -L` would dominate stage-1 runtime. No-ops on a non-git source tree.
 
+### Byte-influence inference
+
+`recon/byte_influence.py` works out which input bytes actually steer the program,
+by measuring rather than by reading a spec or asking a model. Run the seed to get a
+baseline edge map, substitute probe values at each offset, and attribute any edge
+that moves to that byte. Adjacent bytes with similar edge sets are one field.
+
+The output is a `fieldspec` — the same JSON `fieldspec_seedgen.py` already
+interprets — so this is a new *producer* for an existing pipeline, not a new
+subsystem. Fields carry `source: "coverage"` and a confidence; the interpreter
+ignores unknown keys, so that metadata costs nothing.
+
+It recovers **structure** (offsets, widths, groupings), never **semantics**. A
+measured 2-byte integer is reported as an integer; whether it is a length prefix,
+an element count or a checksum cannot be derived from control flow, and guessing
+would produce seeds that are confidently wrong. `len` is deliberately never
+emitted — that inference belongs to the LLM reading this spec.
+
+Three things were measured, not assumed, against a target with known layout:
+
+- **A single bit-flip is not enough.** It found 2 of the 3 observable bytes of a
+  4-byte integer; flipping a middle byte often keeps the value in the same range.
+  Hence several probe values per offset.
+- **Some bytes are invisible in principle.** No value of the low byte of that
+  integer changes any branch — `0x100` and `0x1FF` compare the same way. Mitigated,
+  not solved, by snapping a 3-byte run up to 4; snapped fields record
+  `observed_size` and take a confidence penalty so a measurement is
+  distinguishable from an inference.
+- **Clustering needs Jaccard similarity.** Equality of edge sets splits real
+  fields (a middle byte can reach branches the high bytes cannot); non-empty
+  intersection merges unrelated ones (the magic gates everything downstream, so it
+  shares an edge with every later field). The correct layout is recovered for any
+  threshold in `[0.15, 0.30]`; the default sits inside that window rather than on
+  its edge, and is a parameter because one target is one datapoint.
+
+Every stage writes its own artifact (`baseline.json`, `probes.json`,
+`fields.json`, `fieldspec.json`) — when a real target yields a poor spec the
+question is always *which* stage failed, and the final JSON cannot answer it.
+
 ### Structure-aware mutation
 
 `templates/mutator/mutator_scaffold.h` provides the AFL custom-mutator entry points, RNG,

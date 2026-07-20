@@ -483,7 +483,10 @@ ruff format nemesis/ tests/ # format
 - [x] Auto-sanitizer selection (LLM-ranked, multi-pass)
 - [x] Auto-detect build systems beyond cmake (autotools, meson)
 - [x] Structure-aware mutation (protobuf, ASN.1, archive headers)
-- [ ] Taint-guided fuzzing: track which input bytes reach the target
+- [x] Byte-influence inference — measure which input bytes steer control flow,
+      and derive the field layout from it (coverage-differential, no new build)
+- [ ] True taint tracking (DFSan) — byte → variable dataflow, for root-cause
+      explanation rather than mutation targeting
 - [x] Git-history analysis: recently changed functions, past bug locations
 - [x] Auto-draft vulnerability report + PoC (`nemesis disclose`)
 
