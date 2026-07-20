@@ -24,6 +24,35 @@ a length prefix for a later region, an element count, or a checksum cannot be
 derived from control flow alone, and inventing that relationship would be
 worse than leaving it out. Semantic labelling is the LLM's job downstream.
 
+BLOCKER: does not work with NEMESIS's own harnesses yet
+-------------------------------------------------------
+Measured against a real target (cJSON, 2026-07-20) and it recovered nothing —
+0 of 11 bytes influential. The cause is not this algorithm.
+
+NEMESIS harnesses are AFL++ persistent mode with shared-memory test cases
+(`__AFL_FUZZ_INIT()` sets `__afl_sharedmem_fuzzing = 1`). Outside afl-fuzz the
+runtime prints "running not inside afl-fuzz, disabling shared memory testcases"
+and the harness then sees no input at all. Every input therefore produces the
+identical 9-edge map — valid JSON, deep nesting and pure garbage alike — so no
+byte can ever look influential.
+
+The same limitation silently affects `afl-cmin`: on that binary it reports
+"Found 0 unique tuples across 5 files" and keeps none of them, which means the
+pre-fuzz seed minimisation in `fuzzing/__init__.py` is already a no-op for
+these harnesses. That is a pre-existing bug, not one this module introduced.
+
+So this module is verified against targets that read their input normally
+(argv or stdin), and is effectively inert on NEMESIS's own harnesses until one
+of these is done:
+  * build a probe binary from the harness source with shared-memory fuzzing
+    disabled, so afl-showmap can feed it via stdin (attempted; the AFL macros
+    fight a naive source patch, needs the harness generator to emit a probe
+    variant instead);
+  * or drive probing through source-based coverage from the existing
+    `build_coverage` variant rather than the AFL bitmap.
+`infer_fieldspec` returns None in this situation, so the caller falls back to
+the LLM-synthesised spec and nothing breaks — it just never engages.
+
 Known limitation, measured not assumed
 --------------------------------------
 Coverage probing cannot recover every byte of a multi-byte field. On the
@@ -478,7 +507,16 @@ def infer_fieldspec(
     )
     n_influential = sum(1 for i in influences if i.influential)
     if n_influential == 0:
-        log.warning("infer.no_influential_bytes", seed_len=len(seed))
+        # Almost always means the target never saw the input rather than that
+        # the input does not matter. The usual cause is an AFL++ persistent
+        # harness with shared-memory test cases, which receives nothing when
+        # run outside afl-fuzz (see the module docstring).
+        log.warning(
+            "infer.no_influential_bytes", seed_len=len(seed),
+            hint=("target produced identical coverage for every probe; if this "
+                  "is an AFL persistent/shared-memory harness it never received "
+                  "the input — probe a binary that reads argv or stdin"),
+        )
         return None
 
     groups = cluster_fields(influences, threshold=threshold)

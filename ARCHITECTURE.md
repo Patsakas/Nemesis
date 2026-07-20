@@ -159,6 +159,18 @@ Every stage writes its own artifact (`baseline.json`, `probes.json`,
 `fields.json`, `fieldspec.json`) — when a real target yields a poor spec the
 question is always *which* stage failed, and the final JSON cannot answer it.
 
+**Not yet usable on NEMESIS's own harnesses.** Those are AFL++ persistent mode
+with shared-memory test cases, and outside `afl-fuzz` the runtime disables that
+path — the harness receives no input, so every probe returns an identical map and
+nothing looks influential. Measured on cJSON: 0 of 11 bytes. The same limitation
+makes the pre-fuzz `afl-cmin` step a no-op on these binaries (it reports 0 unique
+tuples and keeps no seeds), which is a pre-existing bug worth fixing on its own.
+Unblocking this needs either a probe binary built from the harness source with
+shared-memory fuzzing disabled, or probing driven from the `build_coverage`
+variant instead of the AFL bitmap. Until then `infer_fieldspec` returns None and
+the LLM-synthesised spec is used, so nothing breaks — the feature simply never
+engages.
+
 ### Structure-aware mutation
 
 `templates/mutator/mutator_scaffold.h` provides the AFL custom-mutator entry points, RNG,
