@@ -255,6 +255,21 @@ nemesis report --run-id <id> --format markdown   # one run, as markdown
 nemesis report --format json -o findings.json
 ```
 
+### `nemesis disclose` — draft the maintainer report
+
+Turns a confirmed finding into the package you actually send upstream: a Markdown
+report (summary table, impact, root cause, minimized-reproducer hexdump, ASAN
+evidence, call chain, suggested patch) plus the raw reproducer bytes as a separate
+`.poc.bin`. Offline and deterministic — no LLM call, no rebuild.
+
+```bash
+nemesis disclose                                    # list findings
+nemesis disclose -f NEMESIS-2026-001                # draft one
+nemesis disclose --all --project-url <repo-url>     # every confirmed finding
+```
+
+Review before sending — coordinated disclosure means the maintainer hears it first.
+
 ### `nemesis daemon` — scheduled scans
 
 Runs the pipeline unattended on a schedule, optionally posting to a webhook.
@@ -466,11 +481,11 @@ ruff format nemesis/ tests/ # format
 - [x] Deep-fuzz mode (scan → score → deep-fuzz top-N)
 - [x] Multi-oracle support (round-trip, differential, MSan, TSan, LSan, invariants)
 - [x] Auto-sanitizer selection (LLM-ranked, multi-pass)
-- [ ] Auto-detect build systems beyond cmake (autotools, meson)
-- [ ] Structure-aware mutation (protobuf, ASN.1, archive headers)
+- [x] Auto-detect build systems beyond cmake (autotools, meson)
+- [x] Structure-aware mutation (protobuf, ASN.1, archive headers)
 - [ ] Taint-guided fuzzing: track which input bytes reach the target
-- [ ] Git-history analysis: recently changed functions, past bug locations
-- [ ] Auto-draft vulnerability report + PoC
+- [x] Git-history analysis: recently changed functions, past bug locations
+- [x] Auto-draft vulnerability report + PoC (`nemesis disclose`)
 
 ---
 

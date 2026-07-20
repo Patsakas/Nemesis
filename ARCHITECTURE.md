@@ -113,6 +113,34 @@ Driven by `recon_scoring` in the target YAML: filename and function-name bonuses
 and file penalties, and a coverage curve that peaks on partially-explored functions — fully
 covered code has been fuzzed already, and completely untouched code is often unreachable.
 
+On top of that, `recon/git_history.py` adds two signals from a single `git log` pass:
+**churn** (code changed recently has had less review exposure) and **past fixes** (bugs
+cluster — a file that already needed an out-of-bounds fix is where the next one lives).
+The same index fills `AnalysisContext.git_history`, so prior fix commits reach the analysis
+prompt. Both are file-granular by design: recon ranks hundreds of candidates and a
+per-function `git log -L` would dominate stage-1 runtime. No-ops on a non-git source tree.
+
+### Structure-aware mutation
+
+`templates/mutator/mutator_scaffold.h` provides the AFL custom-mutator entry points, RNG,
+CRC32 and strategy dispatch; each adapter in `templates/mutator/adapters/` is a
+self-contained TU implementing four hooks (`has_signature`, `parse`, `fix_integrity`,
+`apply_targeted`). Hand-written adapters cover PNG, RIFF/WavPack, tar, ZIP, ASN.1/DER and
+protobuf; the rest are LLM-synthesised per target from the PNG reference
+(`recon/mutator_synthesis.py`).
+
+Whether `fix_integrity` repairs a checksum is a per-format decision, not an oversight:
+PNG's CRC is recomputed (a bad CRC is rejected before any mutated field is read), while
+ZIP's is deliberately left broken (it covers uncompressed data, and the error path it
+triggers is itself worth reaching). ASN.1, protobuf and tar payloads carry no checksum at
+all — tar's header checksum is repaired, since a bad one fails the entry outright.
+
+Adapters are exercised, not just compiled: `tests/mutator_harness.c` runs each one for
+thousands of rounds under ASAN/UBSan. It calls the hooks directly against exactly-sized
+buffers as well as through `afl_custom_fuzz`, because the scaffold's 1 MB scratch buffer
+otherwise masks semantic overflows the same way a large static buffer masked them in
+harnesses (see Lessons).
+
 ### Crash triage
 
 Every crash is replayed standalone to filter AFL persistent-mode artifacts, then classified
