@@ -396,14 +396,23 @@ class AFLOrchestrator:
                     # instead — there is no LLM-authored code to crash, so the
                     # produce wave can't be wasted on a runtime error.
                     from nemesis.recon import fieldspec_seedgen as _fs
-                    spec = _fs.synthesize_fieldspec(
-                        library_name=lib_name,
-                        target_func=target_func,
-                        format_spec=format_spec,
-                        cve_records=cve_records,
-                        client=_llm,
-                        log=self.log,
-                    )
+
+                    # Prefer a MEASURED spec over a recalled one. Probing the
+                    # instrumented binary tells us which bytes actually steer
+                    # the program, which beats asking the model to remember a
+                    # format it may never have seen. Needs a seed to probe and
+                    # an instrumented binary; falls back to the LLM whenever
+                    # either is missing or nothing measurable comes back.
+                    spec = self._measured_fieldspec(seeds_dir)
+                    if spec is None:
+                        spec = _fs.synthesize_fieldspec(
+                            library_name=lib_name,
+                            target_func=target_func,
+                            format_spec=format_spec,
+                            cve_records=cve_records,
+                            client=_llm,
+                            log=self.log,
+                        )
                     if spec:
                         n_fs = _fs.produce_seeds_from_spec(
                             spec, seeds_dir, n_seeds=200, log=self.log,
@@ -1256,6 +1265,57 @@ class AFLOrchestrator:
         if not list(seeds_dir.iterdir()):
             (seeds_dir / "minimal").write_bytes(b"\x00" * 64)
             self.log.warning("seeds.fallback_minimal")
+
+    def _measured_fieldspec(self, seeds_dir: Path) -> dict | None:
+        """Derive a fieldspec by probing the instrumented binary, or None.
+
+        Returns None — meaning "fall back to the LLM-synthesised spec" — when
+        the feature is off, there is no instrumented binary, there is no seed
+        to probe, or probing found nothing measurable. Never raises: this is an
+        optimisation over the LLM path, and a failure here must not cost the
+        run its seeds.
+
+        The seed chosen is the smallest available. Probing costs one execution
+        per byte per probe value, and a small seed that still covers the parser
+        yields the same field layout as a large one for a fraction of the work.
+        """
+        from nemesis.feature_flags import is_enabled as _fflag
+        if not _fflag("byte_influence"):
+            self.log.info("byte_influence.disabled")
+            return None
+
+        binary = Path(self.config.target.build_dir) / "fuzz_nemesis"
+        if not binary.exists():
+            self.log.debug("byte_influence.no_binary", path=str(binary))
+            return None
+
+        try:
+            candidates = [f for f in seeds_dir.iterdir()
+                          if f.is_file() and f.stat().st_size > 0]
+        except OSError:
+            return None
+        if not candidates:
+            self.log.debug("byte_influence.no_seeds", dir=str(seeds_dir))
+            return None
+        seed_file = min(candidates, key=lambda f: f.stat().st_size)
+
+        try:
+            from nemesis.recon.byte_influence import infer_fieldspec
+            spec = infer_fieldspec(
+                binary=binary,
+                seed=seed_file.read_bytes(),
+                work_dir=Path(self.workspace) / "byte_influence",
+            )
+        except Exception as exc:
+            self.log.warning("byte_influence.failed", error=str(exc))
+            return None
+
+        if spec:
+            self.log.info(
+                "byte_influence.measured_spec",
+                seed=seed_file.name, fields=len(spec.get("fields", [])),
+            )
+        return spec
 
     def _minimize_seeds(self, seeds_dir: Path, binary: Path) -> Path:
         """Run afl-cmin on seed corpus BEFORE fuzzing to remove redundant inputs.

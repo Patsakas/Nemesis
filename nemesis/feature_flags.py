@@ -52,6 +52,12 @@ Current features
 * `seed_evolve`        — Seed pipeline #3. Coverage-feedback evolution
                           loop: keep only seeds that reach the pinned
                           function, then breed variations of the winners.
+* `byte_influence`     — Coverage-differential field inference. Probe each
+                          input byte against the instrumented binary and
+                          derive the field layout from which edges move,
+                          instead of asking the LLM to recall the format.
+                          Falls back to the LLM spec when nothing measurable
+                          comes back. Disable to keep the LLM-only path.
 """
 
 from __future__ import annotations
@@ -72,6 +78,7 @@ _FEATURES: frozenset[str] = frozenset({
     "roundtrip",
     "z3_seedgen",
     "seed_evolve",
+    "byte_influence",
 })
 
 
