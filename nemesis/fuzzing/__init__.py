@@ -425,7 +425,15 @@ class AFLOrchestrator:
             self.log.info("seedgen.disabled")
 
         # Minimize seed corpus: keep only seeds that produce unique coverage
-        seeds_dir = self._minimize_seeds(seeds_dir, Path(self.config.target.build_dir) / "fuzz_nemesis")
+        # afl-cmin needs a binary whose coverage varies with the input; the
+        # persistent fuzzing binary's does not when run offline (see
+        # analysis_binary). Falls back to the fuzzing binary only so the call
+        # shape is unchanged when no probe can be built — it will no-op there
+        # exactly as it always has.
+        _cmin_binary = self.analysis_binary() or (
+            Path(self.config.target.build_dir) / "fuzz_nemesis"
+        )
+        seeds_dir = self._minimize_seeds(seeds_dir, _cmin_binary)
 
         # Fix 107: Pre-validate seeds — remove seeds that crash the binary.
         # Prevents AFL early-exit (all-seeds-crash) which wastes 60s+ on warmup.
@@ -1043,7 +1051,12 @@ class AFLOrchestrator:
             # afl-cmin reduces the corpus to the minimal set of inputs that together
             # achieve the same edge coverage as the full corpus — quality over quantity.
             # Built lazily on first run and cached; falls back to raw corpus if unavailable.
-            _binary = Path(self.config.target.build_dir) / "fuzz_nemesis"
+            # Analysis binary, not the fuzzing one — see analysis_binary().
+            # Against the persistent binary this whole step is a no-op: cmin
+            # sees identical coverage for every input and keeps nothing.
+            _binary = self.analysis_binary() or (
+                Path(self.config.target.build_dir) / "fuzz_nemesis"
+            )
             _minset_dir = (
                 self._ensure_corpus_minset(_corpus_dir, _binary)
                 if _corpus_dir.exists()
@@ -1266,33 +1279,30 @@ class AFLOrchestrator:
             (seeds_dir / "minimal").write_bytes(b"\x00" * 64)
             self.log.warning("seeds.fallback_minimal")
 
-    def _measured_fieldspec(self, seeds_dir: Path) -> dict | None:
-        """Derive a fieldspec by probing the instrumented binary, or None.
+    def analysis_binary(self) -> Path | None:
+        """Binary that reports honest per-input coverage when run offline.
 
-        Returns None — meaning "fall back to the LLM-synthesised spec" — when
-        the feature is off, there is no instrumented binary, there is no seed
-        to probe, or probing found nothing measurable. Never raises: this is an
-        optimisation over the LLM path, and a failure here must not cost the
-        run its seeds.
+        NOT the fuzzing binary. That one is AFL++ persistent mode with
+        shared-memory test cases: outside `afl-fuzz` the runtime disables that
+        path and the harness receives no input at all, so every input yields
+        the same map. Anything that reasons about coverage per input —
+        `afl-showmap` for byte-influence probing, `afl-cmin` for corpus
+        minimisation — gets a uniform answer and concludes, wrongly, that no
+        input is distinguishable from any other. Measured on cJSON: afl-cmin
+        reported "0 unique tuples across 5 files" and kept none of them.
 
-        The seed chosen is the smallest available. Probing costs one execution
-        per byte per probe value, and a small seed that still covers the parser
-        yields the same field layout as a large one for a fraction of the work.
+        Built once per orchestrator and cached on disk across runs
+        (see recon/probe_build.py). Returns None when it cannot be built, and
+        every caller must then fall back rather than silently probe the
+        fuzzing binary.
         """
-        from nemesis.feature_flags import is_enabled as _fflag
-        if not _fflag("byte_influence"):
-            self.log.info("byte_influence.disabled")
-            return None
+        if getattr(self, "_analysis_binary_cache", None) is not None:
+            return self._analysis_binary_cache
 
-        # A PROBE binary, not the fuzzing one. The fuzzing harness is AFL++
-        # persistent mode with shared-memory test cases and receives no input
-        # at all when run outside afl-fuzz, so every probe would return an
-        # identical map (measured on cJSON: flat 9 edges for everything).
-        # See nemesis/recon/probe_build.py.
         build_dir = Path(self.config.target.build_dir)
         harness_src = build_dir / "fuzz_nemesis.c"
         if not harness_src.exists():
-            self.log.debug("byte_influence.no_harness_source", path=str(harness_src))
+            self.log.debug("analysis_binary.no_harness_source", path=str(harness_src))
             return None
 
         source_root = Path(self.config.target.source_root)
@@ -1316,9 +1326,32 @@ class AFLOrchestrator:
                 link_libs=self.config.target.link_libs or "",
             )
         except Exception as exc:
-            self.log.warning("byte_influence.probe_build_error", error=str(exc))
+            self.log.warning("analysis_binary.build_error", error=str(exc))
             return None
-        if binary is None:
+
+        self._analysis_binary_cache = binary
+        return binary
+
+    def _measured_fieldspec(self, seeds_dir: Path) -> dict | None:
+        """Derive a fieldspec by probing the instrumented binary, or None.
+
+        Returns None — meaning "fall back to the LLM-synthesised spec" — when
+        the feature is off, there is no instrumented binary, there is no seed
+        to probe, or probing found nothing measurable. Never raises: this is an
+        optimisation over the LLM path, and a failure here must not cost the
+        run its seeds.
+
+        The seed chosen is the smallest available. Probing costs one execution
+        per byte per probe value, and a small seed that still covers the parser
+        yields the same field layout as a large one for a fraction of the work.
+        """
+        from nemesis.feature_flags import is_enabled as _fflag
+        if not _fflag("byte_influence"):
+            self.log.info("byte_influence.disabled")
+            return None
+
+        probe_binary = self.analysis_binary()
+        if probe_binary is None:
             return None
 
         try:
@@ -1334,7 +1367,7 @@ class AFLOrchestrator:
         try:
             from nemesis.recon.byte_influence import infer_fieldspec
             spec = infer_fieldspec(
-                binary=binary,
+                probe_binary=probe_binary,
                 seed=seed_file.read_bytes(),
                 work_dir=Path(self.workspace) / "byte_influence",
             )
@@ -1349,14 +1382,21 @@ class AFLOrchestrator:
             )
         return spec
 
-    def _minimize_seeds(self, seeds_dir: Path, binary: Path) -> Path:
+    def _minimize_seeds(self, seeds_dir: Path, analysis_binary: Path) -> Path:
         """Run afl-cmin on seed corpus BEFORE fuzzing to remove redundant inputs.
 
         Keeps only seeds that produce unique coverage paths — dramatically
         reduces AFL calibration time when using large corpora (e.g. OSS-Fuzz 29K+).
 
+        `analysis_binary` must report coverage that varies with the input. The
+        AFL *fuzzing* binary does not when run offline: persistent mode with
+        shared-memory test cases receives nothing outside afl-fuzz, so cmin
+        sees one behaviour for every seed and keeps none of them ("0 unique
+        tuples across 5 files", measured on cJSON). Use `analysis_binary()`.
+
         Returns the minimized directory, or the original if afl-cmin unavailable.
         """
+        binary = analysis_binary
         seed_files = [f for f in seeds_dir.iterdir() if f.is_file()]
         if len(seed_files) <= 10 or not binary.exists():
             return seeds_dir  # not worth minimizing small sets

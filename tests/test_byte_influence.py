@@ -667,7 +667,7 @@ def test_smallest_seed_is_chosen(tmp_path, monkeypatch):
 
     import nemesis.recon.byte_influence as bi_mod
 
-    def capture(*, binary, seed, work_dir):
+    def capture(*, probe_binary, seed, work_dir):
         captured["seed"] = seed
         return {"fields": [{"kind": "int", "size": 1}]}
     monkeypatch.setattr(bi_mod, "infer_fieldspec", capture)
@@ -675,6 +675,48 @@ def test_smallest_seed_is_chosen(tmp_path, monkeypatch):
     spec = _orchestrator(tmp_path, build)._measured_fieldspec(seeds)
     assert spec is not None
     assert captured["seed"] == b"XY"     # not the 5000-byte one, not the empty
+
+
+def test_cmin_uses_the_analysis_binary_not_the_fuzz_binary(tmp_path, monkeypatch):
+    """REGRESSION: afl-cmin against the persistent fuzzing binary sees identical
+    coverage for every seed and keeps none of them ("0 unique tuples across 5
+    files", measured on cJSON). The step then silently does nothing — no seeds
+    are lost, because the caller falls back to the unminimised corpus, but the
+    minimisation never happens."""
+    build = _build_with_harness(tmp_path)
+    (build / "fuzz_nemesis").write_bytes(b"\x7fELF")
+    probe = tmp_path / "probe_bin"
+    probe.write_bytes(b"\x7fELF")
+    _stub_probe(monkeypatch, probe)
+
+    orch = _orchestrator(tmp_path, build)
+    resolved = orch.analysis_binary()
+    assert resolved == probe
+    assert resolved.name != "fuzz_nemesis"
+
+
+def test_analysis_binary_is_built_once(tmp_path, monkeypatch):
+    """Both cmin call sites and byte-influence probing ask for it; rebuilding
+    per call would recompile the harness several times per run."""
+    build = _build_with_harness(tmp_path)
+    calls = []
+
+    import nemesis.recon.probe_build as pb_mod
+
+    def counting(**kw):
+        calls.append(1)
+        return tmp_path / "probe_bin"
+    monkeypatch.setattr(pb_mod, "build_probe_binary", counting)
+
+    orch = _orchestrator(tmp_path, build)
+    orch.analysis_binary()
+    orch.analysis_binary()
+    orch.analysis_binary()
+    assert len(calls) == 1
+
+
+def test_analysis_binary_none_when_no_harness_source(tmp_path):
+    assert _orchestrator(tmp_path).analysis_binary() is None
 
 
 def test_probe_binary_is_used_not_the_fuzz_binary(tmp_path, monkeypatch):
@@ -692,8 +734,8 @@ def test_probe_binary_is_used_not_the_fuzz_binary(tmp_path, monkeypatch):
 
     import nemesis.recon.byte_influence as bi_mod
 
-    def capture(*, binary, seed, work_dir):
-        captured["binary"] = binary
+    def capture(*, probe_binary, seed, work_dir):
+        captured["binary"] = probe_binary
         return {"fields": []}
     monkeypatch.setattr(bi_mod, "infer_fieldspec", capture)
 

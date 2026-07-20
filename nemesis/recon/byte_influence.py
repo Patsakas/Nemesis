@@ -511,7 +511,7 @@ def _interesting_values(observed: int, size: int) -> list[int]:
 
 
 def infer_fieldspec(
-    binary: str | Path,
+    probe_binary: str | Path,
     seed: bytes,
     work_dir: str | Path,
     threshold: float = DEFAULT_JACCARD_THRESHOLD,
@@ -522,7 +522,14 @@ def infer_fieldspec(
     dump_artifacts: bool = True,
     runner: ShowmapRunner | None = None,
 ) -> dict | None:
-    """Probe `seed` against `binary` and return a measured fieldspec.
+    """Probe `seed` against `probe_binary` and return a measured fieldspec.
+
+    `probe_binary` must be a build that reports honest per-input coverage when
+    run offline — see recon/probe_build.py. Passing the AFL *fuzzing* binary
+    is the one mistake that fails silently: it receives no input outside
+    afl-fuzz, so every probe returns the same map and this reports that no
+    byte matters. The parameter is named for what it must be, not for what it
+    is, because that mistake costs hours to diagnose from the outside.
 
     Returns None when nothing could be measured (no baseline coverage, or no
     influential bytes) — the caller should fall back to the LLM-synthesised
@@ -536,11 +543,11 @@ def infer_fieldspec(
     log = get_logger("recon.byte_influence")
     work = Path(work_dir)
     work.mkdir(parents=True, exist_ok=True)
-    runner = runner or ShowmapRunner(binary)
+    runner = runner or ShowmapRunner(probe_binary)
 
     baseline, flaky = measure_baseline(runner, seed, work, runs=baseline_runs)
     if not baseline:
-        log.warning("infer.no_baseline_coverage", binary=str(binary),
+        log.warning("infer.no_baseline_coverage", binary=str(probe_binary),
                     note="target produced no edges; is the binary instrumented?")
         return None
     if flaky:
