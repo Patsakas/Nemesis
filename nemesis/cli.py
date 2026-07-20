@@ -643,6 +643,109 @@ def verify_crashes(target: str, config_path: str | None) -> None:
         console.print("\n[yellow]All crashes were patch-induced (false positives). No new CVE candidates.[/yellow]")
 
 
+# ── nemesis disclose ────────────────────────────────────────
+
+
+@cli.command()
+@click.option("--finding", "-f", "finding_id", default="",
+              help="Finding ID to draft (e.g. NEMESIS-2026-001). Omit with --all.")
+@click.option("--all", "draft_all", is_flag=True,
+              help="Draft a report for every confirmed finding")
+@click.option("--project-url", default="",
+              help="Upstream project URL to cite in the report header")
+@click.option("--out", "out_dir", default="",
+              help="Output directory (default workspace/reports/disclosure)")
+@click.option("--findings-path", default="findings.yaml", help="Path to findings.yaml")
+def disclose(
+    finding_id: str,
+    draft_all: bool,
+    project_url: str,
+    out_dir: str,
+    findings_path: str,
+) -> None:
+    """Draft a coordinated-disclosure report + PoC file from findings.yaml.
+
+    Produces the package you actually send a maintainer: a Markdown report
+    (summary table, impact, root cause, minimized-reproducer hexdump, ASAN
+    evidence, call chain, suggested patch) plus the raw reproducer bytes as
+    a separate .poc.bin so they can reproduce without un-hexdumping anything.
+
+    Offline and deterministic — no LLM call, no rebuild. Everything comes from
+    what the triager already wrote into findings.yaml.
+    """
+    console.print(BANNER)
+    setup_logging(level="INFO", fmt="console")
+
+    from nemesis.reporter import load_findings, save_disclosure_package
+
+    findings = load_findings(findings_path)
+    if not findings:
+        console.print(
+            "[yellow]No findings in findings.yaml — run 'nemesis run --target <t>' "
+            "first.[/yellow]"
+        )
+        return
+
+    if draft_all:
+        # Only confirmed findings: "potential" entries haven't survived
+        # reproduction on an unpatched build, and sending one to a maintainer
+        # burns credibility.
+        selected = [f for f in findings if f.get("status") == "confirmed"]
+        if not selected:
+            console.print(
+                f"[yellow]No confirmed findings among {len(findings)} entries "
+                "(only confirmed ones are drafted; use --finding ID to force "
+                "one).[/yellow]"
+            )
+            return
+    elif finding_id:
+        selected = [f for f in findings if str(f.get("id")) == finding_id]
+        if not selected:
+            available = ", ".join(str(f.get("id")) for f in findings[:10])
+            console.print(f"[red]No finding with id {finding_id}[/red]")
+            console.print(f"[dim]Available: {available}[/dim]")
+            return
+    else:
+        console.print("[red]Pass --finding <ID> or --all[/red]")
+        table = Table(title="Findings")
+        table.add_column("ID", style="cyan")
+        table.add_column("Library", style="dim")
+        table.add_column("Function")
+        table.add_column("CWE")
+        table.add_column("Status")
+        for f in findings:
+            table.add_row(
+                str(f.get("id", "")), str(f.get("library", "")),
+                str(f.get("function", "")), str(f.get("cwe", "")),
+                str(f.get("status", "")),
+            )
+        console.print(table)
+        return
+
+    for f in selected:
+        report_path, poc_path = save_disclosure_package(
+            f, project_url=project_url, reports_dir=out_dir,
+        )
+        console.print(
+            f"  [green]✓[/green] {f.get('id')} → [cyan]{report_path}[/cyan]"
+        )
+        if poc_path:
+            console.print(f"    PoC: [cyan]{poc_path}[/cyan]")
+        else:
+            # The report still stands on the ASAN evidence, but without bytes
+            # the maintainer can't reproduce — worth flagging loudly.
+            console.print(
+                "    [yellow]no reproducer file found — report has no PoC "
+                "attached[/yellow]"
+            )
+
+    console.print(
+        f"\n[bold green]Disclosure:[/bold green] drafted {len(selected)} "
+        "report(s). Review before sending — coordinated disclosure means the "
+        "maintainer hears it first."
+    )
+
+
 # ── nemesis recon ───────────────────────────────────────────
 
 

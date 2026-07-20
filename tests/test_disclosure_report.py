@@ -4,6 +4,7 @@ from nemesis.reporter import (
     _hexdump,
     generate_disclosure_report,
     load_reproducer,
+    save_disclosure_package,
     save_disclosure_report,
 )
 
@@ -123,3 +124,89 @@ def test_save_disclosure_report_writes_file(tmp_path):
     assert out.exists()
     assert out.name == "NEMESIS-TEST-001.md"
     assert out.read_text(encoding="utf-8").startswith("# libexample:")
+
+
+# ── save_disclosure_package ──────────────────────────────────────────────────
+
+
+def test_package_writes_report_and_raw_poc(tmp_path):
+    """The hexdump in the report is for reading; the maintainer reproduces
+    from the raw bytes, so both must land on disk."""
+    poc_bytes = b"\x89PNG\r\n\x1a\n\x00\x00\xff\xff"
+    src = tmp_path / "min.bin"
+    src.write_bytes(poc_bytes)
+    report, poc = save_disclosure_package(
+        _finding(minimized_input=str(src)), reports_dir=tmp_path / "out",
+    )
+    assert report.name == "NEMESIS-TEST-001.md"
+    assert poc is not None and poc.name == "NEMESIS-TEST-001.poc.bin"
+    # Byte-for-byte — a re-encoded or truncated PoC doesn't reproduce.
+    assert poc.read_bytes() == poc_bytes
+
+
+def test_package_poc_is_not_truncated_by_hexdump_cap(tmp_path):
+    """_hexdump caps at 512 bytes for readability. That cap must NOT reach the
+    written PoC file, or a >512-byte reproducer silently stops reproducing."""
+    poc_bytes = bytes(range(256)) * 4  # 1024 bytes
+    src = tmp_path / "big.bin"
+    src.write_bytes(poc_bytes)
+    _, poc = save_disclosure_package(
+        _finding(minimized_input=str(src)), reports_dir=tmp_path / "out",
+    )
+    assert poc is not None
+    assert poc.read_bytes() == poc_bytes
+    assert len(poc.read_bytes()) == 1024
+
+
+def test_package_without_reproducer_still_writes_report(tmp_path):
+    """Crash files often live on the machine that ran the fuzzer. The report
+    still stands on the ASAN evidence — but there is no PoC to attach."""
+    report, poc = save_disclosure_package(
+        _finding(minimized_input=""), reports_dir=tmp_path / "out",
+    )
+    assert report.exists()
+    assert poc is None
+    assert "Reproducer file not available" in report.read_text(encoding="utf-8")
+
+
+def test_package_prefers_minimized_over_raw_crash_file(tmp_path):
+    """load_reproducer prefers the minimized input; the package must inherit
+    that preference rather than shipping the un-minimized original."""
+    minimized = tmp_path / "small.bin"
+    minimized.write_bytes(b"SMALL")
+    raw = tmp_path / "raw.bin"
+    raw.write_bytes(b"A" * 5000)
+    _, poc = save_disclosure_package(
+        _finding(minimized_input=str(minimized), crash_files=[str(raw)]),
+        reports_dir=tmp_path / "out",
+    )
+    assert poc is not None and poc.read_bytes() == b"SMALL"
+
+
+def test_package_falls_back_to_crash_file(tmp_path):
+    """No minimized input (minimizer failed/skipped) → ship the raw crash file
+    rather than no PoC at all."""
+    raw = tmp_path / "raw.bin"
+    raw.write_bytes(b"RAWCRASH")
+    _, poc = save_disclosure_package(
+        _finding(minimized_input="", crash_files=[str(raw)]),
+        reports_dir=tmp_path / "out",
+    )
+    assert poc is not None and poc.read_bytes() == b"RAWCRASH"
+
+
+def test_package_passes_project_url_through(tmp_path):
+    report, _ = save_disclosure_package(
+        _finding(), project_url="https://github.com/example/libexample",
+        reports_dir=tmp_path / "out",
+    )
+    assert "https://github.com/example/libexample" in report.read_text(encoding="utf-8")
+
+
+def test_package_handles_finding_without_id(tmp_path):
+    """A hand-written findings.yaml entry may lack an id — write something
+    rather than crashing on a None filename."""
+    f = _finding()
+    del f["id"]
+    report, _ = save_disclosure_package(f, reports_dir=tmp_path / "out")
+    assert report.name == "UNKNOWN.md"

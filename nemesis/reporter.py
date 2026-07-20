@@ -813,6 +813,40 @@ def save_disclosure_report(report_md: str, finding_id: str, reports_dir: str | P
     return report_path
 
 
+def save_disclosure_package(
+    finding: dict[str, Any],
+    patch_diff: str = "",
+    project_url: str = "",
+    reports_dir: str | Path = "",
+) -> tuple[Path, Path | None]:
+    """Write the full disclosure package for one finding: report + raw PoC file.
+
+    The hexdump inside the report is for reading; a maintainer reproducing the
+    bug needs the actual bytes, so the reproducer is also written verbatim
+    alongside as ``{finding_id}.poc.bin``. Returns (report_path, poc_path),
+    with poc_path None when no reproducer could be loaded (e.g. the crash files
+    live on the machine that ran the fuzzer and aren't present here).
+    """
+    finding_id = str(finding.get("id") or "UNKNOWN")
+    reproducer = load_reproducer(finding)
+    report_md = generate_disclosure_report(
+        finding,
+        patch_diff=patch_diff,
+        reproducer=reproducer,
+        project_url=project_url,
+    )
+    report_path = save_disclosure_report(report_md, finding_id, reports_dir)
+
+    poc_path: Path | None = None
+    if reproducer is not None:
+        poc_path = report_path.parent / f"{finding_id}.poc.bin"
+        poc_path.write_bytes(reproducer)
+        get_logger("reporter").info(
+            "disclosure_poc.saved", path=str(poc_path), bytes=len(reproducer),
+        )
+    return report_path, poc_path
+
+
 def update_finding_with_cve(
     findings: list[dict[str, Any]],
     finding_id: str,
