@@ -1284,9 +1284,41 @@ class AFLOrchestrator:
             self.log.info("byte_influence.disabled")
             return None
 
-        binary = Path(self.config.target.build_dir) / "fuzz_nemesis"
-        if not binary.exists():
-            self.log.debug("byte_influence.no_binary", path=str(binary))
+        # A PROBE binary, not the fuzzing one. The fuzzing harness is AFL++
+        # persistent mode with shared-memory test cases and receives no input
+        # at all when run outside afl-fuzz, so every probe would return an
+        # identical map (measured on cJSON: flat 9 edges for everything).
+        # See nemesis/recon/probe_build.py.
+        build_dir = Path(self.config.target.build_dir)
+        harness_src = build_dir / "fuzz_nemesis.c"
+        if not harness_src.exists():
+            self.log.debug("byte_influence.no_harness_source", path=str(harness_src))
+            return None
+
+        source_root = Path(self.config.target.source_root)
+        include_subdir = (
+            self.config.target.include_subdir or self.config.target.source_subdir
+        )
+        includes = [str(source_root)]
+        if include_subdir:
+            includes.append(str(source_root / include_subdir))
+
+        lib_name = self.config.target.library_name
+        library = build_dir / lib_name if lib_name else None
+
+        try:
+            from nemesis.recon.probe_build import build_probe_binary
+            binary = build_probe_binary(
+                harness_source_path=harness_src,
+                library_archive=library,
+                out_dir=Path(self.workspace) / "probe",
+                include_dirs=includes,
+                link_libs=self.config.target.link_libs or "",
+            )
+        except Exception as exc:
+            self.log.warning("byte_influence.probe_build_error", error=str(exc))
+            return None
+        if binary is None:
             return None
 
         try:

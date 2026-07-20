@@ -580,19 +580,40 @@ def test_disable_flag_turns_it_off(monkeypatch, tmp_path):
     assert orch._measured_fieldspec(tmp_path) is None
 
 
-def test_returns_none_without_instrumented_binary(tmp_path):
-    """No fuzz_nemesis → fall back to the LLM spec rather than probing
-    something that cannot report coverage."""
+def _build_with_harness(tmp_path):
+    """Build dir containing the harness source the probe is compiled from."""
+    build = tmp_path / "build"
+    build.mkdir(exist_ok=True)
+    (build / "fuzz_nemesis.c").write_text("int main(void){return 0;}\n")
+    return build
+
+
+def _stub_probe(monkeypatch, path):
+    import nemesis.recon.probe_build as pb_mod
+    monkeypatch.setattr(pb_mod, "build_probe_binary", lambda **kw: path)
+
+
+def test_returns_none_without_harness_source(tmp_path):
+    """No harness source → nothing to build a probe from, so fall back to the
+    LLM spec rather than probing the persistent fuzz binary, which would
+    silently report that no byte matters."""
     seeds = tmp_path / "seeds"
     seeds.mkdir()
     (seeds / "a.bin").write_bytes(b"AAAA")
     assert _orchestrator(tmp_path)._measured_fieldspec(seeds) is None
 
 
+def test_returns_none_when_probe_build_fails(tmp_path, monkeypatch):
+    build = _build_with_harness(tmp_path)
+    seeds = tmp_path / "seeds"
+    seeds.mkdir()
+    (seeds / "a.bin").write_bytes(b"AAAA")
+    _stub_probe(monkeypatch, None)
+    assert _orchestrator(tmp_path, build)._measured_fieldspec(seeds) is None
+
+
 def test_returns_none_without_seeds(tmp_path):
-    build = tmp_path / "build"
-    build.mkdir()
-    (build / "fuzz_nemesis").write_bytes(b"\x7fELF")
+    build = _build_with_harness(tmp_path)
     seeds = tmp_path / "seeds"
     seeds.mkdir()
     assert _orchestrator(tmp_path, build)._measured_fieldspec(seeds) is None
@@ -601,12 +622,11 @@ def test_returns_none_without_seeds(tmp_path):
 def test_probing_failure_does_not_raise(tmp_path, monkeypatch):
     """This is an optimisation over the LLM path. If it throws, the run loses
     its seeds entirely — so every failure has to become a None."""
-    build = tmp_path / "build"
-    build.mkdir()
-    (build / "fuzz_nemesis").write_bytes(b"\x7fELF")
+    build = _build_with_harness(tmp_path)
     seeds = tmp_path / "seeds"
     seeds.mkdir()
     (seeds / "a.bin").write_bytes(b"AAAA")
+    _stub_probe(monkeypatch, tmp_path / "probe_bin")
 
     import nemesis.recon.byte_influence as bi_mod
 
@@ -617,17 +637,31 @@ def test_probing_failure_does_not_raise(tmp_path, monkeypatch):
     assert _orchestrator(tmp_path, build)._measured_fieldspec(seeds) is None
 
 
+def test_probe_build_failure_does_not_raise(tmp_path, monkeypatch):
+    build = _build_with_harness(tmp_path)
+    seeds = tmp_path / "seeds"
+    seeds.mkdir()
+    (seeds / "a.bin").write_bytes(b"AAAA")
+
+    import nemesis.recon.probe_build as pb_mod
+
+    def boom(**kw):
+        raise RuntimeError("compiler vanished")
+    monkeypatch.setattr(pb_mod, "build_probe_binary", boom)
+
+    assert _orchestrator(tmp_path, build)._measured_fieldspec(seeds) is None
+
+
 def test_smallest_seed_is_chosen(tmp_path, monkeypatch):
     """Probing costs one exec per byte per probe value, so the small seed is
     the cheap one — and yields the same layout if it covers the parser."""
-    build = tmp_path / "build"
-    build.mkdir()
-    (build / "fuzz_nemesis").write_bytes(b"\x7fELF")
+    build = _build_with_harness(tmp_path)
     seeds = tmp_path / "seeds"
     seeds.mkdir()
     (seeds / "big.bin").write_bytes(b"X" * 5000)
     (seeds / "small.bin").write_bytes(b"XY")
     (seeds / "empty.bin").write_bytes(b"")
+    _stub_probe(monkeypatch, tmp_path / "probe_bin")
 
     captured = {}
 
@@ -641,3 +675,28 @@ def test_smallest_seed_is_chosen(tmp_path, monkeypatch):
     spec = _orchestrator(tmp_path, build)._measured_fieldspec(seeds)
     assert spec is not None
     assert captured["seed"] == b"XY"     # not the 5000-byte one, not the empty
+
+
+def test_probe_binary_is_used_not_the_fuzz_binary(tmp_path, monkeypatch):
+    """REGRESSION: probing the persistent fuzz binary returns a plausible zero
+    — it receives no input outside afl-fuzz, so every byte looks inert."""
+    build = _build_with_harness(tmp_path)
+    (build / "fuzz_nemesis").write_bytes(b"\x7fELF")   # the WRONG binary
+    seeds = tmp_path / "seeds"
+    seeds.mkdir()
+    (seeds / "a.bin").write_bytes(b"AAAA")
+    probe = tmp_path / "probe_bin"
+    _stub_probe(monkeypatch, probe)
+
+    captured = {}
+
+    import nemesis.recon.byte_influence as bi_mod
+
+    def capture(*, binary, seed, work_dir):
+        captured["binary"] = binary
+        return {"fields": []}
+    monkeypatch.setattr(bi_mod, "infer_fieldspec", capture)
+
+    _orchestrator(tmp_path, build)._measured_fieldspec(seeds)
+    assert captured["binary"] == probe
+    assert captured["binary"].name != "fuzz_nemesis"

@@ -165,13 +165,27 @@ disables that path and the harness receives no input at all, so every probe
 returns an identical map and nothing looks influential. Measured on cJSON: a flat
 9 edges for valid JSON, deep nesting and garbage alike, 0 of 11 bytes influential.
 
-A *probe binary* — the same harness source with the persistent macros `#undef`'d
-and replaced by the stdin stub already used for standalone crash reproduction,
-built with `afl-clang-fast` and linked with the library's sanitizer flags — turns
-that into 4-93 edges by input and 100% influential bytes. Note the second half of
-the trap: a stdin-reading target handed a path on argv also parses nothing, and
-looks exactly like a target whose bytes do not matter, so `ShowmapRunner` detects
-the input mode instead of assuming it (cJSON: argv 4 edges, stdin 91).
+`recon/probe_build.py` builds the analysis-time twin: same harness source, same
+library, same sanitizer flags, but the persistent macros `#undef`'d and replaced
+by a one-shot stdin stub, compiled with `afl-clang-fast` so instrumentation is
+kept. That turns the flat 9 edges into 4-93 by input, and 0% influential bytes
+into 100%. Binaries are cached on a fingerprint of source + library mtime/size +
+link line, so a rebuilt library invalidates them but a repeated probe does not
+recompile.
+
+This is not the debug build — that one drops AFL instrumentation entirely and so
+has no coverage map to read. It is a third artifact alongside fuzz and debug.
+
+Two traps are encoded there because both cost real time to find: the `#undef`s
+are required (afl-clang-fast defines those macros itself and wins otherwise,
+silently reverting to shared-memory mode), and the link line needs the library's
+`-fsanitize=address` (without it you get `undefined reference to
+__asan_report_load4`, which reads like an AFL problem and is not).
+
+The second half of the trap is input delivery: a stdin-reading target handed a
+path on argv also parses nothing, and looks exactly like a target whose bytes do
+not matter. `ShowmapRunner` therefore detects the mode instead of assuming it
+(cJSON: argv 4 edges, stdin 91).
 
 The same blindness makes the pre-fuzz `afl-cmin` step a no-op on persistent
 binaries — it reports 0 unique tuples and keeps no seeds, then the caller falls
