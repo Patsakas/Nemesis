@@ -90,7 +90,7 @@ class GitHistoryIndex:
         months: int = 24,
         max_commits: int = 4000,
         timeout: int = 30,
-    ) -> "GitHistoryIndex":
+    ) -> GitHistoryIndex:
         """Walk `git log` once and index every file it touched.
 
         `months` bounds how far back "recent" reaches; `max_commits` bounds the
