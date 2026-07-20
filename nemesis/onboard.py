@@ -117,6 +117,28 @@ _CPP_FILE_EXTS = (".cpp", ".cxx", ".cc", ".c++")
 _C_WRAPPER_RATIO = 10  # .c outnumbers .cpp/.cxx/.cc by this factor → C library
 
 
+# Meson build-file grammar. `library()` is the generic form meson resolves to
+# static or shared per --default-library; `static_library` / `shared_library` /
+# `both_libraries` are the explicit forms. _MESON_LIB_RE captures a string
+# literal name; _MESON_LIB_CALL_RE matches the same calls regardless of how the
+# name is spelled, so a computed name (`library(meson.project_name(), ...)`)
+# still marks the file as the one that builds the library.
+_MESON_LIB_FUNCS = r"(?:static_library|shared_library|both_libraries|library)"
+_MESON_LIB_RE = re.compile(
+    rf"\b{_MESON_LIB_FUNCS}\s*\(\s*(['\"])([A-Za-z][A-Za-z0-9_.\-]*)\1"
+)
+_MESON_LIB_CALL_RE = re.compile(rf"\b{_MESON_LIB_FUNCS}\s*\(")
+_MESON_PROJECT_RE = re.compile(
+    r"\bproject\s*\(\s*(['\"])([A-Za-z][A-Za-z0-9_.\-]*)\1"
+)
+# option('name', type: 'boolean', value: true, ...) — `rest` carries the
+# keyword arguments so the caller can read the declared type. Bounded to the
+# argument list by excluding ')' so one option can't swallow the next.
+_MESON_OPTION_RE = re.compile(
+    r"\boption\s*\(\s*(['\"])(?P<name>[A-Za-z][A-Za-z0-9_\-]*)\1(?P<rest>[^)]*)"
+)
+
+
 def _detect_cpp_project(source_root: Path) -> bool:
     """Best-effort: is the LIBRARY ITSELF C++ (as opposed to C with optional
     C++ wrappers / consumers)?
@@ -595,6 +617,119 @@ class TargetOnboarder:
                     candidates.append(f"--disable-{flag}")
         return candidates
 
+    def _detect_meson_lib(self, source_root: Path) -> tuple[str, str]:
+        """For meson builds, walk meson.build files for `library(...)` /
+        `static_library(...)` declarations to find where the library is built
+        and what its target name is.
+
+        Returns (source_subdir_relative_to_source_root, target_name).
+        Both empty when no meson.build candidate is found.
+
+        Meson projects commonly declare the library in a subdir
+        (`src/meson.build` for libwebp-style layouts), and just as commonly
+        pass a computed name — `library(meson.project_name(), ...)` or
+        `library(libname, ...)` where libname is a variable. When the first
+        argument isn't a string literal we fall back to the `project('name',
+        ...)` declaration in the root meson.build, which is what those
+        computed forms almost always resolve to.
+
+        Picks the topmost (shortest path) candidate so we get the core library
+        rather than a helper sublib, matching `_detect_autotools_lib`.
+        """
+        skip = {"test", "tests", "build", ".git", "doc", "docs",
+                "examples", "contrib", "subprojects"}
+        # str: literal name found; "": library() present but computed name
+        candidates: list[tuple[Path, str]] = []
+        for meson_build in source_root.glob("**/meson.build"):
+            rel = meson_build.relative_to(source_root)
+            if any(seg.lower() in skip for seg in rel.parts):
+                continue
+            if len(rel.parts) > 4:
+                continue
+            try:
+                text = meson_build.read_text(errors="replace")
+            except OSError:
+                continue
+            m = _MESON_LIB_RE.search(text)
+            if m:
+                candidates.append((meson_build, m.group(2)))
+            elif _MESON_LIB_CALL_RE.search(text):
+                candidates.append((meson_build, ""))
+        if not candidates:
+            return "", ""
+        candidates.sort(key=lambda c: (len(c[0].parts), c[0].parts))
+        mbuild, target = candidates[0]
+        if not target:
+            target = self._detect_meson_project_name(source_root)
+            if not target:
+                return "", ""
+        sub_rel = mbuild.parent.relative_to(source_root)
+        sub_str = str(sub_rel) if sub_rel != Path(".") else ""
+        return sub_str, target
+
+    def _detect_meson_project_name(self, source_root: Path) -> str:
+        """Return the name from `project('name', ...)` in the root meson.build.
+
+        Used only as the fallback target name when a `library()` call passes a
+        computed name rather than a string literal (see `_detect_meson_lib`).
+        """
+        root_build = source_root / "meson.build"
+        if not root_build.exists():
+            return ""
+        try:
+            text = root_build.read_text(errors="replace")
+        except OSError:
+            return ""
+        m = _MESON_PROJECT_RE.search(text)
+        return m.group(2) if m else ""
+
+    def _detect_meson_disable_flags(self, source_root: Path) -> list[str]:
+        """Probe meson_options.txt / meson.options for optional-feature opt-outs.
+
+        Returns a list of `-Dname=value` flags for the meson setup command.
+        Same goal as `_detect_autotools_disable_flags`: keep the fuzzing build
+        self-contained by turning off tests, docs, tools and bindings that pull
+        deps which may not be installed.
+
+        Meson is stricter than autotools here — passing `-Dtests=false` for an
+        option the project never declared aborts setup with "Unknown options".
+        So we only emit flags for options we actually found declared, and we
+        match the value to the declared type: `boolean` takes false, `feature`
+        takes disabled. Options of any other type (combo, string, array) are
+        skipped because we can't know their legal values.
+        """
+        text = ""
+        for src in (source_root / "meson_options.txt",
+                    source_root / "meson.options"):
+            if src.exists():
+                try:
+                    text = src.read_text(errors="replace")
+                    break
+                except OSError:
+                    continue
+        if not text:
+            return []
+        wanted = {
+            "tests", "test", "examples", "example", "docs", "doc",
+            "documentation", "tools", "utils", "benchmarks", "benchmark",
+            "python", "bindings", "man", "gtk_doc", "introspection",
+        }
+        flags: list[str] = []
+        for m in _MESON_OPTION_RE.finditer(text):
+            name = m.group("name")
+            if name.lower() not in wanted:
+                continue
+            type_match = re.search(
+                r"\btype\s*:\s*['\"](\w+)['\"]", m.group("rest")
+            )
+            opt_type = type_match.group(1) if type_match else "boolean"
+            if opt_type == "boolean":
+                flags.append(f"-D{name}=false")
+            elif opt_type == "feature":
+                flags.append(f"-D{name}=disabled")
+            # combo / string / array: legal values are project-specific
+        return flags
+
     # ── Library metadata detection ───────────────────────────
 
     def detect_library_info(self, source_root: Path, project_name: str) -> dict:
@@ -990,18 +1125,20 @@ class TargetOnboarder:
         is_cpp: bool = False,
         autotools_disable_flags: list[str] | None = None,
         source_subdir: str = "",
+        meson_disable_flags: list[str] | None = None,
     ) -> dict:
         """
         Return AFL++ fuzz and ASAN debug build commands for a cmake target.
 
-        Raises NotImplementedError for non-cmake build systems with a helpful message.
+        Raises NotImplementedError for unsupported build systems with a helpful
+        message.
 
         extra_cmake_flags: project-specific cmake -D flags detected by
         detect_library_info() (e.g. -DPNG_SHARED=OFF -DPNG_STATIC=ON
         -DPNG_TESTS=OFF). Appended to all four configure variants so static
         archives are produced consistently across fuzz / debug / ubsan / cov.
         """
-        if build_system not in ("cmake", "autoconf"):
+        if build_system not in ("cmake", "autoconf", "meson"):
             raise NotImplementedError(
                 f"{build_system} build system support not yet implemented — "
                 "fill in build commands manually in the generated YAML"
@@ -1144,6 +1281,82 @@ class TargetOnboarder:
                 make_cmd = f"make -j$(nproc) lib{cmake_lib_target.lower()}.la"
             else:
                 make_cmd = "make -j$(nproc)"
+            return {
+                "configure": configure,
+                "make": make_cmd,
+                "debug_configure": debug_configure,
+                "debug_make": make_cmd,
+                "ubsan_configure": ubsan_configure,
+                "ubsan_make": make_cmd,
+                "coverage_configure": coverage_configure,
+                "coverage_make": make_cmd,
+            }
+
+        if build_system == "meson":
+            # Out-of-tree meson build: cwd is $build_dir, so the source tree is
+            # `..` and the build dir is `.` — `meson setup . ..` matches the
+            # `cmake ..` / `../configure` convention of the other two branches.
+            #
+            # `--buildtype=plain` is deliberate: every other buildtype makes
+            # meson inject its own -O/-g flags AFTER ours, which would override
+            # the -O0 the coverage build needs and the -O1 the debug build
+            # wants. plain passes CFLAGS through untouched.
+            #
+            # `--default-library=static` is meson's equivalent of
+            # -DBUILD_SHARED_LIBS=OFF / --enable-static --disable-shared: it
+            # produces the .a archive the AFL+ASAN harness links against.
+            #
+            # `-Dwerror=false` is a builtin option (always accepted, unlike
+            # project options) and mirrors the -Wno-error already in c_flags —
+            # projects that set `werror: true` in project() would otherwise
+            # fail the build on warnings the sanitizer flags provoke.
+            meson_extra = list(meson_disable_flags or [])
+            meson_extra_str = " " + " ".join(meson_extra) if meson_extra else ""
+
+            def _meson_configure(c_flags: str, compiler: str = "clang") -> str:
+                # A build dir that meson already configured rejects a plain
+                # `meson setup`; --wipe reconfigures it in place while keeping
+                # previously-set options. --wipe on a *fresh* dir fails instead,
+                # so we try the plain form first and fall back — this makes the
+                # command idempotent across re-runs of the same target.
+                #
+                # `export` rather than a command prefix so the setup line can be
+                # repeated for the fallback without duplicating four long flag
+                # strings. Note the caller joins this with `&& <make>`, and
+                # `A || B && C` groups as `(A || B) && C` — so the build step
+                # still runs iff either setup succeeded.
+                env = (
+                    f"export CC={compiler} CXX={compiler}++"
+                    f' CFLAGS="{c_flags}"'
+                    f' CXXFLAGS="{c_flags}"'
+                    f' LDFLAGS="{c_flags}";'
+                )
+                setup = (
+                    "meson setup . .."
+                    " --buildtype=plain"
+                    " --default-library=static"
+                    " -Dwerror=false"
+                    f"{meson_extra_str}"
+                )
+                return f"{env} {setup} || {setup} --wipe"
+
+            configure = _meson_configure(c_flags_fuzz, "afl-clang-fast")
+            debug_configure = _meson_configure(c_flags_debug, "clang")
+            ubsan_configure = _meson_configure(c_flags_ubsan, "clang")
+            coverage_configure = _meson_configure(c_flags_coverage, "clang")
+            # Build only the library, not the whole tree — same reasoning as the
+            # autoconf branch (test/ and tools/ subdirs pull deps we don't need).
+            # Meson's ninja target for a static lib is its path relative to the
+            # build dir, which mirrors the source layout: a library declared in
+            # src/meson.build lands at src/libfoo.a. If that name is wrong for
+            # an unusual layout (name_prefix/name_suffix overrides), fall back
+            # to building everything rather than failing the run outright.
+            if cmake_lib_target:
+                archive = f"lib{cmake_lib_target}.a"
+                lib_path = f"{source_subdir}/{archive}" if source_subdir else archive
+                make_cmd = f"ninja {lib_path} || ninja"
+            else:
+                make_cmd = "ninja"
             return {
                 "configure": configure,
                 "make": make_cmd,
@@ -1360,6 +1573,31 @@ class TargetOnboarder:
             autotools_flags = self._detect_autotools_disable_flags(source_root)
             if autotools_flags:
                 self.log.info("autotools.disable_flags", flags=autotools_flags)
+        meson_flags: list[str] = []
+        if build_system == "meson":
+            # Same override rationale as the autoconf branch above: metadata
+            # derived from CMakeLists is wrong when the build is actually meson.
+            # Meson places a static lib at <build_dir>/<subdir>/lib<target>.a —
+            # no .libs/ indirection like libtool, the build tree just mirrors
+            # the source layout.
+            meson_subdir, meson_target = self._detect_meson_lib(source_root)
+            if meson_target:
+                info["cmake_lib_target"] = meson_target
+                info["source_subdir"] = meson_subdir
+                lib_basename = f"lib{meson_target}.a"
+                info["library_name"] = (
+                    f"{meson_subdir}/{lib_basename}" if meson_subdir
+                    else lib_basename
+                )
+                self.log.info(
+                    "meson.library_found",
+                    target=meson_target,
+                    source_subdir=meson_subdir,
+                    library_name=info["library_name"],
+                )
+            meson_flags = self._detect_meson_disable_flags(source_root)
+            if meson_flags:
+                self.log.info("meson.disable_flags", flags=meson_flags)
         cmake_lib_target = info["cmake_lib_target"]
         self.log.info(
             "onboard.library_info",
@@ -1380,6 +1618,7 @@ class TargetOnboarder:
                 is_cpp=info.get("is_cpp", False),  # Fix 154
                 autotools_disable_flags=autotools_flags,
                 source_subdir=info["source_subdir"],
+                meson_disable_flags=meson_flags,
             )
         except NotImplementedError as exc:
             self.log.warning("onboard.build_cmds_skip", reason=str(exc))
