@@ -111,14 +111,20 @@ that takes. These are reproducible — the ground truth is public.
 
 | Library | CVE | CWE | Time to first crash | Human input |
 |---------|-----|-----|--------------------|-------------|
-| **libpng** | [CVE-2018-13785](https://nvd.nist.gov/vuln/detail/CVE-2018-13785) | CWE-369 divide-by-zero (via CWE-190 overflow) | **60 s** (22.7 min total pipeline) | function name + file path |
+| **libpng** | [CVE-2018-13785](https://nvd.nist.gov/vuln/detail/CVE-2018-13785) | CWE-369 divide-by-zero (via CWE-190 overflow) | **60 s** (22.7 min total pipeline) | function name + file path — *plus a hardcoded trigger value, see below* |
 | **cJSON** | [CVE-2023-53154](https://nvd.nist.gov/vuln/detail/CVE-2023-53154) | CWE-125 out-of-bounds read | **81 s** | none — fully automatic |
 | **libtiff** | [CVE-2022-3970](https://nvd.nist.gov/vuln/detail/CVE-2022-3970) | CWE-190 overflow → heap OOB write | 34 min | function name + file path |
 
-**libpng** — crashed at `pngrutil.c:3154`, the exact site named in the NVD entry. The only
-input was the pinned function; NEMESIS generated the harness, discovered and injected the
-`png_set_user_limits()` calls needed to get past libpng's own guards, and synthesized a
-chunk-aware PNG mutator on its own.
+**libpng** — crashed at `pngrutil.c:3154`, the exact site named in the NVD entry. NEMESIS
+generated the harness and discovered it had to inject `png_set_user_limits()` to get past
+libpng's own guards — a real capability, since baseline AFL never reaches the bug at all
+(0/3 runs, the IHDR CRC gate blocks it; see `benchmarks/libpng_cve_2018_13785/`).
+*But this result is confounded and should not be read as a genuine discovery:* the
+chunk-aware PNG mutator hardcodes the exact trigger value (`width = 0x55555555`, commented
+with this CVE's number). Driven standalone, the mutator produces the trigger 0.4 % of the
+time as-is and **0 %** with that constant removed — so it reaches the bug by replaying a
+human-supplied answer, not by finding it. The CRC-recomputation is genuine; the trigger
+value is not discovered.
 
 **cJSON** — end to end with no human input at all. Later re-found independently by
 `--auto-sanitizer`, which ranked the sanitizer profiles with an LLM and ran the top two as
