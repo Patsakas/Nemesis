@@ -79,16 +79,30 @@ run_arm() {
 
   local stats="$sync_dir/default/fuzzer_stats"
   if [[ -f "$stats" ]]; then
-    local edges execs crashes paths
+    local edges edges_n execs eps crashes hangs paths start last ttlf
     edges=$(grep -oP 'bitmap_cvg *: *\K[\d.]+' "$stats" || echo 0)
+    # edges_found is an absolute count; bitmap_cvg is a percentage of a map
+    # whose size depends on the binary, so only the absolute number is
+    # comparable if the target is ever rebuilt.
+    edges_n=$(grep -oP 'edges_found *: *\K\d+' "$stats" || echo 0)
     execs=$(grep -oP 'execs_done *: *\K\d+' "$stats" || echo 0)
+    eps=$(grep -oP 'execs_per_sec *: *\K[\d.]+' "$stats" || echo 0)
     crashes=$(grep -oP 'saved_crashes *: *\K\d+' "$stats" || echo 0)
+    hangs=$(grep -oP 'saved_hangs *: *\K\d+' "$stats" || echo 0)
     paths=$(grep -oP 'corpus_count *: *\K\d+' "$stats" || echo 0)
-    echo "$arm,$rep,$edges,$execs,$crashes,$paths" >> "$OUT_DIR/results.csv"
-    echo "    bitmap=${edges}%  execs=${execs}  crashes=${crashes}  corpus=${paths}"
+    # Seconds from start to the last new find. A run that stops finding early
+    # has saturated; one still finding at the buffer edge was cut short, and
+    # the budget rather than the corpus is what limited it.
+    start=$(grep -oP 'start_time *: *\K\d+' "$stats" || echo 0)
+    last=$(grep -oP 'last_find *: *\K\d+' "$stats" || echo 0)
+    ttlf=$(( last > 0 && start > 0 ? last - start : -1 ))
+    echo "$arm,$rep,$edges,$edges_n,$execs,$eps,$crashes,$hangs,$paths,$ttlf" \
+        >> "$OUT_DIR/results.csv"
+    echo "    bitmap=${edges}%  edges=${edges_n}  execs=${execs} (${eps}/s)"
+    echo "    crashes=${crashes}  hangs=${hangs}  corpus=${paths}  last_find=+${ttlf}s"
   else
     echo "    NO STATS — check $sync_dir/afl.log" >&2
-    echo "$arm,$rep,ERROR,,," >> "$OUT_DIR/results.csv"
+    echo "$arm,$rep,ERROR,,,,,,," >> "$OUT_DIR/results.csv"
   fi
 }
 
@@ -106,7 +120,8 @@ if [[ -n "$RANDOM_SEEDS" && -d "$RANDOM_SEEDS" ]]; then
   cp "$RANDOM_SEEDS"/* "$OUT_DIR/in_C/" 2>/dev/null || true
 fi
 
-echo "arm,repeat,bitmap_cvg_pct,execs,crashes,corpus_count" > "$OUT_DIR/results.csv"
+echo "arm,repeat,bitmap_cvg_pct,edges_found,execs,execs_per_sec,crashes,hangs,corpus_count,secs_to_last_find" \
+    > "$OUT_DIR/results.csv"
 for rep in $(seq 1 "$REPEATS"); do
   run_arm A "$OUT_DIR/in_A" "$rep"
   [[ -d "$OUT_DIR/in_B" ]] && run_arm B "$OUT_DIR/in_B" "$rep"
