@@ -23,10 +23,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from nemesis.config import NemesisConfig, PinnedFunc, TargetConfig
 from nemesis.models import (
+    CWE,
     AnalysisContext,
     CallChain,
     CoverageTarget,
-    CWE,
     VulnerabilityAnalysis,
 )
 from nemesis.neural import PromptBuilder
@@ -35,7 +35,6 @@ from nemesis.onboard import (
     _probe_oracle_candidates,
 )
 from nemesis.recon.oracle_validation import validate_oracle_config
-
 
 # ── Section banner helpers ──────────────────────────────────
 

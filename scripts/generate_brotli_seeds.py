@@ -10,7 +10,6 @@ that generic random seeds miss:
 - Fuzz-derived quality parameter forcing
 """
 
-import os
 import struct
 from pathlib import Path
 
@@ -97,7 +96,7 @@ def main() -> None:
         offset = 64 + i * 80
         if offset + 80 > len(prefix_data):
             break
-        word = f"the of and to a in is it you that".split()[i % 10].encode()
+        word = ["the", "of", "and", "to", "a", "in", "is", "it", "you", "that"][i % 10].encode()
         prefix_data[offset : offset + len(word)] = word
     seeds["dict_prefix_data.bin"] = bytes(prefix_data)
 
