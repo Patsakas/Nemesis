@@ -1,4 +1,55 @@
-# Next session: MAGMA
+# MAGMA is now operational — state and gotchas (2026-07-21)
+
+Docker was never a WSL problem: it was installed (v29.0.1) with WSL integration
+working, just Docker Desktop wasn't running. Start Docker Desktop first.
+
+**Done and persisting:**
+- `~/magma` cloned; **all** aflplusplus target images built (libpng, libtiff,
+  libxml2, libsndfile, openssl, lua, …) — `build.sh` ignores the captainrc
+  TARGETS restriction and builds everything the build phase knows.
+- `core_pattern` fixed to `core` via passwordless sudo (`echo core | sudo tee
+  /proc/sys/kernel/core_pattern`). Persists until WSL restart; re-run if reset.
+  This is the session-long blocker finally resolved at the host.
+- **MAGMA's PNG001 canary == CVE-2018-13785** — the exact bug hand-built in
+  `benchmarks/libpng_cve_2018_13785/`. Its canary `row_factor_l == 2^32`
+  independently confirms the trigger analysis (width 0x55555555 → row_factor 0).
+
+**Captain orchestration gotchas (cost real time — do not relearn):**
+- Before any run, kill leftovers: `pkill -9 -f captain; docker kill $(docker ps -q)`.
+  The captain `run.sh` loop RESPAWNS containers, so a single `docker kill` is not
+  enough — an overrunning multi-target run kept relaunching openssl/lua/etc.
+- `run.sh` mounts a tmpfs on `workdir/cache`; a killed run leaves a stale mount
+  that blocks the next run ("target is busy"). Clean with
+  `for m in $(mount|grep workdir|awk '{print $3}'); do sudo umount -l "$m"; done; sudo rm -rf workdir`.
+- Canary data is LIVE at `workdir/cache/<fuzzer>/<target>/<program>/<rep>/{monitor,canaries.raw}`
+  and is **wiped when the container is killed**. Read it BEFORE stopping, or let
+  the campaign complete so MAGMA archives to `workdir/ar/`. (Lost the first
+  libpng canary result by killing containers before reading — do not repeat.)
+- `TIMEOUT=3m` did not reliably stop containers in a multi-target run. Restrict
+  to one target and confirm it stops, or enforce a wall-clock kill.
+- The oracle is the canary (`MAGMA_LOG`), independent of AFL crash detection, so
+  `AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1` would also suffice without the
+  core_pattern fix.
+
+**Clean next-run recipe (single target):**
+```bash
+cd ~/magma/tools/captain
+pkill -9 -f captain; docker kill $(docker ps -q) 2>/dev/null
+for m in $(mount|grep "$(pwd)/workdir"|awk '{print $3}'); do sudo umount -l "$m"; done
+sudo rm -rf workdir
+# captainrc already: FUZZERS=(aflplusplus) TARGETS=(libpng) REPEAT=1 TIMEOUT=3m
+WORKDIR=./workdir REPEAT=1 TIMEOUT=3m POLL=5 ./run.sh
+# wait for it to COMPLETE, then read workdir/ar (archived) — do NOT docker kill first
+```
+
+**The cross-check still to do:** did baseline aflplusplus trigger PNG001 in the
+budget? Prediction (from the independent hand-built finding): no / rarely — the
+IHDR CRC gate makes it TOO_HARD, which would independently confirm the libpng
+"60 s rediscovery" was confounded by the hardcoded mutator value.
+
+---
+
+# Next session: MAGMA (original plan)
 
 Start here. The single-CVE recon below (libpng, libtiff) stays as fallback for
 non-MAGMA targets, but the primary next step is MAGMA, because it removes the
