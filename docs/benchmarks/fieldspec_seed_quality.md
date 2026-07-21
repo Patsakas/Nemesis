@@ -64,7 +64,59 @@ the same deep code and look alike, so the count stays low even when mean coverag
 per seed is 9x higher. A corpus of 20 deep seeds beats 100 shallow ones; the
 fuzzing A/B should measure paths and crashes, not corpus diversity.
 
-## Fuzzing campaign
+## Fuzzing campaign — the measured advantage does not survive a matched control
+
+**Headline: measured field structure gives no benefit over changing the same
+number of bytes at random positions.** An earlier version of this campaign
+reported the opposite. That control was wrong.
+
+libpng, 4 minutes per run, 5 repeats per arm. Arms are matched on seed count
+(25), seed length, reference seed, and number of bytes changed (median 8, range
+1–128). The only difference is *where* the changes land.
+
+| arm | | per-run edges found |
+|---|---|---|
+| A | real corpus only | 311, 312, 312, 312, 418 |
+| B | + seeds varying **measured** fields | 469, 470, 471, 471, 500 |
+| C | + seeds varying **random** positions | 471, 471, 471, 471, 494 |
+
+| comparison | pairs | exact p | |
+|---|---|---|---|
+| **B vs C** | 5/25 for B, 12/25 for C | **0.635** | **no difference** |
+| B vs A | 25/25 | 0.008 | significant |
+| C vs A | 25/25 | 0.008 | significant — *the control does this too* |
+
+### What changed and why the first result was wrong
+
+The first campaign used uniform random bytes as the control. Those are not
+valid PNGs: they die at the 8-byte signature check, exactly where noise dies.
+So `B vs C` was really asking "are structured seeds better than garbage?", and
+the answer to that was never in doubt. It reported p = 0.008 and it measured
+the wrong thing.
+
+Replacing the control with *the same reference seed, the same number of bytes
+changed, at random offsets* removes that confound. The difference disappears:
+p = 0.635, with the control ahead in more pairings than the measured arm.
+
+### What the data does support
+
+Adding valid perturbations of a real seed helps a lot — both B and C beat the
+baseline in every pairing at p = 0.008, moving 312 edges to ~471. That is a
+real effect and it is worth having.
+
+But it comes from the seeds being **valid variations of a real input**, not from
+knowing which bytes steer control flow. On this target, at this budget, the
+measured field structure contributed nothing detectable beyond that.
+
+### Scope of this negative result
+
+One target, one budget, five repeats, coverage rather than crashes. It does not
+show that byte-influence inference is worthless — the structure it recovers is
+real and verifiable (see the sections above). It shows that *using that
+structure to place mutations in generated seeds* did not beat placing them at
+random, which was the specific claim being tested.
+
+## Fuzzing campaign (superseded — uniform-random control)
 
 Seed coverage is a leading indicator. This is the campaign that tests whether it
 translates into fuzzing. Reproduce with `scripts/bench_campaign.sh` and
@@ -84,10 +136,16 @@ libpng, 8 real seeds, 4 minutes per run, 5 repeats per arm:
 | B vs A | 20/25 | 0.151 | confounded — more seeds *and* different seeds |
 | C vs A | 12/25 | 0.952 | control: adding seeds alone changes nothing |
 
-**B vs C is the comparison that answers the question.** Both arms carry 38 seeds,
-so a difference between them can only come from *which* seeds. Every one of the
-25 pairings favours the measured corpus, and an exact permutation test puts that
-at p = 0.008.
+> **Superseded.** The control in this run was uniform random bytes, which are
+> not valid PNGs and fail at the signature check. The comparison therefore
+> measured "structure vs garbage" rather than "measured placement vs random
+> placement". Kept for the record; see the matched-control campaign above for
+> the corrected result.
+
+**B vs C was read as the comparison that answers the question.** Both arms carry
+38 seeds, so a difference between them can only come from *which* seeds. Every
+one of the 25 pairings favours the measured corpus, at p = 0.008. This is the
+number the matched control later overturned.
 
 **C vs A is the control, and it behaves.** Thirty extra random seeds moved
 nothing (12/25 pairs, p = 0.95), so the gain in B is not "more seeds".

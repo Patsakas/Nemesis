@@ -143,7 +143,20 @@ skipping; a character-by-character JSON parser has none, and there the measured 
 buys little. The libtiff ratio (79×) is arithmetically true and practically misleading —
 random reached 3 edges there, so almost anything divides large.
 
-Reproduce with `scripts/bench_fieldspec.py`. Deterministic, no LLM call, minutes not hours.
+**And a negative result that matters more than the table.** In a fuzzing campaign, seeds
+built from the measured structure did **not** beat seeds that changed the same number of
+bytes at *random* positions in the same real file (p = 0.635, 5 repeats). Both beat the
+plain corpus decisively (312 → ~471 edges, p = 0.008), so generating valid variations of a
+real input helps a great deal — but on this target, knowing *which* bytes steer control
+flow added nothing detectable on top of that.
+
+An earlier version of that campaign reported the opposite, because its control was uniform
+random bytes, which are not valid PNGs and die at the signature check. That comparison was
+measuring structure against garbage.
+[Full write-up, including the superseded result.](docs/benchmarks/fieldspec_seed_quality.md)
+
+Reproduce with `scripts/bench_fieldspec.py` and `scripts/bench_campaign.sh`. Deterministic,
+no LLM call, minutes not hours.
 
 ### Where it does not work yet
 
@@ -160,11 +173,15 @@ Backtesting is only honest if the misses are reported too.
   out-of-bounds read via `TIFFFetchNormalTag`, but the upstream fix patches argv handling
   in `tools/tiffset.c` — the bug is in the CLI tool, not the library, and is unreachable
   from any in-memory file harness. Reports name the crash site, not the bug site.
-- **Better seeds are not yet shown to be better fuzzing.** The structure-inference numbers
-  above measure seed coverage, which is a leading indicator (Rebert 2014) and not a result.
-  Nothing here demonstrates finding bugs faster — that needs a campaign with the same
-  corpus, budget and repeats, and it has not been run. Treat the table as evidence about
-  input structure, not about bug discovery.
+- **Measured structure did not beat random placement in fuzzing.** The campaign that tested
+  it found no difference (p = 0.635) once the control changed the same number of bytes at
+  random offsets in the same file. What helps is generating valid variations of a real
+  seed; choosing *where* to vary them did not add to it on this target. The structure
+  inference itself is sound and verifiable — the claim that failed is the one about using
+  it to aim mutations.
+- **Nothing here shows faster bug discovery.** No arm in any campaign produced a crash,
+  which is expected at a four-minute budget on a hardened libpng, and leaves the metric
+  that matters most untested.
 - **Structure inference needs a probe binary.** The AFL fuzzing harness is persistent-mode
   with shared-memory test cases and receives no input outside `afl-fuzz`, so it reports
   identical coverage for every seed. NEMESIS builds a separate probe binary for offline
