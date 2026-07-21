@@ -1,0 +1,46 @@
+{
+  "summary": {
+    "target": "libxml2",
+    "case": "C (flag, not setter)",
+    "N": 5,
+    "names_HUGE": 5,
+    "applies_correctly": 5
+  },
+  "raw": [
+    {
+      "scores": {
+        "names_HUGE": true,
+        "applies_via_options": true
+      },
+      "text": "```json\n{\n  \"vulnerability_type\": \"None (blocker only)\",\n  \"cwe\": \"N/A\",\n  \"root_cause\": \"The long-name path in xmlParseNameComplex is blocked by the default XML_PARSE_HUGE option not being set. The function checks `maxLength` which is set to XML_MAX_TEXT_LENGTH only when `XML_PARSE_HUGE` is enabled, otherwise it uses XML_MAX_NAME_LENGTH (default 1000). The length check `if (len > maxLength)` will always fail for long names with default options, causing early return(NULL) before reaching the deep-name code paths.\",\n  \"attack_vector\": \"Set XML_PARSE_HUGE option in the harness to allow names longer than XML_MAX_NAME_LENGTH (typically 1000 bytes). The input should be a valid XML name starting with a valid character followed by a long sequence of valid name characters (e.g., 'a' repeated 1001+ times).\",\n  \"confidence\": 0.98,\n  \"missing_checks\": [\n    {\n      \"file\": \"parser.c\",\n      \"line\": 1179,\n      \"description\": \"No check for XML_PARSE_HUGE option in default harness, causing early termination before deep-name path\"\n    }\n  ],\n  \"bypass\": \"Add XML_PARSE_HUGE to the options parameter in xmlReadMemory() call in the harness. Minimal change: replace `0` with `XML_PARSE_HUGE` in the options field.\"\n}\n```"
+    },
+    {
+      "scores": {
+        "names_HUGE": true,
+        "applies_via_options": true
+      },
+      "text": "```json\n{\n  \"vulnerability_type\": \"None (blocker only)\",\n  \"cwe\": \"N/A\",\n  \"root_cause\": \"The long-name path in xmlParseNameComplex is unreachable with default options because the length check `if (len > maxLength)` uses `maxLength = XML_MAX_NAME_LENGTH` (typically 1024) when `XML_PARSE_HUGE` is not set. The default options in xmlReadMemory() do not include XML_PARSE_HUGE, so names longer than 1024 bytes are rejected before reaching the deep-name code paths.\",\n  \"attack_vector\": \"To trigger the long-name path, the harness must set the XML_PARSE_HUGE option in xmlReadMemory(). This allows names longer than XML_MAX_NAME_LENGTH (1024 bytes) to bypass the initial length check. The input should be a valid XML name (starting with a valid name character) with length > 1024 bytes.\",\n  \"confidence\": 0.98,\n  \"missing_checks\": [\n    {\n      \"file\": \"parser.c\",\n      \"line\": 1179,\n      \"description\": \"No check for XML_PARSE_HUGE option in default harness, causing early rejection of long names\"\n    }\n  ]\n}\n```"
+    },
+    {
+      "scores": {
+        "names_HUGE": true,
+        "applies_via_options": true
+      },
+      "text": "```json\n{\n  \"vulnerability_type\": \"None (blocker analysis only)\",\n  \"cwe\": \"N/A\",\n  \"root_cause\": \"The long-name path in xmlParseNameComplex is unreachable with default options because the XML_PARSE_HUGE option is not set by default. The maxLength is determined by (ctxt->options & XML_PARSE_HUGE) ? XML_MAX_TEXT_LENGTH : XML_MAX_NAME_LENGTH. XML_MAX_NAME_LENGTH (default) is typically 1024 bytes, while XML_MAX_TEXT_LENGTH (when XML_PARSE_HUGE is set) is much larger (e.g., INT_MAX). The harness calls xmlReadMemory with default options (0), so the length check len > maxLength will always trigger for names longer than 1024 bytes, returning NULL before reaching the deep-name code paths.\",\n  \"attack_vector\": \"To trigger the long-name path, the harness must set the XML_PARSE_HUGE option. This can be done by changing the options parameter in xmlReadMemory from 0 to XML_PARSE_HUGE. With this change, names longer than XML_MAX_NAME_LENGTH (but <= XML_MAX_TEXT_LENGTH) will bypass the initial length check and reach the deep-name code paths.\",\n  \"confidence\": 1.0,\n  \"missing_checks\": [\n    {\n      \"file\": \"parser.c\",\n      \"line\": 1179,\n      \"description\": \"No check for XML_PARSE_HUGE option in default harness, preventing long-name paths from being reached\"\n    }\n  ]\n}\n```"
+    },
+    {
+      "scores": {
+        "names_HUGE": true,
+        "applies_via_options": true
+      },
+      "text": "```json\n{\n  \"vulnerability_type\": \"None (blocker only)\",\n  \"cwe\": \"N/A\",\n  \"root_cause\": \"The long-name path in xmlParseNameComplex is blocked by the default XML_PARSE_HUGE option not being set. The function checks if (ctxt->options & XML_PARSE_HUGE) is true to allow names longer than XML_MAX_NAME_LENGTH (default 1024). Without this option, names exceeding XML_MAX_NAME_LENGTH are rejected with XML_ERR_NAME_TOO_LONG before reaching the deep-name code paths.\",\n  \"attack_vector\": \"Set XML_PARSE_HUGE in the parser options to bypass the length check. The input must be a valid XML name starting with a valid name character followed by a long sequence of valid name characters (e.g., 'a' repeated 2000 times).\",\n  \"confidence\": 1.0,\n  \"missing_checks\": [\n    {\n      \"file\": \"parser.c\",\n      \"line\": 1179,\n      \"description\": \"No check for XML_PARSE_HUGE option in default harness, preventing long-name paths from being reached\"\n    }\n  ]\n}\n```"
+    },
+    {
+      "scores": {
+        "names_HUGE": true,
+        "applies_via_options": true
+      },
+      "text": "```json\n{\n  \"vulnerability_type\": \"none\",\n  \"cwe\": \"N/A\",\n  \"root_cause\": \"The long-name path in xmlParseNameComplex is unreachable with default options because the maximum allowed name length (maxLength) is set to XML_MAX_NAME_LENGTH (default: 1024 bytes) when XML_PARSE_HUGE is not specified. The harness uses default options (0), so the length check `if (len > maxLength)` will always trigger for names longer than 1024 bytes, returning NULL before the deep-name code paths are reached.\",\n  \"attack_vector\": \"To trigger the long-name path, the harness must enable the XML_PARSE_HUGE option, which sets maxLength to XML_MAX_TEXT_LENGTH (default: 100MB). This allows names longer than 1024 bytes to bypass the length check.\",\n  \"confidence\": 1.0,\n  \"missing_checks\": [\n    {\n      \"file\": \"parser.c\",\n      \"line\": 1179,\n      \"description\": \"No check for XML_PARSE_HUGE option in the harness, preventing access to long-name code paths\"\n    }\n  ]\n}\n```"
+    }
+  ]
+}

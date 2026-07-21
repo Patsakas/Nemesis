@@ -217,13 +217,22 @@ _FACTORY_AND_NULLCHECK_RE = re.compile(
 )
 
 
+def _strip_comments(source: str) -> str:
+    """Remove /* */ and // comments so presence checks don't match a setter
+    name that only appears in a comment. Good enough for C harness sources;
+    string literals are left intact (a setter name in a string is implausible)."""
+    source = re.sub(r"/\*.*?\*/", " ", source, flags=re.DOTALL)
+    source = re.sub(r"//[^\n]*", " ", source)
+    return source
+
+
 def inject_setter_calls(source: str, gates: list[ValidationGate]) -> str:
     """Auto-insert calls to limit-relaxing setters into a harness.
 
     Anchors on the first `<type> <var> = *_create_/init_/alloc_(...);` line
     followed by an `if (!var) continue/return/{...}` null-check, and inserts
     setter calls on the line *after* the null check. Idempotent — any setter
-    name already present in the source is skipped.
+    name already CALLED in the source is skipped (comments don't count).
 
     Returns the source unchanged on any pattern miss.
     """
@@ -238,9 +247,12 @@ def inject_setter_calls(source: str, gates: list[ValidationGate]) -> str:
     indent = fm.group("lead")
     insert_at = fm.end()
 
+    # Presence check ignores comments: a setter merely named in a comment must
+    # not suppress its injection (found via the harness-autonomy experiment).
+    code_only = _strip_comments(source)
     setter_lines: list[str] = []
     for g in injectable:
-        if re.search(rf"\b{re.escape(g.setter_name)}\s*\(", source):
+        if re.search(rf"\b{re.escape(g.setter_name)}\s*\(", code_only):
             continue
         types = _extract_arg_types(g.prototype)
         if len(types) < 2:

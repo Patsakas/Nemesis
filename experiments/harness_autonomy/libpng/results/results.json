@@ -1,0 +1,27 @@
+{
+  "model": "mistralai/mistral-small-4-119b-2603",
+  "temp": 0.2,
+  "N": 5,
+  "levels": {
+    "L0_neutral": {
+      "hits": 3,
+      "reps": 5,
+      "rate": 0.6
+    },
+    "L1a_analysis_names_limit": {
+      "hits": 5,
+      "reps": 5,
+      "rate": 1.0
+    },
+    "L1b_harness_has_call": {
+      "hits": 5,
+      "reps": 5,
+      "rate": 1.0
+    },
+    "L2_named_blocker": {
+      "hits": 5,
+      "reps": 5,
+      "rate": 1.0
+    }
+  }
+}

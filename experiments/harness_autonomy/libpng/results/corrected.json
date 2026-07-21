@@ -1,0 +1,40 @@
+{
+  "metric": "raises width limit above default 1,000,000 (unlocks reachability)",
+  "L0_neutral": {
+    "verdicts": [
+      "LOWER",
+      "fuzz_var",
+      "LOWER",
+      "no_call",
+      "no_call"
+    ],
+    "raise_hits": 0,
+    "n": 5,
+    "raise_rate": 0.0
+  },
+  "L1b_symbolic": {
+    "verdicts": [
+      "at_default",
+      "at_default",
+      "RAISE",
+      "RAISE",
+      "RAISE"
+    ],
+    "raise_hits": 3,
+    "n": 5,
+    "raise_rate": 0.6
+  },
+  "L2_named": {
+    "verdicts": [
+      "RAISE",
+      "RAISE",
+      "RAISE",
+      "RAISE",
+      "RAISE"
+    ],
+    "raise_hits": 5,
+    "n": 5,
+    "raise_rate": 1.0
+  },
+  "L1a_analysis_names_limit": "5/5 (see run_n5.log; unchanged \u2014 analysis is text)"
+}
