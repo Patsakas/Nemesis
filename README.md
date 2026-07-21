@@ -8,14 +8,25 @@
 
 **Neuro-Symbolic Exploit Mining Engine for Software Insecurities**
 
-NEMESIS is an automated vulnerability-discovery engine for C/C++ libraries. It chains
-LLM-based code reasoning, symbolic verification (Z3), and coverage-guided fuzzing (AFL++)
-into a single pipeline that goes from *target selection* to *triaged crash* with no human
-in the loop.
+NEMESIS is a neuro-symbolic **vulnerability-analysis framework** for C/C++ libraries. It
+chains LLM-based code reasoning, symbolic verification (Z3), and coverage-guided fuzzing
+(AFL++) into a single pipeline that goes from *target selection* to *triaged crash*, and it
+ships with an **evaluation methodology** — differential CVE oracles, benchmark
+qualification, and controlled A/B campaigns — for measuring what such a system actually
+contributes.
 
-You point it at a C/C++ project. It figures out which functions are worth attacking,
-writes a fuzzing harness for each, builds an instrumented binary, fuzzes it, and reports
-back only the crashes that reproduce on the unmodified library.
+You point it at a C/C++ project. It figures out which functions are worth attacking, writes
+a fuzzing harness for each, builds an instrumented binary, fuzzes it, and reports back only
+the crashes that reproduce on the unmodified library.
+
+**On the strength of the claims.** What is demonstrated is structural inference (recovering
+fields and influential bytes from unknown binary formats) and format-aware artifact
+generation. What is *not* established is that any of it discovers hard vulnerabilities
+faster than a baseline — the controlled experiments in [Validation](#validation) refuted the
+mutation-placement hypothesis, found seed generation to be target-dependent, and showed the
+headline "60 s libpng rediscovery" to be confounded by a hardcoded trigger value. Discovery
+effectiveness requires independent evaluation, which is why the framework's second half is
+the evaluation methodology itself. The honest results are kept in full alongside the tool.
 
 ![NEMESIS dashboard — configured targets](docs/screenshots/dashboard-targets.png)
 
