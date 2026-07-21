@@ -43,7 +43,40 @@ The opposite of both failures so far:
   the regime where the baseline stumbles some of the time and structural
   inference has room to help.
 
-Candidates worth checking against the five criteria above (both have git tags for
-the differential): a **libpng** chunk-parsing CVE, or an **lz4** block-header CVE.
-Read the fix diff first (criterion 3) — that is what cracked cJSON and what flagged
-libtiff as too hard, each in one step.
+## libpng CVE-2018-13785 — the recommended next target
+
+Reconnaissance done (fix commit `8a05766cb`, `pngrutil.c`). This is the one to
+build and qualify next.
+
+- Harness does a full `png_read` ✓. Fix is in the library ✓.
+- Root cause: `width * channels * factor` overflows 32-bit, so `row_factor`
+  wraps to 0 and the next line, `height > PNG_UINT_32_MAX / row_factor`, is a
+  **divide-by-zero**. Not a huge allocation — the overflow makes a value *small*,
+  so it does not have libtiff's TOO_HARD problem.
+- Trigger: valid PNG signature + an IHDR whose width forces the overflow
+  (`0x55555555` for RGB 8-bit) + a **valid IHDR CRC** (libpng checks it by
+  default, `png_crc`). That CRC gate is what makes it structure-dependent and
+  plausibly mid-difficulty — a random width flip invalidates the CRC and is
+  rejected, so the baseline may hit it only sometimes. Exactly the regime the
+  qualifier is for.
+
+**Oracle is different from cJSON's:** the crash is a SIGFPE (integer
+divide-by-zero), not an ASan report. Detect it by the process dying on signal 8,
+and use the same differential (v1.6.34 crashes, v1.6.35 clean). No sanitizer, no
+symbolizer-hang problem.
+
+**Confound to control, stated up front:** the hand-written `png.c` mutator adapter
+hardcodes the exact trigger value (`0x55555555 /* row-factor=0 */`, with a note
+naming this CVE). Any arm that runs NEMESIS's custom mutator is therefore *given*
+the answer by a human, not discovering it — the README's 60 s libpng result used
+that mutator and should be read that way. A clean A/B here must be **seeds-only**,
+with the custom mutator disabled in both arms, or it measures the hardcoded
+constant rather than anything learned. The genuinely interesting NEMESIS question
+would be a separate, clearly-labelled arm: does the CRC-aware mutator help a
+baseline reach a CRC-gated bug — but that is a mutator experiment, not a seed one,
+and must not be conflated with the placement/seed work.
+
+lz4 CVE-2021-3520 is a second candidate (harness targets `LZ4_decompress_safe`),
+but the README already records it as a miss where the harness reached the function
+and byte flips could not synthesise the trigger — likely TOO_HARD. Recon its fix
+diff before investing.
