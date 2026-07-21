@@ -31,10 +31,15 @@ SECS="${6:-60}"
 export AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1
 export ASAN_OPTIONS="abort_on_error=1:detect_leaks=0:symbolize=0:allocator_may_return_null=1"
 
-# Thresholds for the verdict. TOO_EASY_MS: found this fast in every run means
-# no room to improve on. Chosen at 5s per the fuzzing-eval rule of thumb that a
-# sub-second-to-few-second bug cannot separate two techniques.
-TOO_EASY_MS=5000
+# The verdict is an interpretation of the raw numbers, which are emitted first
+# and separately (as JSON if --json-out is given). Keep the data; the
+# classification can change. TOO_EASY_MS is deliberately a knob, not a constant
+# of nature — the same lesson as the Jaccard threshold and SATURATION_GAP,
+# where a value chosen from one dataset needed its own sensitivity check. If
+# the qualification ever becomes a headline, sweep this the way those were.
+TOO_EASY_MS="${TOO_EASY_MS:-5000}"
+JSON_OUT=""
+if [[ "${1:-}" == "--json-out" ]]; then JSON_OUT="$2"; shift 2; fi
 
 echo "qualifying: $RUNS baseline pilot runs, ${SECS}s each"
 echo
@@ -56,27 +61,39 @@ for rep in $(seq 1 "$RUNS"); do
   rm -rf "$o"
 done
 
-echo
-echo "baseline found the CVE in $hits/$RUNS runs"
+# ── Raw data first — the verdict is just an interpretation of it ──
+rate=$(( hits * 100 / RUNS ))
+lo="" mid="" hi=""
+if [[ $hits -gt 0 ]]; then
+  IFS=$'\n' sorted=($(sort -n <<<"${times[*]}")); unset IFS
+  lo=${sorted[0]}; hi=${sorted[-1]}; mid=${sorted[$((${#sorted[@]} / 2))]}
+fi
 
+# Classify from the stored numbers.
 if [[ $hits -eq 0 ]]; then
-  echo "verdict: TOO HARD — baseline never finds it in ${SECS}s. Both arms would"
-  echo "         likely score 0; no signal. Raise the budget or pick another CVE."
-  exit 2
+  verdict=TOO_HARD; code=2
+elif [[ $hits -eq $RUNS && ${hi:-0} -lt $TOO_EASY_MS ]]; then
+  verdict=TOO_EASY; code=3
+else
+  verdict=DISCRIMINATING; code=0
 fi
 
-# Sort the hit times to report the spread.
-IFS=$'\n' sorted=($(sort -n <<<"${times[*]}")); unset IFS
-lo=${sorted[0]}; hi=${sorted[-1]}; mid=${sorted[$((${#sorted[@]} / 2))]}
-echo "hit times: min=${lo}ms median=${mid}ms max=${hi}ms"
+echo
+echo "qualification:"
+echo "  runs:             $RUNS x ${SECS}s"
+echo "  rediscovery_rate: ${rate}% ($hits/$RUNS)"
+echo "  ttfc_ms:          ${mid:-N/A} median   [${lo:-N/A} .. ${hi:-N/A}]"
+echo "  too_easy_ms:      $TOO_EASY_MS"
+echo "  verdict:          $verdict"
+case $verdict in
+  TOO_HARD)       echo "  -> both arms would likely score 0; raise budget or pick another CVE." ;;
+  TOO_EASY)       echo "  -> baseline saturates; no seed strategy can show an advantage (ceiling)." ;;
+  DISCRIMINATING) echo "  -> room for a strategy to move the numbers; worth a full A/B campaign." ;;
+esac
 
-if [[ $hits -eq $RUNS && $hi -lt $TOO_EASY_MS ]]; then
-  echo "verdict: TOO EASY — found every run in under ${TOO_EASY_MS}ms. The baseline"
-  echo "         already saturates, so no seed strategy can show an advantage."
-  echo "         This is a ceiling effect; the CVE is not a discriminating benchmark."
-  exit 3
+if [[ -n "$JSON_OUT" ]]; then
+  printf '{"runs":%d,"secs_per_run":%d,"hits":%d,"rediscovery_rate_pct":%d,"ttfc_ms":[%s],"too_easy_ms":%d,"verdict":"%s"}\n' \
+    "$RUNS" "$SECS" "$hits" "$rate" "$(IFS=,; echo "${times[*]:-}")" "$TOO_EASY_MS" "$verdict" > "$JSON_OUT"
+  echo "  (raw data written to $JSON_OUT)"
 fi
-
-echo "verdict: DISCRIMINATING — mixed outcomes or wide time spread. Worth a full"
-echo "         A/B campaign; there is room for a strategy to move the numbers."
-exit 0
+exit $code
