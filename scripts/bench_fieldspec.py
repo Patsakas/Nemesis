@@ -125,6 +125,9 @@ def main() -> int:
                     help="skip corpus files larger than this when choosing a probe seed")
     ap.add_argument("--threshold", type=float, default=None)
     ap.add_argument("--out", default="", help="write results JSON here")
+    ap.add_argument("--seeds-out", default="",
+                    help="keep the generated seeds here (for bench_campaign.sh) "
+                         "instead of leaving them in a temp dir")
     args = ap.parse_args()
 
     runner = ShowmapRunner(args.probe, timeout=15)
@@ -141,7 +144,9 @@ def main() -> int:
     seed = seed_path.read_bytes()
     print(f"probe seed: {seed_path.name} ({len(seed)} bytes)")
 
-    work = Path(tempfile.mkdtemp(prefix="bench_fieldspec_"))
+    work = Path(args.seeds_out) if args.seeds_out else Path(
+        tempfile.mkdtemp(prefix="bench_fieldspec_"))
+    work.mkdir(parents=True, exist_ok=True)
     base, flaky = measure_baseline(runner, seed, work)
     print(f"baseline: {len(base)} edges ({len(flaky)} flaky, excluded)")
 

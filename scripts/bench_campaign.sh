@@ -44,11 +44,28 @@ if [[ ! -d "$REAL_CORPUS" ]]; then echo "no corpus: $REAL_CORPUS" >&2; exit 1; f
 mkdir -p "$OUT_DIR"
 SECS=$((MINUTES * 60))
 
-# AFL needs these or it refuses to start on most systems; setting them here
-# rather than expecting the operator to have done it keeps the runs comparable.
+# Same environment the pipeline itself uses for afl-fuzz (see
+# nemesis/fuzzing/__init__.py) — a benchmark configured differently from
+# production measures something production never does.
+#
+# AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES is required on any host whose
+# core_pattern pipes to a crash handler, which is most desktop Linux and all
+# WSL. Without it afl-fuzz aborts at startup with "Pipe at the beginning of
+# core_pattern" and every arm reports nothing. The documented cost is that a
+# crash may be recorded as a timeout; the alternative is `echo core | sudo tee
+# /proc/sys/kernel/core_pattern`, which is worth doing on a host dedicated to
+# a long campaign where crash counts are the headline metric.
 export AFL_NO_UI=1 AFL_SKIP_CPUFREQ=1 AFL_NO_AFFINITY=1
+export AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1
 export AFL_BENCH_UNTIL_CRASH=0
 export ASAN_OPTIONS="abort_on_error=1:detect_leaks=0:symbolize=0:allocator_may_return_null=1"
+
+if grep -q '^|' /proc/sys/kernel/core_pattern 2>/dev/null; then
+  echo "note: core_pattern pipes to a handler; crashes may be recorded as"
+  echo "      timeouts. For a campaign where crash counts matter, run:"
+  echo "        echo core | sudo tee /proc/sys/kernel/core_pattern"
+  echo
+fi
 
 run_arm() {
   local arm="$1" corpus="$2" rep="$3"
