@@ -3,6 +3,58 @@
 Design notes for anyone working on NEMESIS. [README.md](README.md) explains what the tool
 does; this file explains how it is put together and which invariants must not be broken.
 
+## Overview
+
+NEMESIS is an automated pipeline for constructing vulnerability-oriented fuzzing harnesses.
+It combines deterministic source analysis with optional LLM assistance to identify validation
+barriers and generate harness modifications that improve fuzzing reachability — automating a
+step (getting a fuzzer past a library's own validation limits) that is otherwise manual expert
+work.
+
+The flow that carries the core contribution:
+
+```
+Target library source
+        |
+        v
+Source reconnaissance
+        |
+        +----------------------+
+        v                      v
+Validation-gate           API / context
+extraction                understanding
+(deterministic)           (headers, RAG, LLM)
+        |                      |
+        +----------+-----------+
+                   v
+          Harness augmentation
+                   |
+                   v
+          Fuzzing execution  (AFL++ / sanitizers)
+                   |
+                   v
+          Crash / oracle evaluation
+```
+
+Everything else in this document — the four-stage pipeline, the invariants, the subsystems —
+is how that flow is implemented and kept library-agnostic. The evidence for the claim is the
+scientific appendix, [experiments/harness_autonomy/FINDINGS.md](experiments/harness_autonomy/FINDINGS.md).
+
+## Scope boundaries
+
+NEMESIS does **not** claim:
+
+- autonomous vulnerability discovery,
+- to replace or out-perform a fuzzer,
+- general semantic reasoning about program behaviour.
+
+It automates a previously manual step: constructing harnesses that expose deeper execution
+states. The measured capability boundary (see FINDINGS.md) is deliberate: the deterministic
+analyzer handles idiomatically-named limit setters; the LLM extends that to relaxation
+mechanisms *visible in the code* (flags, options); mechanisms **not expressed in the code**
+are not inferred — that was tested and does not work, and the documentation says so rather
+than implying otherwise.
+
 ## The pipeline
 
 ```
@@ -93,6 +145,29 @@ budgets, and `pinned_funcs` (including `indirect_reach` for functions only reach
 a public API) are all config. Generic pipeline code must contain no library's API names.
 
 ## Subsystems
+
+### Validation-gate extraction & harness augmentation
+
+The core mechanism. `recon/validation_gates.py` statically scans the target's `.c` files for
+public-API limit-relaxation setters — functions whose names match limit-relaxer idioms
+(`_set_user`, `_set_*_max`, `_set_*_limit`, …), filtering out format-specific chunk/tag
+setters. It is deterministic and needs no LLM: on raw libpng it recovers `png_set_user_limits`
+unaided. `ContextBuilder` injects the result as section 0 of the architect context.
+
+Two consumers, one pure-symbolic and one LLM-assisted:
+
+- `render_validation_gates_block()` renders the extracted setters into the harness-generation
+  prompt as a directive `<validation_gates>` block, and the LLM emits the calls.
+- `inject_setter_calls()` rewrites a generated harness to add the setter calls at max-permissive
+  values directly, with **no LLM at all** — the pure-symbolic path (comments are stripped before
+  the idempotency check so a setter merely named in a comment is not skipped).
+
+Either way the effect is a harness that raises the library's restrictive defaults so the fuzzer
+can reach code those defaults gate off. The heuristic is scoped, by design, to the "restrictive
+default + idiomatically-named setter" shape (the libpng family). Relaxation levers expressed as
+flags/options rather than named setters are the LLM's job during harness generation; mechanisms
+not expressed in the code at all are out of scope (see Scope boundaries). Regression tests live
+in `tests/test_validation_gates.py`.
 
 ### Harness generation
 
