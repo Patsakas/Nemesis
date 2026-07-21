@@ -116,6 +116,42 @@ real and verifiable (see the sections above). It shows that *using that
 structure to place mutations in generated seeds* did not beat placing them at
 random, which was the specific claim being tested.
 
+### libpng had almost no room to show a difference
+
+Choosing libpng for this test was a design error, visible in numbers that were
+already published here before the campaign ran.
+
+If a share *p* of a file's bytes influence control flow, then a **random**
+position already lands on an influential byte *p* of the time. Measured
+placement can only win in the remaining `1 − p`:
+
+| target | influential bytes | random hits one | **selection advantage** |
+|---|---|---|---|
+| **libpng** ← tested here | 296/325 = 91.1 % | 91.1 % | **8.9 %** |
+| cJSON | 27/27 = 100 % | 100 % | **0 %** |
+| libtiff | 294/2504 = 11.7 % | 11.7 % | **88.3 %** |
+
+On libpng the control was picking influential bytes nine times out of ten by
+accident. A null result there is close to guaranteed whether or not the method
+has value, so this experiment had little power to detect the effect it was
+built to test.
+
+This does not retract the result. On libpng, at this budget, measured placement
+added nothing — that was measured and it stands. What it does not support is the
+general claim that measured placement never helps.
+
+### Prediction, recorded before the libtiff run
+
+libtiff is the target where the effect must appear if it exists: a random
+position misses 88 % of the time there, so the control is a real opponent rather
+than a near-equivalent.
+
+> **If measured placement has value, libtiff is where it shows. If B does not
+> beat C there either, the placement hypothesis fails generally — there is no
+> remaining headroom to appeal to.**
+
+Same protocol, same matched control, no changes to the method.
+
 ## Fuzzing campaign (superseded — uniform-random control)
 
 Seed coverage is a leading indicator. This is the campaign that tests whether it
