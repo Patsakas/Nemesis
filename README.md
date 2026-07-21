@@ -125,23 +125,23 @@ format spec or asking a model to recall one: probe each byte offset against an
 instrumented build and see which coverage edges move. Adjacent bytes whose edge sets
 overlap are one field. ([details](docs/benchmarks/fieldspec_seed_quality.md))
 
-Seeds generated from that inferred structure, against 40 uniform-random seeds of the
-same length and against the single real seed the structure was measured from:
+What it recovers is verifiable. On a target with a known layout it finds all four fields;
+on real TIFF it lands on the header and the repeated 12-byte IFD entries without being told
+what TIFF is. How much of a file steers control flow varies enormously, and that turns out
+to matter more than anything else here:
 
-| Target | Inputs bytes that steer control flow | vs random | Reaches, vs the real seed |
-|--------|------|-----------|------------|
-| **libtiff** | 294 / 2504 — 11.7 % | 3 → 237 edges | 63 % |
-| **libpng** | 296 / 325 — 91.1 % | 91 → 280 edges | 92 % |
-| **cJSON** | 27 / 27 — 100 % | 29 → 112 edges | 108 % |
+| Target | Input bytes that steer control flow | Seeds it generates reach, vs a real seed |
+|--------|------|------------|
+| **libtiff** | 294 / 2504 — 11.7 % | 63 % |
+| **libpng** | 296 / 325 — 91.1 % | 92 % |
+| **cJSON** | 27 / 27 — 100 % | 108 % |
 
-No format spec, no hand-written adapter, no grammar — on libpng that reaches 92 % of the
-coverage of a genuine PNG using seeds it generated itself.
+No format spec, no hand-written adapter, no grammar.
 
-The middle column is the honest caveat: **the benefit tracks how much of the input is
-inert.** A container format with a large compressed payload has plenty of bytes worth
-skipping; a character-by-character JSON parser has none, and there the measured structure
-buys little. The libtiff ratio (79×) is arithmetically true and practically misleading —
-random reached 3 edges there, so almost anything divides large.
+Earlier versions of this table also compared against uniform-random bytes and reported
+ratios up to 79×. Those numbers are gone: random bytes are not valid inputs, they die at
+the first magic check, and comparing against them measures structure-versus-garbage rather
+than anything about the structure.
 
 **And a negative result that matters more than the table.** Fuzzing campaigns on two
 targets tested whether placing mutations on measured fields beats placing them at random
@@ -541,7 +541,9 @@ ruff format nemesis/ tests/ # format
 - [x] Auto-detect build systems beyond cmake (autotools, meson)
 - [x] Structure-aware mutation (protobuf, ASN.1, archive headers)
 - [x] Byte-influence inference — measure which input bytes steer control flow,
-      and derive the field layout from it (coverage-differential, no new build)
+      and derive the field layout from it (coverage-differential, no new build).
+      *The inference works; using it to aim mutations did not beat random placement —
+      see the benchmark write-up.*
 - [ ] True taint tracking (DFSan) — byte → variable dataflow, for root-cause
       explanation rather than mutation targeting
 - [x] Git-history analysis: recently changed functions, past bug locations
