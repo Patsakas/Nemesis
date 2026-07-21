@@ -154,9 +154,13 @@ in the same file. It does not:
 
 libtiff was chosen because it gives placement the most room to matter, and the effect still
 did not appear. **The claim that measured structure improves mutation placement is not
-supported.** What survives is that the recovered structure is real, and that
-measured-placement seeds do not poison a corpus the way randomly-placed ones do — on
-libtiff the random control landed *below* the plain baseline.
+supported.**
+
+Adding the generated seeds at all is also target-dependent rather than a general win: it
+moved libpng from 312 to 471 edges (p = 0.008) and did nothing measurable on libtiff
+(p = 0.691). What does hold across both is that measured-placement seeds do not poison a
+corpus the way randomly-placed ones do — on libtiff the random control landed *below* the
+plain baseline.
 [Full write-up, including two superseded results and why they were wrong.](docs/benchmarks/fieldspec_seed_quality.md)
 
 Reproduce with `scripts/bench_fieldspec.py` and `scripts/bench_campaign.sh`. Deterministic,

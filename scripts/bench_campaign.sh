@@ -61,9 +61,13 @@ export AFL_BENCH_UNTIL_CRASH=0
 export ASAN_OPTIONS="abort_on_error=1:detect_leaks=0:symbolize=0:allocator_may_return_null=1"
 
 if grep -q '^|' /proc/sys/kernel/core_pattern 2>/dev/null; then
-  echo "note: core_pattern pipes to a handler; crashes may be recorded as"
-  echo "      timeouts. For a campaign where crash counts matter, run:"
-  echo "        echo core | sudo tee /proc/sys/kernel/core_pattern"
+  echo "WARNING: core_pattern pipes to a handler, so AFL cannot tell a crash"
+  echo "         from a timeout and will file timeouts under crashes/."
+  echo "         Coverage results are fine. CRASH COUNTS FROM THIS RUN ARE NOT."
+  echo "         Measured here once: 16 recorded crashes, none reproducible."
+  echo "         Fix before any crash-based experiment:"
+  echo "           echo core | sudo tee /proc/sys/kernel/core_pattern"
+  echo "         Verify with: scripts/check_crash_reporting.sh"
   echo
 fi
 
