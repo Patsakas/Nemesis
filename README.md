@@ -90,9 +90,24 @@ config opts in:
 
 ## Validation
 
-NEMESIS is evaluated by **backtesting against already-published CVEs**: point it at the
-vulnerable version of a library and measure whether it independently rediscovers the bug,
-and how long that takes. These are reproducible — the ground truth is public.
+This repository holds two separable things, at different levels of maturity, and it is
+worth keeping them apart:
+
+- **The system.** Whether NEMESIS recovers structure, generates better seeds, or finds
+  bugs faster are hypotheses, tested below. Some hold (structure inference), one was
+  refuted (influence-guided mutation placement), one is target-dependent (seed generation).
+- **The evaluation framework.** The way those hypotheses are tested — differential CVE
+  oracles, benchmark qualification, queue sweeping independent of AFL's crash reporting,
+  matched controls, sensitivity over thresholds rather than fixed cutoffs, raw outputs kept
+  alongside verdicts. This is fuzzer-agnostic: it can evaluate NEMESIS, plain AFL++,
+  libFuzzer, anything that emits inputs. It emerged from repeatedly finding and fixing
+  weaknesses in how results were measured, and the
+  [benchmark write-up](docs/benchmarks/fieldspec_seed_quality.md) documents the negative
+  results in full, including two that were retracted once their controls were corrected.
+
+The backtests below **rediscover already-published CVEs**: point NEMESIS at the vulnerable
+version of a library and measure whether it independently rediscovers the bug, and how long
+that takes. These are reproducible — the ground truth is public.
 
 | Library | CVE | CWE | Time to first crash | Human input |
 |---------|-----|-----|--------------------|-------------|
