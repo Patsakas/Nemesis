@@ -14,10 +14,49 @@ from __future__ import annotations
 
 import argparse
 import csv
+import itertools
 import statistics
 import sys
 from collections import defaultdict
 from pathlib import Path
+
+
+def _u_statistic(x: list[float], y: list[float]) -> float:
+    """Mann-Whitney U: pairs where x beats y, ties counted as half."""
+    return sum(1 if a > b else 0.5 if a == b else 0 for a in x for b in y)
+
+
+def exact_p(x: list[float], y: list[float], max_splits: int = 200_000) -> float | None:
+    """Two-sided exact permutation test on U. None when too large to enumerate.
+
+    Exact rather than the normal approximation because campaigns run a handful
+    of repeats, where that approximation is not trustworthy. At five per arm
+    there are 252 splits, so the whole distribution is enumerable and the p
+    value is not an estimate.
+
+    This exists because comparing min/max ranges is far too blunt: one
+    exceptional baseline run makes ranges overlap even when every other
+    comparison favours the other arm, and "the ranges overlap" then reads as
+    "no difference" when the data says something more specific.
+    """
+    n = len(x)
+    if n == 0 or len(y) == 0:
+        return None
+    from math import comb
+    if comb(n + len(y), n) > max_splits:
+        return None
+    pool = list(x) + list(y)
+    centre = n * len(y) / 2
+    observed = abs(_u_statistic(x, y) - centre)
+    hits = total = 0
+    for idx in itertools.combinations(range(len(pool)), n):
+        chosen = set(idx)
+        g1 = [pool[i] for i in idx]
+        g2 = [pool[i] for i in range(len(pool)) if i not in chosen]
+        total += 1
+        if abs(_u_statistic(g1, g2) - len(g1) * len(g2) / 2) >= observed:
+            hits += 1
+    return hits / total if total else None
 
 # Metric, human label, whether more is better.
 METRICS = [
@@ -194,6 +233,30 @@ def main() -> int:
 
     print(f"  verdict: {verdict}")
     print(f"  {note}")
+
+    # ── Pairwise significance ───────────────────────────────
+    #
+    # B vs C is the comparison that answers the actual question. Both arms have
+    # the same number of seeds, so a difference between them can only come from
+    # which seeds. B vs A confounds "better seeds" with "more seeds", and C vs A
+    # is the check that adding seeds alone changes nothing.
+    print()
+    print("  pairwise (exact permutation test on U):")
+    raw = {a: values(by_arm[a], key) for a in arms}
+    for lhs, rhs, meaning in (
+        ("B", "C", "same seed count, different content — the real question"),
+        ("B", "A", "confounded: more seeds AND different seeds"),
+        ("C", "A", "control: does adding seeds alone do anything?"),
+    ):
+        if lhs not in raw or rhs not in raw or not raw[lhs] or not raw[rhs]:
+            continue
+        u = _u_statistic(raw[lhs], raw[rhs])
+        n = len(raw[lhs]) * len(raw[rhs])
+        p = exact_p(raw[lhs], raw[rhs])
+        p_txt = "n/a" if p is None else f"p={p:.4f}"
+        mark = "" if p is None else ("  SIGNIFICANT" if p < 0.05 else "  ns")
+        print(f"    {lhs} vs {rhs}:  {u:g}/{n} pairs  {p_txt}{mark}")
+        print(f"      ({meaning})")
 
     if "C" in stats[key]:
         c_med, c_lo, c_hi = stats[key]["C"]

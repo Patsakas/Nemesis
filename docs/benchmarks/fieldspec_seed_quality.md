@@ -64,7 +64,49 @@ the same deep code and look alike, so the count stays low even when mean coverag
 per seed is 9x higher. A corpus of 20 deep seeds beats 100 shallow ones; the
 fuzzing A/B should measure paths and crashes, not corpus diversity.
 
-## Not yet measured
+## Fuzzing campaign
 
-Whether any of this translates into finding bugs faster. That needs a fuzzing
-campaign — same corpus, same budget, repeated runs — and is the next step.
+Seed coverage is a leading indicator. This is the campaign that tests whether it
+translates into fuzzing. Reproduce with `scripts/bench_campaign.sh` and
+`scripts/bench_report.py`.
+
+libpng, 8 real seeds, 4 minutes per run, 5 repeats per arm:
+
+| arm | | edges found (median [range]) |
+|---|---|---|
+| A | real corpus | 312 [311–428] |
+| B | real + 30 measured seeds | **398 [383–398]** |
+| C | real + 30 random seeds | 312 [311–321] |
+
+| comparison | pairs favouring first | exact p | |
+|---|---|---|---|
+| **B vs C** | 25/25 | **0.008** | same seed count, different content |
+| B vs A | 20/25 | 0.151 | confounded — more seeds *and* different seeds |
+| C vs A | 12/25 | 0.952 | control: adding seeds alone changes nothing |
+
+**B vs C is the comparison that answers the question.** Both arms carry 38 seeds,
+so a difference between them can only come from *which* seeds. Every one of the
+25 pairings favours the measured corpus, and an exact permutation test puts that
+at p = 0.008.
+
+**C vs A is the control, and it behaves.** Thirty extra random seeds moved
+nothing (12/25 pairs, p = 0.95), so the gain in B is not "more seeds".
+
+**B vs A does not reach significance** (p = 0.15) because of a single baseline
+run that reached 428 edges while the other four sat at 311–312. That run is not
+an error — AFL is stochastic and one run found a productive path the others
+missed — but it is enough to make the ranges overlap at five repeats. Note this
+comparison is confounded anyway: A has 8 seeds against B's 38.
+
+### What this does and does not show
+
+It shows that at a four-minute budget on libpng, a corpus enriched with measured
+seeds explored more than the same-sized corpus enriched with random ones, and
+that the difference is unlikely to be chance.
+
+It does not show faster bug discovery. **No arm produced a single crash**, which
+is expected at four minutes on a hardened libpng and means the metric that
+matters most is untested. It is one target, one budget, five repeats. The
+`--sensitivity` output on this data also reports that the plateau diagnosis flips
+across its threshold grid, so no claim is made about whether the budget truncated
+any arm.
