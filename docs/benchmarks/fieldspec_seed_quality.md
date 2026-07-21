@@ -176,9 +176,20 @@ seeds were worse placed. That confound alone could account for the gap.
 Both arms saturated well inside the budget here (last find at 51 s and 52 s of
 240 s), so this is not a truncation artefact.
 
-**Crashes appeared in every arm** (1–2 per run, including the baseline), which
-libpng never produced. They are not attributed to any arm: with every arm
-crashing at a similar rate, they say something about libtiff, not about seeds.
+**The crashes are not real.** AFL recorded 16 across the three arms (6/5/5,
+including the baseline). Replaying every one of them against the ASan debug
+build reproduces nothing — all 16 exit cleanly.
+
+They are artefacts of running with `AFL_I_DONT_CARE_ABOUT_MISSING_CRASHES=1`,
+which the campaign runner sets because this host pipes core dumps to a handler
+(`|/wsl-capture-crash`). AFL then cannot tell a crash from a timeout, and the
+runner's own startup note warns about exactly this. Counting them as findings
+would have been wrong in either direction — they favour no arm, but they are not
+crashes.
+
+Anything measuring time-to-crash on this host must first run
+`echo core | sudo tee /proc/sys/kernel/core_pattern`. Coverage numbers are
+unaffected.
 
 ### Where that leaves the hypothesis
 
