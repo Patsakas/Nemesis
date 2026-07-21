@@ -61,6 +61,9 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("csv", type=Path)
     ap.add_argument("--markdown", action="store_true")
+    ap.add_argument("--budget-secs", type=float, default=0,
+                    help="per-run time budget, so plateau can be told from "
+                         "truncation (see the verdict section)")
     args = ap.parse_args()
 
     if not args.csv.exists():
@@ -106,33 +109,97 @@ def main() -> int:
         else:
             print(sep.join(f"{c:<22}" for c in row))
 
-    # Verdict on the primary metric only. Coverage is what a short campaign can
-    # measure; crash counts need far longer to separate.
+    # ── Plateau detection ───────────────────────────────────
+    #
+    # A run that stopped finding long before the budget expired has shown what
+    # its corpus can do. A run still finding when the clock ran out was cut
+    # short, and its number is a lower bound rather than a result. Comparing a
+    # saturated arm against a truncated one measures the budget, not the seeds.
+    #
+    # Observed on libpng at 4 minutes: two A runs and a C run stopped finding
+    # 60-80s before the end (and AFL reported 36-50 cycles with no new finds),
+    # while every B run was still finding in the final 20s. Reading that as
+    # "B is better" or as "inconclusive" would both miss what happened.
+    PLATEAU_FRACTION = 0.85   # last find before this share of the budget → done
+    plateaued: dict[str, list[bool]] = {}
+    if args.budget_secs > 0:
+        for a in arms:
+            flags = []
+            for v in values(by_arm[a], "secs_to_last_find"):
+                if v < 0:
+                    continue
+                flags.append(v < args.budget_secs * PLATEAU_FRACTION)
+            plateaued[a] = flags
+        print()
+        print(f"plateau (last find before {PLATEAU_FRACTION:.0%} of "
+              f"{args.budget_secs:g}s budget):")
+        for a in arms:
+            f = plateaued.get(a, [])
+            if f:
+                print(f"  {a}: {sum(f)}/{len(f)} runs saturated, "
+                      f"{len(f) - sum(f)} still finding at cutoff")
+
     print()
     key = "edges_found"
-    if "A" in stats.get(key, {}) and "B" in stats[key]:
-        a_med, a_lo, a_hi = stats[key]["A"]
-        b_med, b_lo, b_hi = stats[key]["B"]
-        print(f"primary metric: {key}")
-        print(f"  A {a_med:g} [{a_lo:g}-{a_hi:g}]   B {b_med:g} [{b_lo:g}-{b_hi:g}]")
-        if b_lo > a_hi:
-            print("  B's worst run beat A's best — separation is clean.")
-        elif b_med > a_med:
-            print("  B's median is higher but the ranges OVERLAP. This is consistent "
-                  "with noise; more repeats or a longer budget are needed before "
-                  "claiming an effect.")
-        else:
-            print("  no advantage for B on this metric.")
+    if "A" not in stats.get(key, {}) or "B" not in stats[key]:
+        return 0
 
-        if "C" in stats[key]:
-            c_med, c_lo, c_hi = stats[key]["C"]
-            print(f"  control C {c_med:g} [{c_lo:g}-{c_hi:g}]")
-            if c_med >= b_med:
-                print("  C matched or beat B — the gain is from ADDING SEEDS, not from "
-                      "which seeds. This is the result that would invalidate the claim.")
-            elif c_med <= a_med:
-                print("  C sat at A's level, so extra seeds alone bought nothing and "
-                      "B's gain is attributable to seed content.")
+    a_med, a_lo, a_hi = stats[key]["A"]
+    b_med, b_lo, b_hi = stats[key]["B"]
+    print(f"primary metric: {key}")
+    print(f"  A {a_med:g} [{a_lo:g}-{a_hi:g}]   B {b_med:g} [{b_lo:g}-{b_hi:g}]")
+
+    # Compare saturation RATES, not "did every run saturate". Requiring all of
+    # A and C to have plateaued is too strict to ever fire: one lucky baseline
+    # run that was still climbing at the cutoff would mask the fact that every
+    # B run was. What matters is whether B is systematically less saturated
+    # than the arms it is being compared against.
+    def sat_rate(arm: str) -> float | None:
+        flags = plateaued.get(arm)
+        return (sum(flags) / len(flags)) if flags else None
+
+    b_rate = sat_rate("B")
+    ac_flags = [f for a in ("A", "C") for f in plateaued.get(a, [])]
+    ac_rate = (sum(ac_flags) / len(ac_flags)) if ac_flags else None
+
+    # A quarter of runs is a wide enough gap not to fire on one stray run.
+    SATURATION_GAP = 0.25
+    b_truncated = (
+        b_rate is not None and ac_rate is not None
+        and b_rate < ac_rate - SATURATION_GAP
+    )
+
+    if b_lo > a_hi:
+        verdict = "COVERAGE SEPARATION"
+        note = ("B's worst run beat A's best. If all arms also plateaued, this "
+                "is a result; if B was still finding, it is a lower bound.")
+    elif b_truncated:
+        verdict = "BUDGET-LIMITED"
+        note = (f"B saturated in {b_rate:.0%} of runs against {ac_rate:.0%} for "
+                "A/C, so this compares a search that finished against one that "
+                "did not. The fix is a LONGER BUDGET, not more repeats — "
+                "repeating a truncated measurement only measures the "
+                "truncation more precisely.")
+    elif b_med > a_med:
+        verdict = "NO EVIDENCE (overlapping ranges)"
+        note = ("B's median is higher but the ranges overlap, and B is not "
+                "systematically less saturated than A/C. Consistent with noise.")
+    else:
+        verdict = "NO ADVANTAGE"
+        note = "B did not beat A on this metric."
+
+    print(f"  verdict: {verdict}")
+    print(f"  {note}")
+
+    if "C" in stats[key]:
+        c_med, c_lo, c_hi = stats[key]["C"]
+        print(f"  control C {c_med:g} [{c_lo:g}-{c_hi:g}]")
+        if c_med >= b_med:
+            print("  C matched or beat B — the gain is from ADDING SEEDS, not from "
+                  "which seeds. This is the result that would invalidate the claim.")
+        elif c_med <= a_med:
+            print("  C sat at A's level, so extra seeds alone bought nothing and "
+                  "B's difference is attributable to seed content.")
     return 0
 
 
