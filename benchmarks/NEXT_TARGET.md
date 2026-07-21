@@ -1,4 +1,77 @@
-# Picking the next rediscovery benchmark
+# Next session: MAGMA
+
+Start here. The single-CVE recon below (libpng, libtiff) stays as fallback for
+non-MAGMA targets, but the primary next step is MAGMA, because it removes the
+cost that dominated this work: proving, per target, that the benchmark is valid.
+
+## The claim being tested — narrower than "evaluate NEMESIS on MAGMA"
+
+> Does NEMESIS structural inference + seed generation produce a better starting
+> corpus than the baseline, on validated vulnerability targets?
+
+Explicitly **not** in scope, because none of it has been shown to help and mixing
+it in would reintroduce "what caused the result?":
+mutation placement (refuted), custom-mutator scheduling, harness generation,
+symbolic execution. The experiment stays boring on purpose — the isolation of one
+variable is the strongest thing NEMESIS has right now.
+
+## Harness decision: use MAGMA's, not NEMESIS's
+
+MAGMA ships its own libFuzzer harnesses plus **canary instrumentation**
+(`MAGMA_LOG` per bug, distinguishing *reached* from *triggered*). Use them.
+
+- This reduces "NEMESIS" in the experiment to *its seed generator feeding MAGMA's
+  harness* — say it that way, not "NEMESIS evaluated on MAGMA".
+- The canary oracle is an upgrade over the differential oracle built this session
+  (reached-vs-triggered, single build). The `benchmarks/cjson_cve_2023_53154/`
+  differential oracle becomes the fallback for non-MAGMA targets.
+- MAGMA harnesses are plain entry points — none of the `continue` predicate gates
+  the NEMESIS cJSON harness had (which blocked the minimal `{"1":1,` trigger). One
+  less surprise.
+- Consistency note: generate the NEMESIS seeds by running the inference against a
+  probe binary built from **MAGMA's** harness source, so seeds and campaign
+  exercise the same code path.
+
+## Evaluation model
+
+```
+A: MAGMA baseline corpus
+B: A + NEMESIS-generated seeds   (custom mutator OFF in both — the png.c confound)
+```
+
+Primary metric: bug triggered? (canary). Secondary: TTFC distribution
+(censored at budget). Tertiary: edge coverage, diagnostic only.
+Stats: Fisher exact on trigger rate, exact permutation on TTFC — same as
+`scripts/bench_report.py`.
+
+## Qualification gate first — `scripts/qualify_benchmark.sh`
+
+Composes with the canary oracle. Per bug: TOO_EASY (baseline triggers fast every
+run) → discard; TOO_HARD (neither arm triggers in budget) → discard; keep only
+the mid-difficulty ones. This is the step that makes the whole thing worth
+running, and it is why single-CVE hunting was a trap.
+
+## Initial targets — the four MAGMA/NEMESIS overlap
+
+Not five: **lz4 is not in MAGMA**. The overlap with what NEMESIS has onboarded
+(config + structural adapter, all confirmed present) is exactly:
+
+| target | adapter | why this order |
+|--------|---------|----------------|
+| libxml2 | `xml2_synth.c` | untested; parsing-heavy, deep nesting, field relationships — where structure is most likely to matter |
+| libsndfile | `sndfile_synth.c` | untested; binary chunks + headers + metadata |
+| libpng | `png.c` | the one target where seed generation *did* beat baseline (p=0.008) — confirm it holds on MAGMA's different bugs, mutator off |
+| libtiff | `tiff_synth.c` | seed generation did *not* help here (p=0.691) — include for honesty, expect a negative |
+
+## Prediction, recorded before running
+
+Most likely target-dependent, not a universal win — consistent with libpng-yes /
+libtiff-no already seen. A result like libxml2 +, libsndfile +, libpng +,
+libtiff − would be more informative than a uniform 10/10, and is the honest bet.
+
+---
+
+# Picking the next rediscovery benchmark (single-CVE, non-MAGMA fallback)
 
 The cJSON entry (`cjson_cve_2023_53154/`) validated the framework but qualified
 **TOO_EASY** — the baseline finds it in under a second. The next target must be
