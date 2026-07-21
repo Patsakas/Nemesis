@@ -6,27 +6,64 @@
 [![Fuzzer: AFL++](https://img.shields.io/badge/fuzzer-AFL%2B%2B-orange.svg)](https://github.com/AFLplusplus/AFLplusplus)
 [![Solver: Z3](https://img.shields.io/badge/solver-Z3-8A2BE2.svg)](https://github.com/Z3Prover/z3)
 
-**Neuro-Symbolic Exploit Mining Engine for Software Insecurities**
+**Automated harness construction for effective fuzzing of C/C++ libraries.**
 
-NEMESIS is a neuro-symbolic **vulnerability-analysis framework** for C/C++ libraries. It
-chains LLM-based code reasoning, symbolic verification (Z3), and coverage-guided fuzzing
-(AFL++) into a single pipeline that goes from *target selection* to *triaged crash*, and it
-ships with an **evaluation methodology** — differential CVE oracles, benchmark
-qualification, and controlled A/B campaigns — for measuring what such a system actually
-contributes.
+**NEMESIS is an automated harness-construction framework that improves fuzzing reachability
+by identifying and relaxing validation constraints in C/C++ libraries.** It combines
+deterministic source analysis with targeted LLM assistance to construct fuzzing harnesses
+that expose execution states hidden behind restrictive validation logic.
 
-You point it at a C/C++ project. It figures out which functions are worth attacking, writes
-a fuzzing harness for each, builds an instrumented binary, fuzzes it, and reports back only
-the crashes that reproduce on the unmodified library.
+The research contribution is not the fuzzing itself — it is the *setup*. A fuzzer only finds
+bugs in code it reaches, and reaching deep parser states depends on a harness that gets past
+the library's own validation limits (size caps, dimension limits, depth guards). Writing
+that harness is manual expert work; NEMESIS automates it. You point it at a C/C++ project, it
+builds the harness, instruments it, fuzzes it, and reports only crashes that reproduce on the
+unmodified library.
 
-**On the strength of the claims.** What is demonstrated is structural inference (recovering
-fields and influential bytes from unknown binary formats) and format-aware artifact
-generation. What is *not* established is that any of it discovers hard vulnerabilities
-faster than a baseline — the controlled experiments in [Validation](#validation) refuted the
-mutation-placement hypothesis, found seed generation to be target-dependent, and showed the
-headline "60 s libpng rediscovery" to be confounded by a hardcoded trigger value. Discovery
-effectiveness requires independent evaluation, which is why the framework's second half is
-the evaluation methodology itself. The honest results are kept in full alongside the tool.
+### The idea in one picture
+
+```mermaid
+flowchart LR
+    A[Target C/C++ library source]
+    A --> B[Static analysis]
+    B --> C[Validation-gate extraction]
+    C --> D[Limit-relaxation candidates]
+    A --> E[Context builder]
+    E --> F[LLM assistance]
+    F --> G[Harness generation]
+    D --> G
+    G --> H[Fuzzing harness]
+    H --> I[AFL++ / sanitizers]
+    I --> J[Crash triage]
+    J --> K[Differential oracle]
+    K --> L[Evaluation evidence]
+```
+
+### What is claimed — and what is not
+
+| Layer | Claim | Status |
+|-------|-------|--------|
+| Harness construction | builds a harness that unlocks otherwise-unreachable states | ✅ demonstrated (controlled A/B + MAGMA ground truth) |
+| Static analyzer | extracts limit-relaxation APIs from source, no LLM needed | ✅ |
+| LLM assistance | recognizes/applies a relaxation mechanism *when it is visible in the code* | ✅ bounded |
+| Autonomous discovery of hidden mechanisms | — | ❌ explicitly **not** claimed (measured 0/5) |
+| Finding CVEs faster than a baseline fuzzer | — | ❌ **not** claimed |
+
+The capability boundary is stated up front rather than hidden — the failures define the
+system as much as the successes:
+
+```
+explicit setter / API   →  deterministic extraction        ✓
+visible flag / option   →  LLM recognition + application    ✓
+hidden mechanism        →  not solved                       ✗
+```
+
+The full experimental setup, tables and numbers are the scientific appendix:
+**[experiments/harness_autonomy/FINDINGS.md](experiments/harness_autonomy/FINDINGS.md)**.
+Earlier overclaims have been retracted in place: the mutation-placement hypothesis was
+refuted, seed generation is target-dependent, and the headline "60 s libpng rediscovery" was
+confounded by a hardcoded trigger value and is not read as a genuine discovery. The honest
+results are kept in full alongside the tool.
 
 ![NEMESIS dashboard — configured targets](docs/screenshots/dashboard-targets.png)
 
@@ -100,6 +137,13 @@ config opts in:
 ---
 
 ## Validation
+
+> **The core evaluation — the harness-construction A/B experiments, the analyzer loop, the
+> LLM capability ladder, and the MAGMA ground-truth cross-check — lives in
+> [experiments/harness_autonomy/FINDINGS.md](experiments/harness_autonomy/FINDINGS.md).**
+> That is the scientific appendix and the primary evidence for the claim above. The section
+> below documents the *earlier* structural-inference and CVE-backtest experiments, kept in
+> full including the refuted and retracted results.
 
 This repository holds two separable things, at different levels of maturity, and it is
 worth keeping them apart:
