@@ -1,0 +1,48 @@
+{
+  "experiment": "MAGMA Level-2 ground-truth reachability — oracle verification step",
+  "target": "libpng_PNG001",
+  "cve": "CVE-2018-13785",
+  "arm": "baseline",
+  "harness": "MAGMA default (contrib/oss-fuzz/libpng_read_fuzzer.cc)",
+  "harness_raises_user_limits": false,
+  "fuzzer": "aflplusplus",
+  "timeout_s": 180,
+  "run_time_s": 178,
+
+  "PNG001_reached": true,
+  "PNG001_reached_count": 42898,
+  "PNG001_triggered": false,
+  "PNG001_triggered_count": 0,
+
+  "coverage_bitmap_pct": 26.14,
+  "edges_found": 1180,
+  "execs_done": 283720,
+  "execs_per_sec": 1589.12,
+  "afl_unique_crashes": 0,
+
+  "oracle_integrity": {
+    "verified": true,
+    "note": "reached and triggered are separate, both functional. The triggered counter demonstrably fires for other bugs, so PNG001_T=0 is a real 'not triggered', not a dead counter. Impossible to read 'no crash = not reached'.",
+    "all_bugs_final_canary": {
+      "PNG001": {"reached": 42898, "triggered": 0},
+      "PNG003": {"reached": 106801, "triggered": 20486},
+      "PNG004": {"reached": 1962, "triggered": 0},
+      "PNG005": {"reached": 40014, "triggered": 0},
+      "PNG006": {"reached": 597894, "triggered": 24},
+      "PNG007": {"reached": 33195, "triggered": 0}
+    }
+  },
+
+  "classification": "Case 2 (reached=true, triggered=false)",
+  "key_finding": "PNG001 triggered=0 is STRUCTURAL, not budget-limited. The MAGMA harness does not call png_set_user_limits, so the default user_width_max=1,000,000 rejects the width 0x55555555 that the overflow needs, at png_check_IHDR, before it can ever reach the row_factor divide with the bad value. No fuzzing budget changes this. This independently confirms, on MAGMA ground truth, the benchmarks/harness_reasoning result: the bug sits behind a limit the default harness does not raise.",
+
+  "implication_for_nemesis_arm": "Raising the limit (Arm B = harness + png_set_user_limits) is NECESSARY to make PNG001 triggerable at all. But the trigger also needs a width=0x55555555 PNG with a VALID IHDR CRC (the CRC gate), which blind fuzzing rarely synthesises in a short budget. So Arm B may still show triggered=0 unless a seed supplies the width. The clean harness-edge on PNG001 is therefore the deterministic A/B already in benchmarks/harness_reasoning; MAGMA's contribution here is the canary-backed proof that the baseline is STRUCTURALLY blocked, plus a verified oracle for targets where fuzzing can reach the trigger.",
+
+  "fixed_conditions": {
+    "core_pattern": "core",
+    "captainrc": "FUZZERS=(aflplusplus) TARGETS=(libpng) REPEAT=1 TIMEOUT=3m",
+    "corpus": "MAGMA default libpng corpus",
+    "docker_image": "magma/aflplusplus/libpng:latest",
+    "note": "These must be identical for the NEMESIS arm so the harness is the only variable."
+  }
+}

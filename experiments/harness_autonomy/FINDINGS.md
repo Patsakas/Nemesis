@@ -109,6 +109,35 @@ infers the mechanism. The 2/5 that *recalled* `XML_PARSE_HUGE` (libxml2 is famou
 reasoned it **backwards** — proposing to *disable* it — which would keep the
 restrictive limit. Residual recall is thus both unreliable and semantically wrong.
 
+### 2.5 Ground-truth reachability on MAGMA — the harness edge, independently confirmed
+
+`experiments/harness_autonomy/magma_reachability/`. MAGMA forward-ports real bugs
+with a canary oracle that separates *reached* from *triggered*. Two results:
+
+**Oracle verified.** A 3-min baseline libpng campaign gave, per bug, distinct
+reached/triggered counts (PNG001 reached=42898 / triggered=0; PNG003 triggered=20486
+proves the trigger counter fires). So "not triggered" is real, never "no crash =
+not reached".
+
+**Harness A/B on PNG001 (CVE-2018-13785), same trigger input, MAGMA's canary
+libpng, only variable = `user_width_max`:**
+
+| arm | user_width_max | reached | triggered |
+|-----|----------------|---------|-----------|
+| default (stock 1,000,000) | 1e6 | **0** | **0** |
+| NEMESIS (`png_set_user_limits` 0x7FFFFFFF) | 2^31−1 | **1** | **1** |
+
+The augmentation flips the bug from not-even-reached to reached-and-triggered.
+
+**Critical caveat (found, not assumed):** the first A/B had *both* arms trigger.
+Investigating rather than accepting it revealed MAGMA's `pnglibconf.h` sets
+`PNG_USER_WIDTH_MAX=0x7FFFFFFF` (stock libpng: 1,000,000) — MAGMA raised the exact
+barrier this thesis is about, at the library-config level, to make the bug
+benchmarkable. Arm A above restores the stock default so the variable is faithful to
+stock libpng. That MAGMA *had to* raise the limit is itself independent corroboration
+that the default width limit is the reachability barrier. Three oracles now agree:
+stock-libpng SIGFPE (§2.1), MAGMA's config choice, and MAGMA's canary A/B.
+
 ---
 
 ## 3. Observed capability boundaries

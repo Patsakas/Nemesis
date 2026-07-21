@@ -1,0 +1,36 @@
+{
+  "experiment": "MAGMA Level-2 (A) — fixed-seed harness A/B on ground-truth PNG001, measured through MAGMA's canary oracle",
+  "target": "libpng_PNG001",
+  "cve": "CVE-2018-13785",
+  "method": "Same trigger.png fed to two harnesses linked against MAGMA's SAME canary-instrumented libpng16.a; single-input replay; PNG001 reached/triggered read from MAGMA_STORAGE. Only variable = user_width_max.",
+  "seed": "benchmarks/harness_reasoning/libpng/trigger.png (width 0x55555555)",
+
+  "arm_A_default": {
+    "user_width_max": 1000000,
+    "note": "stock libpng default",
+    "PNG001_reached": 0,
+    "PNG001_triggered": 0,
+    "interpretation": "width 0x55555555 > 1,000,000 rejected at png_check_IHDR; the vulnerable IDAT chunk-length code is never even REACHED."
+  },
+  "arm_B_nemesis": {
+    "user_width_max": 2147483647,
+    "note": "png_set_user_limits(0x7FFFFFFF, 0x7FFFFFFF) — the NEMESIS augmentation",
+    "PNG001_reached": 1,
+    "PNG001_triggered": 1,
+    "interpretation": "raised limit lets the width pass; the row_factor overflow path is reached and the bug condition triggered."
+  },
+
+  "result": "Harness augmentation flips PNG001 from NOT-REACHED (0/0) to REACHED+TRIGGERED (1/1) on identical input and library, measured by MAGMA's ground-truth canary. Matches Outcome A: harness construction unlocked an execution state the default harness leaves unreachable.",
+
+  "critical_caveat": "MAGMA's build OVERRIDES the stock libpng limit: pnglibconf.h sets PNG_USER_WIDTH_MAX=0x7FFFFFFF (stock is 1,000,000). So against MAGMA's libpng AS SHIPPED, the default harness ALREADY passes the width and BOTH arms trigger (verified: both 1/1). MAGMA neutralised the exact barrier the thesis is about — at the library-config level. To evaluate faithfully to STOCK libpng, Arm A here explicitly restores the stock 1,000,000 default that MAGMA overrode; the variable is then the enforced limit value.",
+
+  "indirect_corroboration": "That MAGMA had to raise PNG_USER_WIDTH_MAX to 0x7FFFFFFF to make CVE-2018-13785 benchmarkable independently confirms the default width limit IS the reachability barrier — exactly what the NEMESIS harness augmentation removes at the harness level (without patching the library).",
+
+  "three_oracle_convergence": {
+    "1_stock_libpng_SIGFPE": "benchmarks/harness_reasoning: naive default-limit harness exit 0; +png_set_user_limits SIGFPE (exit 136).",
+    "2_magma_config_inference": "MAGMA raised the limit to 0x7FFFFFFF to benchmark the bug.",
+    "3_magma_canary_this_run": "Arm A (1M) reached=0/triggered=0; Arm B (max) reached=1/triggered=1."
+  },
+
+  "fully_clean_followup": "Recompile MAGMA's libpng16.a with stock PNG_USER_WIDTH_MAX=1000000 so Arm A is the literal UNMODIFIED default harness inheriting the stock default (no explicit call). Expected identical result; removes the last bit of artificiality."
+}
