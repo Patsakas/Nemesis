@@ -1,0 +1,11 @@
+{
+  "probe": "/tmp/probecache_png/probe_97079a1f687d18b6",
+  "length": 325,
+  "floor_edges": 91,
+  "reference_edges": 304,
+  "threshold": 152.0,
+  "requested": 30,
+  "accepted": 30,
+  "attempts": 18720,
+  "acceptance_rate": 0.0016025641025641025
+}
