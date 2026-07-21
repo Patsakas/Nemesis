@@ -143,17 +143,21 @@ skipping; a character-by-character JSON parser has none, and there the measured 
 buys little. The libtiff ratio (79×) is arithmetically true and practically misleading —
 random reached 3 edges there, so almost anything divides large.
 
-**And a negative result that matters more than the table.** In a fuzzing campaign, seeds
-built from the measured structure did **not** beat seeds that changed the same number of
-bytes at *random* positions in the same real file (p = 0.635, 5 repeats). Both beat the
-plain corpus decisively (312 → ~471 edges, p = 0.008), so generating valid variations of a
-real input helps a great deal — but on this target, knowing *which* bytes steer control
-flow added nothing detectable on top of that.
+**And a negative result that matters more than the table.** Fuzzing campaigns on two
+targets tested whether placing mutations on measured fields beats placing them at random
+in the same file. It does not:
 
-An earlier version of that campaign reported the opposite, because its control was uniform
-random bytes, which are not valid PNGs and die at the signature check. That comparison was
-measuring structure against garbage.
-[Full write-up, including the superseded result.](docs/benchmarks/fieldspec_seed_quality.md)
+| target | headroom for placement | measured vs baseline |
+|---|---|---|
+| libpng | 8.9 % of bytes | p = 0.008, but the random control matched it — not placement |
+| libtiff | 88.3 % of bytes | **p = 0.691 — no difference** |
+
+libtiff was chosen because it gives placement the most room to matter, and the effect still
+did not appear. **The claim that measured structure improves mutation placement is not
+supported.** What survives is that the recovered structure is real, and that
+measured-placement seeds do not poison a corpus the way randomly-placed ones do — on
+libtiff the random control landed *below* the plain baseline.
+[Full write-up, including two superseded results and why they were wrong.](docs/benchmarks/fieldspec_seed_quality.md)
 
 Reproduce with `scripts/bench_fieldspec.py` and `scripts/bench_campaign.sh`. Deterministic,
 no LLM call, minutes not hours.

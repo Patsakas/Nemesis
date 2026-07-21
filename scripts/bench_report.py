@@ -264,6 +264,14 @@ def main() -> int:
         if c_med >= b_med:
             print("  C matched or beat B — the gain is from ADDING SEEDS, not from "
                   "which seeds. This is the result that would invalidate the claim.")
+        elif c_med < a_med * 0.95:
+            # C below the baseline is not "the control did nothing" — it means
+            # the control seeds actively hurt. B then beats C partly because C
+            # is poisoned, which is a much weaker claim than B being good, and
+            # an earlier version of this reported it as "C sat at A's level".
+            print(f"  WARNING: C ({c_med:g}) is BELOW the baseline A ({a_med:g}). "
+                  "The control seeds made things worse, so B beating C does not "
+                  "show B is good — compare B against A instead.")
         elif c_med <= a_med:
             print("  C sat at A's level, so extra seeds alone bought nothing and "
                   "B's difference is attributable to seed content.")

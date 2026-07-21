@@ -140,6 +140,65 @@ This does not retract the result. On libpng, at this budget, measured placement
 added nothing — that was measured and it stands. What it does not support is the
 general claim that measured placement never helps.
 
+### libtiff result: the prediction held, and it did not help
+
+The prediction below was recorded before the run. B did beat C, significantly.
+It still does not rescue the hypothesis, for a reason the libpng campaign could
+not have shown.
+
+libtiff, 4 minutes, 5 repeats, arms matched on seed count (25), length (2504 B)
+and bytes changed (median 2, range 1–10).
+
+| arm | | per-run edges | median execs |
+|---|---|---|---|
+| A | real corpus only | 1442, 1446, 1475, 1659, 1687 | 289 559 |
+| B | + **measured** placement | 1550, 1563, 1567, 1649, 1651 | 317 104 |
+| C | + **random** placement | 1135, 1137, 1158, 1190, 1205 | **36 747** |
+
+| comparison | pairs | exact p | |
+|---|---|---|---|
+| **B vs C** | 25/25 for B | **0.008** | as predicted |
+| B vs A | 15/25 for B | 0.691 | **no difference** |
+| C vs A | **0/25** for C | 0.008 | C is *worse* than doing nothing |
+
+**B beat C exactly as predicted — but B did not beat the baseline.** Measured
+placement is indistinguishable from adding no seeds at all (p = 0.691), while
+random placement is significantly *worse* than adding nothing. So B wins the
+comparison it was set up to win mainly because C is harmful, not because B
+helps.
+
+**And the arms did not get an equal shot.** The control ran 7.9× fewer
+executions in the same four minutes (36 747 against 289 559). Randomly mutated
+TIFFs evidently drive the parser into slow paths — large allocations, long
+loops — so C explored less partly because it was slower, not only because its
+seeds were worse placed. That confound alone could account for the gap.
+
+Both arms saturated well inside the budget here (last find at 51 s and 52 s of
+240 s), so this is not a truncation artefact.
+
+**Crashes appeared in every arm** (1–2 per run, including the baseline), which
+libpng never produced. They are not attributed to any arm: with every arm
+crashing at a similar rate, they say something about libtiff, not about seeds.
+
+### Where that leaves the hypothesis
+
+Across two targets with very different headroom, measured placement never beat
+the plain corpus:
+
+| target | selection advantage available | B vs A |
+|---|---|---|
+| libpng | 8.9 % | p = 0.008 for B — but C matched B, so not placement |
+| libtiff | 88.3 % | p = 0.691 — no difference |
+
+The libtiff run was the one designed to be decisive, and it was: given the
+headroom the hypothesis needed, the effect still did not appear against the
+baseline. **The claim that measured field structure improves mutation placement
+is not supported.**
+
+What survives is narrower and still real: the inference recovers genuine
+structure (verified against known layouts), and measured-placement seeds do not
+degrade a corpus the way randomly-placed ones do.
+
 ### Prediction, recorded before the libtiff run
 
 libtiff is the target where the effect must appear if it exists: a random
