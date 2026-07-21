@@ -91,8 +91,16 @@ def main() -> int:
                          "uniform: draw bytes from scratch; only viable on "
                          "targets that accept arbitrary input.")
     ap.add_argument("--mutations", type=int, default=1,
-                    help="bytes to perturb per seed in perturb mode. Match the "
-                         "measured arm, which varies one field at a time.")
+                    help="bytes to perturb per seed in perturb mode. Ignored "
+                         "when --match-corpus is given.")
+    ap.add_argument("--match-corpus", default="",
+                    help="directory of measured seeds to match byte-for-byte. "
+                         "For each one, count how many bytes it changed from "
+                         "the reference and change the SAME NUMBER at random "
+                         "offsets. Without this the arms differ in how much "
+                         "they changed, not only in where — a measured seed "
+                         "that varied an 8-byte field is not comparable to a "
+                         "control that flipped one byte.")
     ap.add_argument("--max-attempts", type=int, default=200_000)
     ap.add_argument("--seed", type=int, default=4242, help="RNG seed, for reproducibility")
     ap.add_argument("--stats-out", default="", help="write acceptance stats JSON here")
@@ -134,6 +142,29 @@ def main() -> int:
 
     rng = random.Random(args.seed)
     base = Path(args.like).read_bytes() if args.like else None
+
+    # Per-seed mutation budget, matched to the measured arm when asked. A
+    # measured seed that varied an 8-byte field changed 8 bytes; matching it
+    # with a 1-byte flip would compare amount of change, not placement.
+    budgets: list[int] = []
+    if args.match_corpus and base is not None:
+        for f in sorted(Path(args.match_corpus).iterdir()):
+            if not f.is_file():
+                continue
+            d = f.read_bytes()
+            if len(d) != len(base):
+                continue
+            n = sum(1 for x, y in zip(d, base, strict=False) if x != y)
+            if n:
+                budgets.append(n)
+        if budgets:
+            print(f"matching {len(budgets)} measured seeds: "
+                  f"{min(budgets)}-{max(budgets)} bytes changed "
+                  f"(median {sorted(budgets)[len(budgets) // 2]})")
+        else:
+            print("WARNING: --match-corpus produced no usable budgets; "
+                  "falling back to --mutations", file=sys.stderr)
+
     accepted = attempts = 0
     while accepted < args.count and attempts < args.max_attempts:
         attempts += 1
@@ -142,9 +173,12 @@ def main() -> int:
         else:
             # Perturb the reference instead of drawing from scratch. See the
             # --mode help: uniform random cannot reach a text parser at all.
+            n_mut = budgets[accepted % len(budgets)] if budgets else args.mutations
             data = bytearray(base)
-            for _ in range(args.mutations):
-                data[rng.randrange(len(data))] = rng.randrange(256)
+            # Distinct offsets, so n_mut really is the number of bytes changed
+            # rather than an upper bound with collisions.
+            for pos in rng.sample(range(len(data)), min(n_mut, len(data))):
+                data[pos] = rng.randrange(256)
             data = bytes(data)
         candidate.write_bytes(data)
         if len(runner.edges_for(candidate)) >= threshold:

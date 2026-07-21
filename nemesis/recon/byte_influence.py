@@ -521,8 +521,23 @@ def fields_to_fieldspec(
         return {"kind": "const", "hex": data.hex(), "name": name,
                 "source": "coverage"}
 
-    for idx in order:
+    for pos, idx in enumerate(order):
         f = fields[idx]
+
+        # Snapping widens a field to the next natural width, which can push it
+        # over the field after it (a 3-byte run at offset 0 snapped to 4 when
+        # the next field starts at 3). Rendering both in full then emits more
+        # bytes than the seed contained, shifting every later offset and
+        # changing the input length — measured seeds came out 327 bytes from a
+        # 325-byte reference before this was capped.
+        size = f.size
+        next_offset = (fields[order[pos + 1]].offset
+                       if pos + 1 < len(order) else len(seed))
+        if f.offset + size > next_offset:
+            size = max(f.observed_size, next_offset - f.offset)
+        if f.offset >= len(seed):
+            continue
+
         if f.offset > cursor:
             # Gaps are the inert regions between measured fields. Filling them
             # with random bytes would corrupt payload the parser does read
@@ -530,37 +545,37 @@ def fields_to_fieldspec(
             # steers control flow. Reproduce them instead.
             spec_fields.append(_literal(seed[cursor:f.offset], f"gap_{cursor}"))
 
-        chunk = seed[f.offset:f.offset + f.size]
+        chunk = seed[f.offset:f.offset + size]
         varying = vary_only is None or idx == vary_only
 
         if not varying:
             # Held at its observed value so this variant differs in one place.
             spec_fields.append(_literal(chunk, f"fixed_{f.offset}"))
-            cursor = f.offset + f.size
+            cursor = f.offset + size
             continue
 
         entry: dict = {
-            "kind": "int" if f.size in SNAP_WIDTHS else "bytes",
+            "kind": "int" if size in SNAP_WIDTHS else "bytes",
             "source": "coverage",
             "confidence": f.confidence,
             "method": method,
         }
         if entry["kind"] == "int":
-            entry["size"] = f.size
+            entry["size"] = size
             entry["endian"] = "be"
             # Keep the observed value alongside boundary values, so rendered
             # seeds stay close enough to valid to get past early checks.
             observed_value = int.from_bytes(chunk, "big") if chunk else 0
-            entry["values"] = _interesting_values(observed_value, f.size)
+            entry["values"] = _interesting_values(observed_value, size)
         else:
             entry["name"] = f"field_{f.offset}"
-            entry["min"] = f.size
-            entry["max"] = f.size
+            entry["min"] = size
+            entry["max"] = size
             entry["fill"] = "random"
         if f.snapped:
             entry["observed_size"] = f.observed_size
         spec_fields.append(entry)
-        cursor = f.offset + f.size
+        cursor = f.offset + size
 
     if cursor < len(seed):
         spec_fields.append(_literal(seed[cursor:], "tail"))

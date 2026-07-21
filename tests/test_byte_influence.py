@@ -313,6 +313,38 @@ def test_fieldspec_metadata_survives_the_interpreter(seed):
     build_from_fieldspec(spec["fields"], random.Random(0))  # must not raise
 
 
+def test_snapping_cannot_push_a_field_over_the_next_one(seed):
+    """REGRESSION: snapping widens a field to the next natural width, which can
+    run it past the field after it. Rendering both in full then emits more
+    bytes than the seed held, shifting every later offset. Measured libpng
+    seeds came out 327 bytes from a 325-byte reference, which also silently
+    broke byte-for-byte matching against a control corpus."""
+    import random as _r
+
+    from nemesis.recon.fieldspec_seedgen import build_from_fieldspec
+    fields = [
+        MeasuredField(offset=0, size=4, observed_size=3, confidence=0.85),
+        MeasuredField(offset=3, size=2, observed_size=2, confidence=1.0),
+    ]
+    spec = fields_to_fieldspec(fields, seed)
+    assert len(build_from_fieldspec(spec["fields"], _r.Random(0))) == len(seed)
+
+
+def test_variants_all_render_to_the_reference_length(seed):
+    """Every variant must be byte-comparable with the reference, or a control
+    arm cannot be matched against it."""
+    import random as _r
+
+    from nemesis.recon.fieldspec_seedgen import build_from_fieldspec
+    fields = [
+        MeasuredField(offset=0, size=4, observed_size=3, confidence=0.85),
+        MeasuredField(offset=3, size=2, observed_size=2, confidence=1.0),
+        MeasuredField(offset=8, size=8, observed_size=5, confidence=0.6),
+    ]
+    for spec in fieldspec_variants(fields, seed):
+        assert len(build_from_fieldspec(spec["fields"], _r.Random(0))) == len(seed)
+
+
 def test_fieldspec_preserves_seed_length(seed):
     """Gaps and tail become byte regions so later fields keep their measured
     offsets — a spec that renders short would misplace every field after it."""
