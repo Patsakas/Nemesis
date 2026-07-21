@@ -268,9 +268,66 @@ def main() -> int:
             print("  C sat at A's level, so extra seeds alone bought nothing and "
                   "B's difference is attributable to seed content.")
 
+    _distribution(by_arm, arms, key)
+
     if args.sensitivity and args.budget_secs > 0:
         _sensitivity(by_arm, arms, args.budget_secs)
     return 0
+
+
+def _distribution(by_arm, arms, key: str) -> None:
+    """Show every run, not just the summary.
+
+    A median hides the shape, and the shape is what decides whether a result
+    means anything. The first libpng campaign had four baseline runs at 311-312
+    and one at 428; the median said 312, the range said "overlaps everything",
+    and neither conveyed that a single run was doing all the work.
+
+    What to look for: is one arm consistently ahead, or ahead on average
+    because of a couple of jumps? An advantage that shows up in every run is a
+    different claim from one that shows up in two.
+    """
+    print()
+    print("per-run values (sorted) — check the shape, not just the median:")
+    series = {}
+    for a in arms:
+        vals = sorted(values(by_arm[a], key))
+        series[a] = vals
+        if not vals:
+            continue
+        med = statistics.median(vals)
+        # Flag values far from the rest of their own arm: with a handful of
+        # runs, one outlier can carry a median or blow out a range.
+        #
+        # Distance must be large both relative to the arm's own spread AND in
+        # absolute terms. Spread alone misfires on a tight arm: 383 and 389
+        # against a median of 398 sit more than half the spread away only
+        # because the spread is 15, and calling them outliers would be absurd.
+        spread = max(vals) - min(vals)
+        outliers = [
+            v for v in vals
+            if spread and abs(v - med) > 0.5 * spread and abs(v - med) > 0.1 * med
+        ]
+        tag = f"   outlier(s): {', '.join(f'{o:g}' for o in outliers)}" if outliers else ""
+        print(f"  {a}: {', '.join(f'{v:g}' for v in vals)}{tag}")
+
+    if "B" in series and series["B"]:
+        for other in ("A", "C"):
+            if other not in series or not series[other]:
+                continue
+            b, o = series["B"], series[other]
+            wins = sum(1 for x in b for y in o if x > y)
+            losses = sum(1 for x in b for y in o if x < y)
+            worst_b, best_o = min(b), max(o)
+            print(f"  B vs {other}: B ahead in {wins}/{len(b) * len(o)} pairings, "
+                  f"behind in {losses}")
+            if worst_b > best_o:
+                print(f"    every B run beat every {other} run "
+                      f"({worst_b:g} > {best_o:g}) — consistent, not driven by outliers")
+            elif wins > losses:
+                print(f"    B leads on average but {other} reaches {best_o:g} "
+                      f"against B's worst {worst_b:g} — check whether the lead "
+                      "comes from a few runs or all of them")
 
 
 def _sensitivity(by_arm, arms, budget: float) -> None:
