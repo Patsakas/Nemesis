@@ -64,6 +64,10 @@ def main() -> int:
     ap.add_argument("--budget-secs", type=float, default=0,
                     help="per-run time budget, so plateau can be told from "
                          "truncation (see the verdict section)")
+    ap.add_argument("--sensitivity", action="store_true",
+                    help="re-run the plateau diagnosis across a grid of "
+                         "thresholds, to show whether the verdict depends on "
+                         "the two constants it uses")
     args = ap.parse_args()
 
     if not args.csv.exists():
@@ -200,7 +204,49 @@ def main() -> int:
         elif c_med <= a_med:
             print("  C sat at A's level, so extra seeds alone bought nothing and "
                   "B's difference is attributable to seed content.")
+
+    if args.sensitivity and args.budget_secs > 0:
+        _sensitivity(by_arm, arms, args.budget_secs)
     return 0
+
+
+def _sensitivity(by_arm, arms, budget: float) -> None:
+    """Re-diagnose across a grid of both constants.
+
+    PLATEAU_FRACTION and SATURATION_GAP were chosen from one target at one
+    budget. If the diagnosis holds across a range of both, it is a property of
+    the data; if it flips inside that range, it is a property of the constants
+    and must not be quoted as a finding.
+    """
+    print()
+    print("sensitivity of the plateau diagnosis:")
+    print(f"  {'plateau@':<10}" + "".join(f"gap {g:<6.2f}" for g in
+                                          (0.15, 0.20, 0.25, 0.30, 0.35)))
+    flips = set()
+    for frac in (0.75, 0.80, 0.85, 0.90, 0.95):
+        cells = []
+        for gap in (0.15, 0.20, 0.25, 0.30, 0.35):
+            rates = {}
+            for a in arms:
+                flags = [v < budget * frac
+                         for v in values(by_arm[a], "secs_to_last_find") if v >= 0]
+                rates[a] = (sum(flags) / len(flags)) if flags else None
+            ac = [v for a in ("A", "C") for v in
+                  ([rates[a]] if rates.get(a) is not None else [])]
+            b_r, ac_r = rates.get("B"), (sum(ac) / len(ac)) if ac else None
+            limited = (b_r is not None and ac_r is not None and b_r < ac_r - gap)
+            cells.append("LIMITED" if limited else "-")
+            flips.add(limited)
+        print(f"  {frac:<10.0%}" + "".join(f"{c:<10}" for c in cells))
+
+    print()
+    if len(flips) == 1:
+        print("  Diagnosis is identical across the whole grid — it does not "
+              "depend on where the thresholds were set.")
+    else:
+        print("  Diagnosis FLIPS inside this grid. The thresholds are doing the "
+              "work, not the data. Do not quote the verdict as a finding "
+              "without reporting this table alongside it.")
 
 
 if __name__ == "__main__":
