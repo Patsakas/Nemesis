@@ -74,3 +74,25 @@ rediscovery *engine* — is:
 For **this** CVE, step 2 returns TOO EASY: the baseline finds it in well under a
 second, so it is a valid target but not a discriminating benchmark for comparing
 seed strategies. That is a property of the bug's reachability, not of any tool.
+
+### Rediscovery campaign (raw data: `rediscovery_campaign.csv`)
+
+10 repeats per arm, 60 s each. A = baseline JSON corpus (4 seeds); B = baseline +
+20 NEMESIS-generated seeds. Verdict via the oracle sweep over each run's queue.
+
+| arm | rediscovery rate | TTFC median | range |
+|-----|------|------|------|
+| A (baseline) | **10/10** | 706 ms | 604–2068 ms |
+| B (+ NEMESIS seeds) | **10/10** | 760 ms | 570–2524 ms |
+
+TTFC, B vs A: exact permutation test **p = 0.63** — no difference. Every run of
+both arms rediscovered the CVE, all in under three seconds.
+
+Applying the qualification procedure retrospectively to the baseline classifies
+this benchmark as **TOO_EASY** (100 % rediscovery, all under 5 s), so an
+experiment of this type would be filtered before running. The trigger is any
+object seed truncated at a comma, which havoc produces almost immediately, so
+there is no headroom for a seed strategy to matter — the same ceiling shape as
+libpng's 91 %-influential-bytes result, here in the time-to-crash rather than in
+coverage. The finding is about the benchmark's discriminating power, not about
+whether NEMESIS works.
