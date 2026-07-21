@@ -229,9 +229,44 @@ L3 gap), which today does not work.
 
 **Future work, in priority order:** (1) case-insensitive/camelCase idioms in the
 extractor (closes Case B cheaply); (2) memorization-controlled L3 on an obscure
-library (settles whether mechanism inference is ever worth pursuing); (3) extend the
-harness A/B to more MAGMA targets (libxml2, libsndfile) to test the routing decision
-at scale.
+library (settles whether mechanism inference is ever worth pursuing); (3) **seed
+generation as a separate study** — see §6. MAGMA is *not* the right venue for it:
+the qualification sweep found 118 reached-but-not-triggered bugs and 0 observable
+not-reached, i.e. MAGMA's harnesses already solve reachability, so a seed experiment
+there measures input synthesis, a different research question from harness
+construction. It requires its own experimental design and is deferred, not skipped.
+
+---
+
+## 6. Evidence stack — where NEMESIS works and where it stops
+
+The value of this work is not a bug count; it is a bounded map of a system's
+capability. The claim that survives every experiment:
+
+> The fuzzing bottleneck is not only input search but the construction of harnesses
+> that let the fuzzer reach critical states. NEMESIS automates that stage.
+
+| Component | Claim | Evidence | Status |
+|-----------|-------|----------|--------|
+| Harness construction | builds a harness that unlocks otherwise-unreachable states | libpng A/B (§2.1); MAGMA canary 0→1 (§2.5) | ✅ strong |
+| Static analyzer | extracts limit-relaxation mechanisms from raw source | `validation_gates` loop + regression tests (§2.2b) | ✅ |
+| LLM role | recognizes/applies a mechanism *when it is visible* in the code | libxml2 ladder L1/L2 5/5 (§2.4) | ✅ bounded |
+| Autonomous discovery | infers hidden mechanisms on its own | L3 0/5 (§2.4) | ❌ correctly rejected |
+| Seed generation | improves fuzzing after the harness is built | little, target-dependent | ⏳ future work |
+
+The evidence chain, four controlled experiments, each isolating one variable:
+
+1. **Harness A/B** — a default harness misses a reachable state a semantic harness reaches.
+2. **Analyzer loop** — NEMESIS constructs that augmentation automatically, no LLM needed.
+3. **Capability boundaries** — deterministic + LLM routing, with the autonomy claim refuted, no overclaim.
+4. **MAGMA validation** — ground truth independently confirms the harness is the bottleneck (MAGMA itself had to raise the limit).
+
+**Seed generation is deliberately out of the core claim.** Not "we ran out of
+time," but "it requires a different experimental design (input-synthesis, not
+reachability) and does not strengthen the central contribution proportionally." A
+clean future study would evaluate whether NEMESIS structural seeds improve mutation
+efficiency *after* harness construction is optimized — measured somewhere other than
+MAGMA, whose harnesses have already solved the reachability half.
 
 ---
 
