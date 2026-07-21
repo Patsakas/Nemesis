@@ -60,3 +60,17 @@ count a run as a rediscovery only on CVE-HIT. Because the AFL crash directory on
 a piped-`core_pattern` host contains timeouts mislabelled as crashes (see
 `scripts/check_crash_reporting.sh`), the oracle — a real ASan reproduction — is
 what separates a genuine finding from an artefact.
+
+The full evaluation workflow — a differential-oracle framework, not a
+rediscovery *engine* — is:
+
+1. `reproduce.sh` — validate the target (differential: crashes vulnerable, clean fixed).
+2. `scripts/qualify_benchmark.sh` — check the CVE is discriminating (not found instantly,
+   not never found) before spending hours. A CVE the baseline finds in under a
+   second cannot separate two seed strategies, so qualification is a precondition,
+   not a conclusion.
+3. `scripts/cve_sweep.sh` — per-run rediscovery verdict over AFL's queue + crashes.
+
+For **this** CVE, step 2 returns TOO EASY: the baseline finds it in well under a
+second, so it is a valid target but not a discriminating benchmark for comparing
+seed strategies. That is a property of the bug's reachability, not of any tool.
