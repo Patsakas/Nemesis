@@ -176,6 +176,49 @@ def test_explainable_fails_when_only_the_value_is_logged(tmp_path):
                      "score_explainable") == "fail"
 
 
+# ── metric_provenance [provenance] ──────────────────────────
+
+COV_ITER1 = ("source_coverage.result func=minmea_scan line_cov_pct=76.56 "
+             "iteration=1 stage=pipeline")
+COV_ITER0 = ("source_coverage.result func=minmea_scan line_cov_pct=21.35 "
+             "iteration=0 stage=pipeline")
+BITMAP_ITER1 = ("fuzz_a.bitmap_expanded bitmap_delta=44.59 func=minmea_scan "
+                "iteration=1 source_coverage_pct=76.56 quality_score=0.918 "
+                "stage=pipeline")
+BITMAP_ITER1_STALE = ("fuzz_a.bitmap_expanded bitmap_delta=44.59 "
+                      "func=minmea_scan iteration=1 source_coverage_pct=21.35 "
+                      "quality_score=0.7247 stage=pipeline")
+
+
+def test_provenance_pass_when_value_measured_for_its_own_iteration(tmp_path):
+    r = run(tmp_path, [COV_ITER0, COV_ITER1, BITMAP_ITER1, SCORE_FULL])
+    assert status_of(r, "metric_provenance") == "pass"
+
+
+def test_provenance_fails_on_a_value_carried_over_from_a_previous_iteration(tmp_path):
+    """The observed bug: `TargetResult` outlives an iteration, so a guard on the
+    field stopped firing after iteration 0 and iteration 1 reported iteration
+    0's coverage. The log does not misreport the value — it misreports the
+    context, so the check pairs values with measurement events rather than
+    inspecting the numbers."""
+    r = run(tmp_path, [COV_ITER0, BITMAP_ITER1_STALE, SCORE_FULL])
+    assert status_of(r, "metric_provenance") == "fail"
+
+
+def test_provenance_is_independent_of_consumption(tmp_path):
+    """A stale value still *reaches* the score, so consumption is satisfied
+    while provenance is not. Conflating them would hide this bug behind a
+    passing check."""
+    r = run(tmp_path, [COV_ITER0, BITMAP_ITER1_STALE, SCORE_FULL])
+    assert status_of(r, "score_consumes_coverage") == "pass"
+    assert status_of(r, "metric_provenance") == "fail"
+
+
+def test_provenance_not_exercised_without_a_terminal_metric(tmp_path):
+    assert status_of(run(tmp_path, [COV_ITER0, SCORE_FULL]),
+                     "metric_provenance") == "not_exercised"
+
+
 # ── rollup ──────────────────────────────────────────────────
 
 

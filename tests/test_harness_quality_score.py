@@ -112,3 +112,36 @@ def test_score_stays_in_range():
     for explore in (-1.0, 0.0, 21.35, 76.56, 100.0, 150.0):
         s = score(reach=100.0, explore=explore, paths=726, density=44.26)
         assert 0.0 <= s <= 1.0
+
+
+# ── the documented bands ────────────────────────────────────
+
+
+def test_unreachable_target_lands_in_the_ran_but_useless_band():
+    """minmea_getdatetime, measured: 0% reachability, 0% exploration, AFL busy.
+
+    The floor is not zero — building and running are worth 0.40 before the
+    target is touched. Anyone reading a raw score needs that, or 0.40 looks
+    like partial success."""
+    s = score(reach=0.0, explore=0.0, paths=726, density=44.26)
+    assert s == pytest.approx(0.40, abs=0.01)
+
+
+def test_reached_but_shallow_lands_above_never_reached():
+    """minmea_scan iteration 0 as it actually ran: 100% reachability, 21.35%
+    exploration, and modest AFL activity (10 paths, 8.24% density). The
+    pipeline logged 0.6819 for exactly these inputs."""
+    useless = score(reach=0.0, explore=0.0, paths=726, density=44.26)
+    shallow = score(reach=100.0, explore=21.35, paths=10, density=8.24)
+    assert shallow == pytest.approx(0.68, abs=0.01)
+    assert shallow > useless
+
+
+def test_band_order_holds_across_the_three_measured_cases():
+    """Held at identical AFL activity so the ordering comes from reachability
+    and exploration, not from how busy the fuzzer happened to be."""
+    never = score(reach=0.0, explore=0.0, paths=726, density=44.26)
+    shallow = score(reach=100.0, explore=21.35, paths=726, density=44.26)
+    deep = score(reach=100.0, explore=76.56, paths=726, density=44.26)
+    assert never < shallow < deep
+    assert deep >= 0.75, "substantial exploration must reach the top band"

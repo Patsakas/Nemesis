@@ -1,18 +1,21 @@
 """Health check over a run log: are the safeguards actually on the path?
 
-Every defect found on 2026-07-22 was a violation of one of four properties,
+Every defect found on 2026-07-22 was a violation of one of five properties,
 never of the code itself:
 
-  wiring          the component is called from the production path
-  observability   the right measurement is recorded
-  consumption     the measurement reaches the decision that needs it
+  wiring           the component is called from the production path
+  observability    the right measurement is recorded
+  consumption      the measurement reaches the decision that needs it
+  provenance       the value belongs to the run it is attributed to
   interpretability the log alone explains the outcome, with no reconstruction
 
 Concretely: a variadic gate passed 23 unit tests and logged zero events because
 the harness-variant path bypassed it; source coverage was measured on every
 iteration by code the loop returned before reaching; a quality score moved in
 the right direction for the wrong reason and needed an offline reconstruction
-to explain. Each is invisible to a test suite and obvious in a run log.
+to explain; and the fix for the second went on to report one iteration's
+coverage as the next one's, because TargetResult outlives an iteration. Each is
+invisible to a test suite and obvious in a run log.
 
 Each check reports one of three states, kept distinct on purpose:
 
@@ -224,8 +227,60 @@ def check_score_explainable(log: str) -> Check:
     return c.fail("score log is missing coverage or the value itself")
 
 
+def check_metric_provenance(log: str) -> Check:
+    """Provenance. A value reported for an iteration must have been measured
+    for that iteration.
+
+    `TargetResult` lives for the whole target, not one iteration, so any
+    "have we measured yet?" guard on a metric field stops firing after
+    iteration 0 and the previous iteration's value gets reported as the current
+    one's. Observed immediately: `minmea_scan` iteration 1 logged
+    `source_coverage_pct=21.35`, exactly iteration 0's figure, for a harness
+    that was a different program.
+
+    The log did not misreport the field — it misreported the *context*. So this
+    pairs every reported value with a measurement event for the same iteration
+    rather than checking the value itself. A stale number is plausible; a
+    missing measurement event is not.
+    """
+    c = Check("metric_provenance", "provenance")
+    measured: dict[tuple[str, str], list[float]] = {}
+    for e in _events(log, "source_coverage.result"):
+        func = re.search(r"\bfunc=(\S+)", e)
+        it = re.search(r"\biteration=(\d+)", e)
+        val = _floats(e, "line_cov_pct")
+        if func and it and val is not None:
+            measured.setdefault((func.group(1), it.group(1)), []).append(val)
+
+    reported = []
+    for e in _events(log, "fuzz_a.bitmap_expanded"):
+        val = _floats(e, "source_coverage_pct")
+        if val is None:
+            continue
+        func = re.search(r"\bfunc=(\S+)", e)
+        it = re.search(r"\biteration=(\d+)", e)
+        if func and it:
+            reported.append((func.group(1), it.group(1), val))
+
+    if not reported:
+        return c.na("no per-iteration metric reported at a terminal exit")
+
+    unbacked = [(f, i, v) for f, i, v in reported if (f, i) not in measured]
+    if unbacked:
+        detail = "; ".join(
+            f"{f} iteration {i} reported {v} with no measurement for that "
+            f"iteration" for f, i, v in unbacked[:3])
+        return c.fail(
+            f"{len(unbacked)} of {len(reported)} reported value(s) carry no "
+            f"measurement event for their own iteration: {detail}",
+            reported=len(reported), unbacked=len(unbacked))
+    return c.ok(f"all {len(reported)} reported value(s) were measured for the "
+                "iteration they are attributed to", reported=len(reported))
+
+
 CHECKS = [check_variadic_gate, check_closed_loop, check_coverage_recorded,
-          check_score_consumes_coverage, check_score_explainable]
+          check_score_consumes_coverage, check_score_explainable,
+          check_metric_provenance]
 
 
 def main() -> int:
@@ -282,7 +337,8 @@ def main() -> int:
         print(f"  NOT_EXERCISED  {counts['not_exercised']}")
         print()
         print("By property:")
-        for prop in ("wiring", "observability", "consumption", "interpretability"):
+        for prop in ("wiring", "observability", "consumption", "provenance",
+                     "interpretability"):
             if prop in by_property:
                 print(f"  {prop:<18}{by_property[prop]}")
         print()

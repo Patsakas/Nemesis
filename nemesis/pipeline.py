@@ -128,6 +128,63 @@ def _classify_run_status(results, targets_processed: int, total_crashes: int):
     return PipelineStatus.SUCCESS, []
 
 
+def _code_version() -> dict:
+    """Which code produced this run, for the run log.
+
+    A run log is otherwise unattributable. Reading `metric_provenance: FAIL` in
+    an archived log tells you nothing about whether the defect still exists —
+    only whether it existed when that log was written — and working that out
+    afterwards meant comparing commit timestamps against the run start time by
+    hand.
+
+    `dirty` matters as much as the sha: most runs during development execute a
+    working tree that matches no commit, and a sha alone would invite a reader
+    to check that commit out and expect the same behaviour.
+
+    `git_diff_hash` gives such a tree an identity without storing the diff — two
+    runs share it only if they ran the same uncommitted code.
+
+    `git_error` is recorded rather than swallowed: an unexplained "unknown" is
+    the same absence-without-a-reason this whole field exists to avoid. Failure
+    never blocks the run — provenance is metadata for evaluation, not a
+    prerequisite for execution, and instrumentation must not become a single
+    point of failure.
+    """
+    import hashlib  # noqa: PLC0415
+    import subprocess  # noqa: PLC0415
+
+    from nemesis import __version__  # noqa: PLC0415
+
+    root = Path(__file__).resolve().parent.parent
+    info: dict = {"code_version": __version__, "git_sha": "unknown",
+                  "git_dirty": None, "git_diff_hash": None, "git_error": None}
+
+    def _git(*args: str, timeout: int = 10):
+        return subprocess.run(["git", "-C", str(root), *args],
+                              capture_output=True, text=True, timeout=timeout)
+
+    try:
+        sha = _git("rev-parse", "--short", "HEAD", timeout=5)
+        if sha.returncode == 0:
+            info["git_sha"] = sha.stdout.strip()
+        else:
+            info["git_error"] = sha.stderr.strip()[:120] or "rev-parse failed"
+
+        status = _git("status", "--porcelain", "--untracked-files=no")
+        if status.returncode == 0:
+            info["git_dirty"] = bool(status.stdout.strip())
+            if info["git_dirty"]:
+                diff = _git("diff", "HEAD", timeout=20)
+                if diff.returncode == 0:
+                    info["git_diff_hash"] = hashlib.sha256(
+                        diff.stdout.encode("utf-8", "replace")).hexdigest()[:16]
+        elif info["git_error"] is None:
+            info["git_error"] = status.stderr.strip()[:120] or "status failed"
+    except (OSError, subprocess.SubprocessError) as exc:
+        info["git_error"] = f"{type(exc).__name__}: {str(exc)[:100]}"
+    return info
+
+
 class NemesisPipeline:
     """
     Main pipeline orchestrator.
@@ -553,7 +610,8 @@ class NemesisPipeline:
 
         run_id = uuid.uuid4().hex[:12]
         run = PipelineRun(run_id=run_id, target_name=self.config.target.name)
-        self.log.info("execute.start", run_id=run_id, resume=resume)
+        self.log.info("execute.start", run_id=run_id, resume=resume,
+                      **_code_version())
 
         # Heartbeat so the dashboard can show progress while the run is still
         # in flight — results.json only lands at the very end.
@@ -2025,6 +2083,26 @@ class NemesisPipeline:
         reachability (first gains matter more than saturation) but *not* for
         exploration: 40%-to-80% should read as a real doubling, and log scaling
         flattens exactly the range worth optimising.
+
+        Reading the number — the floor is not zero. A harness that compiles and
+        runs collects 0.25 for building plus up to 0.15 for AFL activity before
+        touching the target at all, so:
+
+            0.00 - 0.39   did not build, or did not run
+            0.40 - 0.64   built and ran; target barely or never reached
+            0.65 - 0.74   target reached, exploration shallow
+            0.75 - 1.00   target reached and substantially exercised
+
+        Measured on minmea: `minmea_getdatetime` scored **0.40** with 0%
+        reachability and 0% exploration — AFL worked, the harness never touched
+        the function. `minmea_scan` scored **0.68** with 100% reachability and
+        21% exploration. Under the previous weighting those two came out at
+        roughly 0.70 and 0.88, close enough to read the first as nearly
+        working.
+
+        A hard gate zeroing the score when reachability is 0 is defensible and
+        deliberately not applied here: it would change the objective mid-way
+        through the comparison these numbers come from.
         """
         import math
 
@@ -2333,7 +2411,15 @@ class NemesisPipeline:
                 # 76.56% and the run recorded neither number, exiting 2ms after
                 # the bitmap check. Had coverage *fallen*, this path would have
                 # been equally satisfied.
-                if not result.crashes and result.source_coverage_pct < 0.0:
+                # Measured unconditionally. `TargetResult` is created once and
+                # reused across iterations, so a "have we measured yet?" guard
+                # on the field never fires past iteration 0 and the value from
+                # the previous iteration gets logged as though it were this
+                # one's — a stale number that looks plausible, which is worse
+                # than the missing number this replaced. The two measurement
+                # sites cannot both run in one iteration anyway: this branch
+                # returns, and the block below is only reached when it does not.
+                if not result.crashes:
                     src_cov = self._measure_source_coverage(target, result)
                     result.source_coverage_pct = src_cov
                     if src_cov >= 0:

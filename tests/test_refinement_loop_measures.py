@@ -110,9 +110,23 @@ def test_bitmap_log_reports_the_measurement():
     assert "quality_score" in block
 
 
-def test_measurement_is_not_repeated_when_already_taken():
-    """Iteration 0 measures in the block below; the bitmap path must not pay
-    for a second llvm-cov pass over the same corpus."""
-    result = _result(21.35)
-    should_measure = not result.crashes and result.source_coverage_pct < 0.0
-    assert should_measure is False
+def test_measurement_is_not_skipped_because_a_previous_iteration_measured():
+    """`TargetResult` is created once and reused across iterations.
+
+    A "have we measured yet?" guard on `source_coverage_pct` therefore never
+    fires past iteration 0, and the bitmap exit logs the previous iteration's
+    coverage as though it were this one's. Observed on minmea_scan: iteration 1
+    reported 21.35%, exactly iteration 0's figure, while the refined harness
+    was a different program. A stale number that looks plausible is worse than
+    the missing number it replaced.
+    """
+    import inspect
+
+    from nemesis import pipeline as pipeline_mod
+
+    src = inspect.getsource(pipeline_mod)
+    marker = src.index("fuzz_a.bitmap_expanded")
+    window = "\n".join(src[:marker].split("\n")[-40:])
+    assert "source_coverage_pct < 0" not in window, (
+        "the bitmap path must measure every iteration, not only when the field "
+        "has never been set")
