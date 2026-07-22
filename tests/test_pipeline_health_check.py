@@ -19,8 +19,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-import pytest
-
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "pipeline_health_check.py"
 
 TS = "2026-07-22T20:00:00.0Z [info     ] "

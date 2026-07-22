@@ -12,10 +12,6 @@ bitmap grew" and "the target was explored more" are different claims. Bitmap
 expansion is a reason to measure, not a reason to stop.
 """
 
-from unittest.mock import MagicMock
-
-import pytest
-
 from nemesis.models import (
     AFLStats,
     CoverageTarget,
