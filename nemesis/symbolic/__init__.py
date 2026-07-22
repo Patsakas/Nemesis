@@ -14,6 +14,7 @@ import subprocess
 from pathlib import Path
 
 from nemesis.config import NemesisConfig
+from nemesis.library_resolver import LibraryResolution, LibraryResolver
 from nemesis.logging import get_logger
 from nemesis.models import (
     AnalysisContext,
@@ -3694,86 +3695,22 @@ class InstrumentedBuilder:
         return code
 
     def _find_library(self, build_dir: Path, name: str) -> str:
-        """Search for a static library in the build tree.
+        """Path to the built library as a string, or "" if not found.
 
-        Order:
-          1. Exact path under build_dir / source_subdir / lib/.
-          2. Recursive `find` for the exact filename.
-          3. Fuzzy fallback: cmake projects rename outputs via
-             set_target_properties(... OUTPUT_NAME ...). For example,
-             libpng's `add_library(png_static STATIC)` actually produces
-             `libpng16d.a` (PNG_LIB_NAME + debug suffix). Try globs that
-             cover such renames before giving up.
+        Thin wrapper over the shared LibraryResolver so this stage and the
+        fuzzing stage can never disagree about where a library lives — they did
+        once, and the probe build failed while the harness compile succeeded,
+        which silently disabled every per-input coverage consumer for a whole
+        campaign. Returns a bare string because callers test truthiness; use
+        `resolve_library()` when the provenance matters.
         """
-        # Common locations
-        source_subdir = self.config.target.source_subdir
-        candidates = [
-            build_dir / name,
-            build_dir / "lib" / name,
-        ]
-        if source_subdir:
-            candidates.insert(0, build_dir / source_subdir / name)
-        for candidate in candidates:
-            if candidate.exists():
-                self.log.debug("library.found", path=str(candidate))
-                return str(candidate)
+        return str(self.resolve_library(build_dir, name).path or "")
 
-        # Fall back to find command (exact filename)
-        try:
-            result = subprocess.run(
-                ["find", str(build_dir), "-name", name, "-type", "f"],
-                capture_output=True, text=True, timeout=10,
-            )
-            paths = [p for p in result.stdout.strip().split("\n") if p]
-            if paths:
-                self.log.debug("library.found_via_search", path=paths[0])
-                return paths[0]
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
-
-        # Fuzzy fallback: cmake renamed the output (libpng_static.a → libpng16d.a).
-        # Derive a base prefix from the requested name, glob for variants, and
-        # pick the largest matching .a (the main library, not a helper).
-        try:
-            stem = Path(name).stem  # libpng_static
-            if stem.startswith("lib"):
-                base = stem[3:]      # png_static
-            else:
-                base = stem
-            # Strip trailing _static suffix to broaden the match
-            if base.endswith("_static"):
-                base = base[:-len("_static")]
-            # Try a couple of progressively broader globs
-            globs = [
-                f"lib{base}*.a",
-                f"lib{base[0]}*.a" if base else None,
-                "lib*.a",
-            ]
-            seen: set[str] = set()
-            best: tuple[int, str] | None = None
-            for g in globs:
-                if not g:
-                    continue
-                for hit in build_dir.rglob(g):
-                    if not hit.is_file() or str(hit) in seen:
-                        continue
-                    seen.add(str(hit))
-                    sz = hit.stat().st_size
-                    if best is None or sz > best[0]:
-                        best = (sz, str(hit))
-                if best is not None:
-                    self.log.info(
-                        "library.found_via_fuzzy_glob",
-                        requested=name,
-                        actual=best[1],
-                        size=best[0],
-                        glob=g,
-                    )
-                    return best[1]
-        except Exception as exc:
-            self.log.debug("library.fuzzy_search_failed", error=str(exc))
-
-        return ""
+    def resolve_library(self, build_dir: Path, name: str) -> LibraryResolution:
+        """Locate the built library, keeping how it was found."""
+        return LibraryResolver(
+            source_subdir=self.config.target.source_subdir, log=self.log,
+        ).resolve(build_dir, name)
 
     def _fallback_compile(
         self,

@@ -15,6 +15,7 @@ from collections.abc import Callable
 from pathlib import Path
 
 from nemesis.config import NemesisConfig
+from nemesis.library_resolver import LibraryResolution, LibraryResolver
 from nemesis.logging import get_logger
 from nemesis.models import (
     CWE,
@@ -1389,43 +1390,23 @@ class AFLOrchestrator:
         }
 
     def _resolve_library_archive(self, build_dir: Path) -> Path | None:
-        """Locate the static archive in a build tree.
+        """Locate the built library, via the shared resolver.
 
-        This used to be `build_dir / library_name`, which assumes cmake drops
-        the archive at the build root. libnmea sets ARCHIVE_OUTPUT_DIRECTORY, so
-        the file lands at `build_fuzz/lib/libnmea.a` and the concatenation
-        missed it. The harness compile survived that (it resolves via the
-        symbolic builder's `_find_library`, which knows about `lib/`), so the
-        run looked healthy — but the probe build failed with `undefined
-        reference to nmea_parse`, no analysis binary was produced, and afl-cmin
-        then reported an empty result and minimised nothing. Silent degradation
-        of every per-input coverage consumer.
-
-        Mirrors `SymbolicStage.builder._find_library` resolution order.
+        This used to be `build_dir / library_name`, a second and divergent
+        answer to a question the symbolic stage already answered properly.
+        libnmea sets ARCHIVE_OUTPUT_DIRECTORY, so the archive lands at
+        `build_fuzz/lib/libnmea.a`: the harness compile found it, this did not,
+        and the probe build failed with `undefined reference to nmea_parse`
+        while the run reported success throughout.
         """
-        name = self.config.target.library_name
-        if not name:
-            return None
+        resolution = self.resolve_library(build_dir)
+        return resolution.path
 
-        source_subdir = self.config.target.source_subdir
-        candidates = []
-        if source_subdir:
-            candidates.append(build_dir / source_subdir / name)
-        candidates += [build_dir / name, build_dir / "lib" / name]
-        for candidate in candidates:
-            if candidate.exists():
-                return candidate
-
-        # The archive may sit anywhere in the tree (nested subproject builds).
-        found = sorted(build_dir.rglob(Path(name).name))
-        if found:
-            self.log.debug("analysis_binary.library_found_by_search",
-                           path=str(found[0]))
-            return found[0]
-
-        self.log.warning("analysis_binary.library_not_found",
-                         name=name, build_dir=str(build_dir))
-        return None
+    def resolve_library(self, build_dir: Path) -> LibraryResolution:
+        """Locate the built library, keeping how it was found."""
+        return LibraryResolver(
+            source_subdir=self.config.target.source_subdir, log=self.log,
+        ).resolve(build_dir, self.config.target.library_name)
 
     def _measured_fieldspec(self, seeds_dir: Path) -> dict | None:
         """Derive a fieldspec by probing the instrumented binary, or None.
