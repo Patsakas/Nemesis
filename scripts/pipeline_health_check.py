@@ -278,9 +278,56 @@ def check_metric_provenance(log: str) -> Check:
                 "iteration they are attributed to", reported=len(reported))
 
 
+def check_reachability_confidence(log: str) -> Check:
+    """Provenance. Inferred reachability must not be reported as measured.
+
+    `variant.profile` falls back to the AFL bitmap when a GDB breakpoint misses
+    the target — reasonable, since breakpoints fail on inlined, static and
+    renamed functions. But `bitmap_cvg` is the edge map for the whole binary,
+    harness included, and the threshold is 3%, which any harness that runs at
+    all clears. The result is then stated as a certainty:
+
+        coverage_pct = 100.0 if function_reached else 0.0
+
+    Measured on minmea_getdatetime: the GDB check reported `hits=0 pct=0.0`
+    over ten inputs while the fallback saw 63.85% bitmap and recorded complete
+    reachability.
+
+    This does not object to the fallback. It objects to the loss of the
+    distinction: a run where the override fired cannot tell a measured 100%
+    from an inferred one, so any reachability figure downstream — including the
+    quality score's 0.25 term — carries unearned confidence.
+    """
+    c = Check("reachability_confidence", "provenance")
+    overrides = _events(log, "variant.profile.bitmap_reach_override")
+    if not overrides:
+        return c.na("no reachability inferred from the bitmap fallback",
+                    overrides=0)
+
+    # One event per harness variant, not per target — the profiler runs on each
+    # candidate. Counting events as targets overstates the spread; reporting
+    # both is what shows whether one awkward function or the whole run is
+    # affected.
+    by_func: dict[str, list[float]] = {}
+    for e in overrides:
+        func = re.search(r"\bfunc=(\S+)", e)
+        pct = _floats(e, "bitmap_pct")
+        by_func.setdefault(func.group(1) if func else "?", []).append(pct or 0.0)
+
+    detail = "; ".join(
+        f"{f} ({len(v)}x, bitmap {min(v)}–{max(v)}%)" for f, v in
+        sorted(by_func.items())[:4])
+    return c.fail(
+        f"reachability inferred from whole-binary bitmap activity and recorded "
+        f"as measured: {len(overrides)} variant profile(s) across "
+        f"{len(by_func)} target(s) — {detail}",
+        overrides=len(overrides), targets=len(by_func),
+        lowest_bitmap_pct=min(min(v) for v in by_func.values()))
+
+
 CHECKS = [check_variadic_gate, check_closed_loop, check_coverage_recorded,
           check_score_consumes_coverage, check_score_explainable,
-          check_metric_provenance]
+          check_metric_provenance, check_reachability_confidence]
 
 
 def main() -> int:

@@ -219,6 +219,36 @@ def test_provenance_not_exercised_without_a_terminal_metric(tmp_path):
                      "metric_provenance") == "not_exercised"
 
 
+# ── reachability_confidence [provenance] ────────────────────
+
+OVERRIDE = ("variant.profile.bitmap_reach_override bitmap_pct=63.85 "
+            "func=minmea_getdatetime reason='GDB breakpoint missed but bitmap "
+            "indicates code reached' stage=symbolic.builder")
+
+
+def test_reachability_confidence_fails_when_reach_is_inferred(tmp_path):
+    """The measured case: GDB reported 0 of 10 inputs reaching the target while
+    the fallback saw 63.85% whole-binary bitmap and recorded 100%."""
+    r = run(tmp_path, [OVERRIDE, COV_OK, SCORE_FULL, BITMAP_OK])
+    assert status_of(r, "reachability_confidence") == "fail"
+
+
+def test_reachability_confidence_not_exercised_without_a_fallback(tmp_path):
+    """A run where every target was confirmed by breakpoint has nothing to
+    report — which is not the same as the fallback being safe."""
+    assert status_of(run(tmp_path, [COV_OK, SCORE_FULL]),
+                     "reachability_confidence") == "not_exercised"
+
+
+def test_inference_does_not_disturb_the_other_checks(tmp_path):
+    """The objection is to the lost distinction, not to coverage being absent —
+    everything else on the same log still passes."""
+    r = run(tmp_path, [OVERRIDE, COV_ITER0, COV_ITER1, BITMAP_ITER1, SCORE_FULL])
+    assert status_of(r, "coverage_recorded") == "pass"
+    assert status_of(r, "metric_provenance") == "pass"
+    assert status_of(r, "reachability_confidence") == "fail"
+
+
 # ── rollup ──────────────────────────────────────────────────
 
 

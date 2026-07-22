@@ -43,6 +43,23 @@ def score(**kw) -> float:
     return NemesisPipeline._compute_harness_quality_score(result(**kw))
 
 
+# Named data points, because a bare 0.68 is not enough to identify a case.
+# Writing this file, MEASURED_SHALLOW and SYNTHETIC_BUSY_SHALLOW were confused
+# with each other: same reachability, same exploration, different AFL activity,
+# different score. The scalar looked interchangeable; the situations are not.
+# `source` distinguishes what a run actually produced from what was constructed
+# to probe the formula.
+
+MEASURED_UNREACHABLE = dict(  # minmea_getdatetime iteration 0, logged 0.4
+    reach=0.0, explore=0.0, paths=726, density=44.26)
+MEASURED_SHALLOW = dict(      # minmea_scan iteration 0, logged 0.6819
+    reach=100.0, explore=21.35, paths=10, density=8.24)
+SYNTHETIC_BUSY_SHALLOW = dict(  # constructed: many paths, still 21% explored
+    reach=100.0, explore=21.35, paths=726, density=44.26)
+SYNTHETIC_DEEP = dict(          # the 76.56% harness, at identical AFL activity
+    reach=100.0, explore=76.56, paths=726, density=44.26)
+
+
 # ── the measured counterexample ─────────────────────────────
 
 
@@ -118,30 +135,70 @@ def test_score_stays_in_range():
 
 
 def test_unreachable_target_lands_in_the_ran_but_useless_band():
-    """minmea_getdatetime, measured: 0% reachability, 0% exploration, AFL busy.
-
-    The floor is not zero — building and running are worth 0.40 before the
+    """The floor is not zero — building and running are worth 0.40 before the
     target is touched. Anyone reading a raw score needs that, or 0.40 looks
     like partial success."""
-    s = score(reach=0.0, explore=0.0, paths=726, density=44.26)
-    assert s == pytest.approx(0.40, abs=0.01)
+    assert score(**MEASURED_UNREACHABLE) == pytest.approx(0.40, abs=0.01)
 
 
 def test_reached_but_shallow_lands_above_never_reached():
-    """minmea_scan iteration 0 as it actually ran: 100% reachability, 21.35%
-    exploration, and modest AFL activity (10 paths, 8.24% density). The
-    pipeline logged 0.6819 for exactly these inputs."""
-    useless = score(reach=0.0, explore=0.0, paths=726, density=44.26)
-    shallow = score(reach=100.0, explore=21.35, paths=10, density=8.24)
-    assert shallow == pytest.approx(0.68, abs=0.01)
-    assert shallow > useless
+    """The pipeline logged 0.6819 for exactly these inputs — note the modest
+    AFL activity, which is what separates this from SYNTHETIC_BUSY_SHALLOW."""
+    assert score(**MEASURED_SHALLOW) == pytest.approx(0.68, abs=0.01)
+    assert score(**MEASURED_SHALLOW) > score(**MEASURED_UNREACHABLE)
 
 
-def test_band_order_holds_across_the_three_measured_cases():
-    """Held at identical AFL activity so the ordering comes from reachability
-    and exploration, not from how busy the fuzzer happened to be."""
-    never = score(reach=0.0, explore=0.0, paths=726, density=44.26)
-    shallow = score(reach=100.0, explore=21.35, paths=726, density=44.26)
-    deep = score(reach=100.0, explore=76.56, paths=726, density=44.26)
+def test_band_order_holds_at_identical_afl_activity():
+    """Paths and density held constant, so the ordering comes from reachability
+    and exploration rather than from how busy the fuzzer happened to be."""
+    never = score(**MEASURED_UNREACHABLE)
+    shallow = score(**SYNTHETIC_BUSY_SHALLOW)
+    deep = score(**SYNTHETIC_DEEP)
     assert never < shallow < deep
     assert deep >= 0.75, "substantial exploration must reach the top band"
+
+
+# ── properties, not fixtures ────────────────────────────────
+
+
+@pytest.mark.parametrize("paths,density", [
+    (0, 0.0), (10, 8.24), (100, 20.0), (726, 44.26), (10_000, 100.0),
+])
+def test_activity_cannot_lift_an_unreachable_harness(paths: int, density: float):
+    """With the target never reached, no amount of fuzzer activity may raise
+    the score above the "ran, touched nothing" ceiling.
+
+    Stated as a property over the whole activity range rather than a single
+    pair, because the failure it guards against is gradual: the old weighting
+    gave activity 0.40 of the total, so a busy harness climbed steadily without
+    ever reaching its target. Observed on minmea_getdatetime — bitmap grew by
+    56.64 between iterations and the score stayed at 0.40.
+    """
+    assert score(reach=0.0, explore=0.0, paths=paths, density=density) <= 0.40
+
+
+def test_exploration_outweighs_maximum_activity():
+    """A quiet harness that exercises the target must beat a busy one that does
+    not. Otherwise the score still rewards the fuzzer working hard in the wrong
+    place."""
+    busy_useless = score(reach=0.0, explore=0.0, paths=10_000, density=100.0)
+    quiet_useful = score(reach=100.0, explore=50.0, paths=0, density=0.0)
+    assert quiet_useful > busy_useless
+
+
+@pytest.mark.parametrize("explore", [0.0, 10.0, 40.0, 80.0, 100.0])
+def test_score_is_monotonic_in_exploration(explore: float):
+    """More of the target exercised is never worth less, at fixed everything
+    else."""
+    lower = score(reach=100.0, explore=max(explore - 10.0, 0.0),
+                  paths=100, density=20.0)
+    higher = score(reach=100.0, explore=explore, paths=100, density=20.0)
+    assert higher >= lower
+
+
+def test_the_two_shallow_cases_are_not_the_same_point():
+    """Same reachability, same exploration, different AFL activity — and so a
+    different score. Conflating them is the mistake that made this file's
+    fixtures named."""
+    assert score(**MEASURED_SHALLOW) != pytest.approx(
+        score(**SYNTHETIC_BUSY_SHALLOW), abs=0.01)

@@ -4,8 +4,27 @@ Deliberately open items, with the evidence that identified them. Recorded here
 rather than fixed immediately when a fix would add a variable to an experiment
 already in flight, or when the gap is itself worth measuring first.
 
+Everything here has been observed in a run. Hypotheses do not belong on this
+list — a reader must be able to treat every entry as a report of something that
+happened.
+
 `scripts/pipeline_health_check.py` reports several of these against any run log,
 so they stay visible instead of living in a conversation.
+
+## The shape most of these share
+
+Three of the entries below are the same mistake at different layers:
+
+| where | what failed | what was recorded |
+|---|---|---|
+| triage | crash analysis timed out | `unique_crashes=0` |
+| metrics | no measurement for this iteration | the previous iteration's value |
+| reachability | GDB breakpoint missed the target | `function_reached=True`, 100% |
+
+In each, **uncertainty was collapsed into a definitive state**. Not one of them
+produced an error, a warning that changed a decision, or a number that looked
+wrong. A pipeline that says "I could not tell" is far easier to trust than one
+that answers confidently when it could not measure.
 
 ---
 
@@ -74,6 +93,59 @@ options, and an explicit triage result type where a timeout increments an
 
 **Deferred until:** the current evaluation run completes. Both changes touch
 the triage path the run is exercising.
+
+---
+
+## function_reachability_proxy_overclaims — inferred reach reported as measured
+
+**Status:** open. Affects the correctness of the reachability metric, which
+feeds both the quality score and the refinement trigger.
+
+**Evidence.** minmea run 2026-07-22, target `minmea_getdatetime`. Two mechanisms
+answered the same question and the indirect one won:
+
+| method | result |
+|---|---|
+| `post_fuzz_cov` — GDB breakpoint on the target | `hits=0 pct=0.0 samples=10` |
+| `variant.profile` — AFL bitmap fallback | `bitmap_pct=63.85` |
+| what the pipeline recorded | `function_reached=True`, `coverage_pct=100.0` |
+
+Not zero of ten inputs reached the function, and the pipeline recorded complete
+reachability.
+
+**Cause.**
+
+```python
+# Fix 116: Bitmap-based reach fallback — if GDB says not reached but
+# AFL achieved significant bitmap coverage, the function IS being exercised.
+if not function_reached and bitmap_pct > 3.0:
+    function_reached = True
+
+coverage_pct = 100.0 if function_reached else 0.0
+```
+
+The fallback itself is reasonable: GDB breakpoints do fail on inlined, static
+and renamed functions, and without it those targets would read as unreachable.
+Two things go wrong around it.
+
+The evidence changes semantic level. `bitmap_cvg` is the AFL edge map for the
+**whole binary**, harness included; it says nothing about one function. A 3%
+threshold is cleared by any harness that runs at all — this one measured 63.85%
+while reaching the target zero times.
+
+And the uncertainty is discarded. `coverage_pct = 100.0 if function_reached`
+turns a proxy inference into a stated certainty, with no way downstream to tell
+a measured 100% from an inferred one.
+
+**Required direction.** Keep inferred reach separate from measured reach:
+`function_reached` set only by function-specific evidence, bitmap activity kept
+as its own metric, and a confidence field distinguishing `direct` / `inferred` /
+`unknown`. Never convert proxy evidence into a boolean function coverage.
+
+**Consequence for in-flight work.** Any reachability figure from this run is
+suspect where GDB missed. That includes target 3 (`main` from `tests.c`): a high
+reachability there will not, on its own, distinguish "reached `main`" from
+"binary was busy and the fallback fired".
 
 ---
 
