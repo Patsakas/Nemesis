@@ -286,6 +286,8 @@ class IntrospectorParser:
                 continue
             if any(fnmatch.fnmatch(Path(rel_path).name, pat) for pat in exclude_files):
                 continue
+            if self._is_harness_function(name):
+                continue
 
             line_begin = int(func.get("source_line_begin", 0))
             line_end = int(func.get("source_line_end", line_begin))
@@ -341,6 +343,7 @@ class IntrospectorParser:
                     break
 
             score += self._vuln_pattern_score(signature, [])
+            score += self._entry_point_score(signature, name)
             score += self._git_history_bonus(rel_path)
 
             is_static = self._is_static_function(name, rel_path)
@@ -601,7 +604,11 @@ class IntrospectorParser:
                     continue
 
                 func_name = self._find_enclosing_function(lines, i - 1)
-                if not func_name or self._is_duplicate(targets, func_name):
+                if (
+                    not func_name
+                    or self._is_harness_function(func_name)
+                    or self._is_duplicate(targets, func_name)
+                ):
                     continue
 
                 # Base score
@@ -629,6 +636,13 @@ class IntrospectorParser:
 
                 # Vulnerability pattern bonus: dangerous constructs score higher
                 score += self._vuln_pattern_score(line, window)
+
+                # Entry-point reachability: can fuzzer bytes even get in here?
+                # Everything above scores how dangerous the code looks; this
+                # scores whether we can drive it at all. See _entry_point_score.
+                score += self._entry_point_score(
+                    self._extract_signature(lines, func_start_idx), func_name
+                )
 
                 # Config-driven scoring bonuses/penalties
                 fname = Path(rel_path).name
@@ -720,30 +734,269 @@ class IntrospectorParser:
 
         return max(bonus, 0.0)
 
+    # ── entry-point reachability ────────────────────────────
+
+    # A function can only be fuzzed through parameters that carry bytes we
+    # control. These are the byte-buffer element types; `struct foo *` and
+    # `FILE *` are deliberately NOT here (handled separately / not at all).
+    _BUFFER_TYPES = ("char", "uint8_t", "int8_t", "byte", "void", "uchar")
+    # Scalar types that plausibly carry a length alongside a buffer.
+    _LENGTH_TYPES = ("size_t", "ssize_t", "int", "unsigned", "long", "uint32_t",
+                     "uint64_t", "uint16_t")
+    _LENGTH_NAMES = ("len", "length", "size", "sz", "count", "n", "nbytes", "num")
+    # Lifecycle verbs: these run before/after parsing and take their data from
+    # the environment (getenv, a directory listing, a global registry), not from
+    # the caller — so they are near-useless as fuzz entry points.
+    _LIFECYCLE_VERBS = ("load", "unload", "init", "register", "unregister",
+                        "create", "destroy", "cleanup", "alloc", "free", "open",
+                        "close", "setup", "teardown", "new", "delete")
+    # Verbs that consume caller-supplied bytes.
+    _CONSUMER_VERBS = ("parse", "decode", "read", "validate", "process",
+                       "consume", "deserial", "unpack", "extract", "scan",
+                       "load_from", "from_buffer", "from_string")
+
+    def _split_params(self, signature: str) -> list[str] | None:
+        """Return the parameter list of a C signature, or None if unparseable.
+
+        An empty list means the function genuinely takes no arguments —
+        `f()` and `f(void)` both yield [].
+        """
+        start = signature.find("(")
+        if start < 0:
+            return None
+        depth = 0
+        end = -1
+        for i in range(start, len(signature)):
+            if signature[i] == "(":
+                depth += 1
+            elif signature[i] == ")":
+                depth -= 1
+                if depth == 0:
+                    end = i
+                    break
+        if end < 0:
+            return None
+        inner = signature[start + 1:end].strip()
+        if not inner or inner == "void":
+            return []
+        # Split on top-level commas only (function-pointer params nest parens).
+        params, depth, buf = [], 0, ""
+        for ch in inner:
+            if ch in "([":
+                depth += 1
+            elif ch in ")]":
+                depth -= 1
+            if ch == "," and depth == 0:
+                params.append(buf.strip())
+                buf = ""
+            else:
+                buf += ch
+        if buf.strip():
+            params.append(buf.strip())
+        return params
+
+    def _entry_point_score(self, signature: str, func_name: str) -> float:
+        """
+        Score how plausibly this function can be driven by fuzzer bytes.
+
+        The rest of the scoring measures how *dangerous* a function looks
+        (pointer arithmetic, malloc/memcpy, branch density). Nothing measured
+        whether the function can receive attacker-controlled input at all, and
+        those two are not the same question. libnmea made the gap concrete: a
+        loader whose whole signature is
+
+            int nmea_load_parsers();
+
+        ranked #1 because it mallocs and walks a pointer list, while
+
+            nmea_s *nmea_parse(char *sentence, size_t length, int check);
+
+        — the canonical (buffer, length) entry point sitting in the public
+        header — ranked lower. The generated harness was correct for the
+        function it was given; it just discarded the fuzz input, because there
+        was nowhere to put it. Every pipeline stage reported success while
+        fuzzing nothing.
+
+        A zero-argument function is penalised, not excluded: it can still be a
+        valid target when it reads a global the harness sets up, but it should
+        have to outrank real entry points on other evidence to get there.
+        """
+        score = 0.0
+        params = self._split_params(signature)
+
+        if params is not None:
+            has_buffer = has_length = has_stream = False
+            for p in params:
+                low = p.lower()
+                if "*" in low and any(t in low for t in self._BUFFER_TYPES):
+                    has_buffer = True
+                elif "file" in low and "*" in low:
+                    has_stream = True
+                elif "*" not in low and (
+                    any(t in low for t in self._LENGTH_TYPES)
+                    or any(re.search(rf"\b{n}\b", low) for n in self._LENGTH_NAMES)
+                ):
+                    has_length = True
+
+            if has_buffer and has_length:
+                score += 8.0      # canonical fuzz entry point
+            elif has_buffer:
+                score += 4.0
+            elif has_stream:
+                score += 3.0
+            elif not params:
+                # No parameters at all — nothing for the harness to feed.
+                score -= 10.0
+
+        low_name = func_name.lower()
+        if any(v in low_name for v in self._LIFECYCLE_VERBS):
+            score -= 5.0
+        if any(v in low_name for v in self._CONSUMER_VERBS):
+            score += 3.0
+        return score
+
+    def _extract_signature(self, lines: list[str], start_idx: int) -> str:
+        """Join a K&R-style definition from its name line until the params close.
+
+        `_find_function_start_line` points at the line holding `name(...`, with
+        the return type on the line above, so the parameter list starts there
+        but may wrap across several lines.
+        """
+        if start_idx < 0 or start_idx >= len(lines):
+            return ""
+        buf = ""
+        for ln in lines[start_idx:start_idx + 10]:
+            buf += " " + ln.strip()
+            if ")" in buf and buf.count("(") <= buf.count(")"):
+                break
+        return buf.strip()
+
+    # Everything up to the first `(`: a leading identifier followed by any mix
+    # of identifiers, whitespace and `*` (i.e. a return type and qualifiers).
+    _FUNC_HEAD_RE = re.compile(r"^([A-Za-z_][\w\s\*]*?)\(")
+    _NOT_FUNC_NAMES = ("if", "for", "while", "switch", "return", "sizeof", "do",
+                       "else", "case", "goto")
+
+    def _definition_name(self, line: str) -> str | None:
+        """Name of the function whose definition this line opens, or None.
+
+        The previous pattern was `^(\\w+)\\s*\\(`, which requires the line to
+        *begin* with the function name — true only for K&R layout:
+
+            nmea_s *
+            nmea_parse(char *sentence, size_t length, int check)
+
+        Every other C project on earth writes the return type on the same line:
+
+            bool minmea_parse_rmc(struct minmea_sentence_rmc *frame, ...)
+            static int hex2int(char c)
+
+        and matched nothing, so `_find_enclosing_function` returned None for
+        every line and `_scan_local_source` produced *zero* candidates. libnmea
+        only worked because it happens to use K&R. Since the local scan is the
+        sole target source for any project not in OSS-Fuzz, this silently
+        emptied the pipeline for exactly the projects it exists to serve.
+        """
+        head_m = self._FUNC_HEAD_RE.match(line.strip())
+        if not head_m:
+            return None
+        head = head_m.group(1)
+        if "=" in head or ";" in head:
+            return None            # an expression or initialiser, not a header
+        tokens = re.findall(r"[A-Za-z_]\w*", head)
+        if not tokens:
+            return None
+        if tokens[0] in self._NOT_FUNC_NAMES:
+            return None            # `return foo(`, `if (`, `case x(` …
+        name = tokens[-1]
+        return None if name in self._NOT_FUNC_NAMES else name
+
+    def _is_function_definition(self, lines: list[str], idx: int) -> bool:
+        """True if lines[idx] opens a definition rather than a call statement.
+
+        `free(data);` and `nmea_parse(char *s, size_t n)` both match
+        name-then-paren. Only a definition is followed by a body, so require the
+        parameter list to close and a brace to follow. Without this the scanner
+        happily reports `printf` and `free` as fuzz targets, because it picked
+        them up from call sites.
+        """
+        buf = ""
+        for j in range(idx, min(idx + 8, len(lines))):
+            s = lines[j].strip()
+            buf += " " + s
+            if buf.count("(") > buf.count(")"):
+                continue          # parameter list still open (wrapped params)
+            if s.endswith(";"):
+                return False      # a call statement, or a prototype
+            if s.endswith("{"):
+                return True
+            for k in range(j + 1, min(j + 3, len(lines))):
+                nxt = lines[k].strip()
+                if not nxt:
+                    continue
+                return nxt.startswith("{")
+            return False
+        return False
+
     def _find_function_start_line(self, lines: list[str], idx: int) -> int:
-        """Return the 0-based line index where the enclosing function definition starts."""
-        func_pattern = re.compile(r"^(\w+)\s*\(")
-        for i in range(idx, max(idx - 100, 0), -1):
-            line = lines[i].strip()
-            m = func_pattern.match(line)
-            if m and m.group(1) not in ("if", "for", "while", "switch", "return"):
+        """Return the 0-based line index where the enclosing function definition starts.
+
+        The backward walk stops at a column-0 `}` — that is the end of the
+        *previous* function, so continuing past it would attribute this line to
+        a function it does not belong to. This bound is what makes an unlimited
+        lookback safe, and an unlimited lookback is what this needs: libnmea's
+        `nmea_parse` body puts its first interesting line 54 lines below the
+        signature, and the old fixed 50-line window returned no name at all, so
+        the canonical `(buffer, length)` entry point was dropped before scoring.
+        """
+        for i in range(idx, -1, -1):
+            raw = lines[i]
+            if i < idx and raw.startswith("}"):
+                return -1
+            if (
+                self._definition_name(raw) is not None
+                and self._is_function_definition(lines, i)
+            ):
                 return i
         return -1
 
     def _find_enclosing_function(self, lines: list[str], idx: int) -> str | None:
-        """Look backwards from idx to find the function name."""
-        import re
-        func_pattern = re.compile(r"^(\w+)\s*\(")
+        """Name of the function containing lines[idx], or None.
 
-        for i in range(idx, max(idx - 50, 0), -1):
-            line = lines[i].strip()
-            m = func_pattern.match(line)
-            if m and m.group(1) not in ("if", "for", "while", "switch", "return"):
-                return m.group(1)
-        return None
+        Derived from `_find_function_start_line` so the two can never disagree:
+        when they used different lookback windows, a long function yielded a
+        valid start index and a None name, and the candidate was silently
+        discarded.
+        """
+        start = self._find_function_start_line(lines, idx)
+        if start < 0:
+            return None
+        return self._definition_name(lines[start])
 
     def _is_duplicate(self, targets: list[CoverageTarget], name: str) -> bool:
         return any(t.func_name == name for t in targets)
+
+    # libFuzzer entry points, and the names AFL/OSS-Fuzz harnesses conventionally
+    # use. A harness is the thing we generate, never the thing we target.
+    _HARNESS_FUNCS = frozenset({
+        "LLVMFuzzerTestOneInput", "LLVMFuzzerInitialize", "LLVMFuzzerCustomMutator",
+        "LLVMFuzzerCustomCrossOver", "FuzzerTestOneInput", "fuzz_one", "fuzz_target",
+    })
+
+    def _is_harness_function(self, name: str) -> bool:
+        """True for functions that are themselves fuzz harnesses.
+
+        minmea ships a ClusterFuzzLite harness, and recon ranked its
+        `LLVMFuzzerTestOneInput` as target #2 — a fuzzing framework selecting a
+        fuzz harness as its fuzz target. Beyond being useless, it is circular:
+        the generated harness would wrap an existing harness, and the coverage
+        attributed to "the library" would partly be the other harness's own
+        setup code.
+
+        Name-level, so it holds regardless of where the file lives or what it
+        is called; the path/filename exclusions are the second line of defence.
+        """
+        return name in self._HARNESS_FUNCS or name.startswith("LLVMFuzzer")
 
 
 class CallChainTracer:

@@ -122,8 +122,16 @@ class IntrospectorConfig(BaseModel):
     api_url: str = "https://introspector.oss-fuzz.com/api"
     coverage_threshold_pct: float = 5.0
     prioritize_memory_ops: bool = True
-    exclude_files: list[str] = Field(default_factory=lambda: ["fuzz_*.c"])
-    exclude_dirs: list[str] = Field(default_factory=lambda: ["test", "contrib", "build"])
+    # Harness sources are never fuzz targets. `fuzz_*.c` alone missed minmea's
+    # ClusterFuzzLite harness at .clusterfuzzlite/fuzzer.c, whose
+    # LLVMFuzzerTestOneInput then ranked as target #2.
+    exclude_files: list[str] = Field(default_factory=lambda: [
+        "fuzz_*.c", "fuzzer.c", "fuzz.c", "*_fuzzer.c", "*_fuzz.c",
+    ])
+    exclude_dirs: list[str] = Field(default_factory=lambda: [
+        "test", "tests", "contrib", "build",
+        "fuzz", "fuzzing", ".clusterfuzzlite", "oss-fuzz",
+    ])
     enable_enrichment: bool = True
     enrichment_batch_size: int = 10
 

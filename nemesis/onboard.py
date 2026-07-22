@@ -883,11 +883,18 @@ class TargetOnboarder:
             if n and n not in name_variants:
                 name_variants.append(n)
 
-        # ── include_subdir: include/{variant}/ > include/ > src/{variant}/ > lib/ > source_subdir ──
+        # ── include_subdir: include/{variant}/ > include/ > inc/ > src/{variant}/ > lib/ > source_subdir ──
         inc_candidates: list[str] = []
         for n in name_variants:
             inc_candidates.append(f"include/{n}")
         inc_candidates.append("include")
+        # Embedded-C layout: headers live at inc/ (embedded-nmea-0183: inc/nmea.h),
+        # a widespread convention in firmware/RTOS trees (also Inc/ in ST projects).
+        # Ranked right after include/ because it plays the exact same role.
+        for n in name_variants:
+            inc_candidates.append(f"inc/{n}")
+        inc_candidates.append("inc")
+        inc_candidates.append("Inc")
         # libwebp layout: public headers live at src/{variant}/ (src/webp/*.h),
         # NOT include/{variant}/. Without this branch the onboarder leaves
         # harness_includes empty and the architect has no API surface to scan.
@@ -1069,7 +1076,7 @@ class TargetOnboarder:
         # to find the .a archive.
         #   - *_SHARED / *_FRAMEWORK              → OFF (no shared libs)
         #   - *_STATIC                             → ON  (need static archive)
-        #   - *_TESTS / *_BUILD_TESTING / *_EXAMPLES / *_TOOLS / *_DEMO → OFF
+        #   - *_TESTS / *_TESTING / *_EXAMPLES / *_TOOLS / *_DEMO → OFF
         extra_cmake_flags: list[str] = []
         seen_opts: set[str] = set()
         # link_text_parts already contains every CMakeLists + *.cmake we collected.
@@ -1095,13 +1102,22 @@ class TargetOnboarder:
                     upper.endswith("_SHARED")
                     or upper.endswith("_FRAMEWORK")
                     or upper.endswith("_TESTS")
-                    or upper.endswith("_BUILD_TESTING")
+                    or upper.endswith("_TEST")
+                    # `_TESTING` subsumes the older `_BUILD_TESTING` entry and
+                    # also catches cmake's stock BUILD_TESTING plus the
+                    # {PROJECT}_ENABLE_TESTING spelling (minmea). That one is
+                    # default-ON and pulls in libcheck via pkg_check_modules,
+                    # so without this the configure step fails outright on a
+                    # dependency we never needed for fuzzing.
+                    or upper.endswith("_TESTING")
                     or upper.endswith("_EXAMPLES")
+                    or upper.endswith("_EXAMPLE")
                     or upper.endswith("_DEMO")
                     or upper.endswith("_DEMOS")
                     or upper.endswith("_TOOLS")
                     or upper.endswith("_DOCS")
                     or upper.endswith("_BENCH")
+                    or upper.endswith("_BENCHMARK")
                     or upper.endswith("_BENCHMARKS")
                 ):
                     extra_cmake_flags.append(f"-D{name}=OFF")

@@ -1,0 +1,30 @@
+{
+  "_comment": [
+    "Acceptance bounds for reproduce.sh. This benchmark measures a fuzzing run,",
+    "so exact equality is not reproducible: harness text is LLM-generated and",
+    "AFL++ throughput depends on core count and scheduling. What IS reproducible",
+    "is the methodology and the shape of the result, so the bounds are set",
+    "generously below the observed reference run — a pass means the pipeline",
+    "still works end-to-end, not that it produced identical numbers.",
+    "",
+    "Reference run 2026-07-22: 16 cores, 4 instances, 900 s.",
+    "  selected=nmea_parse, lines 89.37%, functions 88.46%, 47,863,002 execs,",
+    "  0 crashes, corpus 370."
+  ],
+
+  "selected_target": "nmea_parse",
+  "selected_target_rationale": "the only assertion here that is deterministic: recon ranking is a pure function of the source tree",
+
+  "min_line_coverage_pct": 70.0,
+  "min_function_coverage_pct": 70.0,
+  "min_functions_covered": 18,
+  "min_corpus_entries": 100,
+  "min_total_execs": 5000000,
+
+  "max_crashes": 0,
+  "max_hangs": 0,
+  "_max_crashes_note": "libnmea has no known memory-safety defect reachable this way. A crash here is a finding to investigate, not a pass — hence the run FAILS so it cannot be ignored.",
+
+  "require_input_influence": true,
+  "_require_input_influence_note": "the probe binary must produce >1 distinct coverage map across corpus samples. This is the check that would have caught the nmea_load_parsers harness, which compiled, ran, and consumed nothing."
+}

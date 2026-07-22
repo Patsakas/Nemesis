@@ -154,11 +154,21 @@ introspector:
   # Prevents NEMESIS harnesses from appearing as scan targets
   exclude_files:
     - "fuzz_*.c"
+    - "fuzzer.c"
+    - "fuzz.c"
+    - "*_fuzzer.c"
+    - "*_fuzz.c"
   # Directory name components to exclude (matched against any part of the path)
   exclude_dirs:
     - "test"
+    - "tests"
     - "contrib"
     - "build"
+    # Upstream harness trees: a project's own fuzzers are not fuzz targets.
+    - "fuzz"
+    - "fuzzing"
+    - ".clusterfuzzlite"
+    - "oss-fuzz"
   # Enrich targets with per-function headers and existing harness info
   enable_enrichment: true
   enrichment_batch_size: 10

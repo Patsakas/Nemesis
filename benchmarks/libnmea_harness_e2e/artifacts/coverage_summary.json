@@ -1,0 +1,23 @@
+{
+  "lines": {
+    "count": 367,
+    "covered": 328,
+    "percent": 89.37
+  },
+  "functions": {
+    "count": 26,
+    "covered": 23,
+    "percent": 88.46
+  },
+  "regions": {
+    "count": 298,
+    "covered": 269,
+    "percent": 90.27
+  },
+  "branches": {
+    "count": 180,
+    "covered": 147,
+    "percent": 81.67
+  },
+  "_scope": "Only source files carrying LLVM coverage mapping. For libnmea that is 4 of 11 files \u2014 the other sentence parsers are stripped of mapping by the objcopy --redefine-sym PRE_LINK step. See README.md."
+}

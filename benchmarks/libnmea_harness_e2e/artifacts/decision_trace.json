@@ -1,0 +1,156 @@
+{
+  "target": "libnmea",
+  "question": "which function does recon pick as the fuzz target, with no human pinning?",
+  "method": "nemesis.recon.IntrospectorParser._scan_local_source() over a clean libnmea checkout, bare NemesisConfig (no target yaml), run once against the pre-fix commit and once against the fixed tree. The only variable is the recon code.",
+  "before": {
+    "revision": "4eded43 (pre-fix)",
+    "candidate_count": 11,
+    "selected": "nmea_load_parsers",
+    "selected_is_fuzzable": false,
+    "why": "int nmea_load_parsers() takes zero arguments. The harness generated for it discards the fuzz buffer; see harnesses/nmea_load_parsers.BROKEN.c"
+  },
+  "after": {
+    "revision": "working tree (5 recon fixes)",
+    "candidate_count": 11,
+    "selected": "nmea_parse",
+    "selected_is_fuzzable": true,
+    "why": "nmea_s *nmea_parse(char *sentence, size_t length, int check_checksum) \u2014 the canonical (buffer, length) entry point, declared in the public header. It was not a candidate at all before the fixes."
+  },
+  "ranking": [
+    {
+      "function": "nmea_parse",
+      "file": "src/nmea/nmea.c",
+      "rank_before": null,
+      "score_before": null,
+      "rank_after": 1,
+      "score_after": 23.5,
+      "note": "not a candidate before the fixes"
+    },
+    {
+      "function": "_get_so_files",
+      "file": "src/nmea/parser.c",
+      "rank_before": 2,
+      "score_before": 12.5,
+      "rank_after": 2,
+      "score_after": 16.5,
+      "note": null
+    },
+    {
+      "function": "nmea_date_parse",
+      "file": "src/parsers/parse.c",
+      "rank_before": 4,
+      "score_before": 9.3,
+      "rank_after": 3,
+      "score_after": 16.3,
+      "note": null
+    },
+    {
+      "function": "nmea_get_parser_by_sentence",
+      "file": "src/nmea/parser.c",
+      "rank_before": 5,
+      "score_before": 9.2,
+      "rank_after": 4,
+      "score_after": 16.2,
+      "note": null
+    },
+    {
+      "function": "nmea_init_parser",
+      "file": "src/nmea/parser.c",
+      "rank_before": 6,
+      "score_before": 8.7,
+      "rank_after": 5,
+      "score_after": 10.7,
+      "note": null
+    },
+    {
+      "function": "nmea_load_parsers",
+      "file": "src/nmea/parser.c",
+      "rank_before": 1,
+      "score_before": 15.1,
+      "rank_after": 6,
+      "score_after": 3.1,
+      "note": null
+    },
+    {
+      "function": "nmea_free",
+      "file": "src/nmea/nmea.c",
+      "rank_before": 9,
+      "score_before": 5.0,
+      "rank_after": 7,
+      "score_after": 3.0,
+      "note": null
+    },
+    {
+      "function": "free_data",
+      "file": "src/parsers/gprmc.c",
+      "rank_before": null,
+      "score_before": null,
+      "rank_after": 8,
+      "score_after": 2.2,
+      "note": "not a candidate before the fixes"
+    },
+    {
+      "function": "allocate_data",
+      "file": "src/parsers/gprmc.c",
+      "rank_before": 8,
+      "score_before": 6.2,
+      "rank_after": 9,
+      "score_after": 1.2,
+      "note": null
+    },
+    {
+      "function": "main",
+      "file": "examples/minimum.c",
+      "rank_before": null,
+      "score_before": null,
+      "rank_after": 10,
+      "score_after": -2.0,
+      "note": "not a candidate before the fixes"
+    },
+    {
+      "function": "nmea_unload_parsers",
+      "file": "src/nmea/parser.c",
+      "rank_before": null,
+      "score_before": null,
+      "rank_after": 11,
+      "score_after": -3.4,
+      "note": "not a candidate before the fixes"
+    },
+    {
+      "function": "free",
+      "file": "src/parsers/gprmc.c",
+      "rank_before": 7,
+      "score_before": 7.0,
+      "rank_after": null,
+      "score_after": null,
+      "note": "dropped by the fixes"
+    },
+    {
+      "function": "printf",
+      "file": "examples/parse_stdin.c",
+      "rank_before": 3,
+      "score_before": 10.5,
+      "rank_after": null,
+      "score_after": null,
+      "note": "dropped by the fixes"
+    },
+    {
+      "function": "test_position_parse_fail",
+      "file": "tests/unit-tests/test_parse.c",
+      "rank_before": 11,
+      "score_before": 3.4,
+      "rank_after": null,
+      "score_after": null,
+      "note": "dropped by the fixes"
+    },
+    {
+      "function": "test_position_parse_ok",
+      "file": "tests/unit-tests/test_parse.c",
+      "rank_before": 10,
+      "score_before": 3.4,
+      "rank_after": null,
+      "score_after": null,
+      "note": "dropped by the fixes"
+    }
+  ]
+}

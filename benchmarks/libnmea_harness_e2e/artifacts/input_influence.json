@@ -1,0 +1,10 @@
+{
+  "method": "probe_binary",
+  "inputs_tested": 40,
+  "distinct_execution_maps": 14,
+  "minimum_required": 2,
+  "input_influence": true,
+  "analysis_quality": "ok",
+  "probe_available": true,
+  "degraded_reason": null
+}

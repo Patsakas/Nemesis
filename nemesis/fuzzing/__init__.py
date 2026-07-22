@@ -424,16 +424,22 @@ class AFLOrchestrator:
         else:
             self.log.info("seedgen.disabled")
 
-        # Minimize seed corpus: keep only seeds that produce unique coverage
+        # Minimize seed corpus: keep only seeds that produce unique coverage.
         # afl-cmin needs a binary whose coverage varies with the input; the
         # persistent fuzzing binary's does not when run offline (see
-        # analysis_binary). Falls back to the fuzzing binary only so the call
-        # shape is unchanged when no probe can be built — it will no-op there
-        # exactly as it always has.
-        _cmin_binary = self.analysis_binary() or (
-            Path(self.config.target.build_dir) / "fuzz_nemesis"
-        )
-        seeds_dir = self._minimize_seeds(seeds_dir, _cmin_binary)
+        # analysis_binary). When no probe can be built we skip minimisation
+        # outright rather than run it against the fuzzing binary: that path
+        # keeps zero seeds and reports success, which reads identically to
+        # "the corpus was already minimal".
+        _cmin_binary = self.analysis_binary()
+        if _cmin_binary is None:
+            self.log.warning(
+                "seeds.cmin_skipped_no_probe",
+                **self.analysis_quality,
+                impact="corpus not minimised; AFL calibrates over the full seed set",
+            )
+        else:
+            seeds_dir = self._minimize_seeds(seeds_dir, _cmin_binary)
 
         # Fix 107: Pre-validate seeds — remove seeds that crash the binary.
         # Prevents AFL early-exit (all-seeds-crash) which wastes 60s+ on warmup.
@@ -1053,13 +1059,18 @@ class AFLOrchestrator:
             # Built lazily on first run and cached; falls back to raw corpus if unavailable.
             # Analysis binary, not the fuzzing one — see analysis_binary().
             # Against the persistent binary this whole step is a no-op: cmin
-            # sees identical coverage for every input and keeps nothing.
-            _binary = self.analysis_binary() or (
-                Path(self.config.target.build_dir) / "fuzz_nemesis"
-            )
+            # sees identical coverage for every input and keeps nothing, so
+            # skip it and use the raw corpus instead of pretending to minimise.
+            _binary = self.analysis_binary()
+            if _binary is None:
+                self.log.warning(
+                    "corpus.minset_skipped_no_probe",
+                    **self.analysis_quality,
+                    impact="using the raw OSS-Fuzz corpus without minimisation",
+                )
             _minset_dir = (
                 self._ensure_corpus_minset(_corpus_dir, _binary)
-                if _corpus_dir.exists()
+                if _binary is not None and _corpus_dir.exists()
                 else None
             )
 
@@ -1302,7 +1313,9 @@ class AFLOrchestrator:
         build_dir = Path(self.config.target.build_dir)
         harness_src = build_dir / "fuzz_nemesis.c"
         if not harness_src.exists():
-            self.log.debug("analysis_binary.no_harness_source", path=str(harness_src))
+            self._mark_analysis_degraded(
+                "no_harness_source", f"no harness at {harness_src}"
+            )
             return None
 
         source_root = Path(self.config.target.source_root)
@@ -1313,8 +1326,7 @@ class AFLOrchestrator:
         if include_subdir:
             includes.append(str(source_root / include_subdir))
 
-        lib_name = self.config.target.library_name
-        library = build_dir / lib_name if lib_name else None
+        library = self._resolve_library_archive(build_dir)
 
         try:
             from nemesis.recon.probe_build import build_probe_binary
@@ -1326,11 +1338,94 @@ class AFLOrchestrator:
                 link_libs=self.config.target.link_libs or "",
             )
         except Exception as exc:
-            self.log.warning("analysis_binary.build_error", error=str(exc))
+            self._mark_analysis_degraded("build_error", str(exc))
+            return None
+
+        if binary is None:
+            self._mark_analysis_degraded(
+                "probe_build_failed",
+                f"probe did not link (library={library})",
+            )
             return None
 
         self._analysis_binary_cache = binary
         return binary
+
+    # ── analysis quality ────────────────────────────────────
+
+    def _mark_analysis_degraded(self, reason: str, detail: str = "") -> None:
+        """Record that per-input coverage analysis is not available.
+
+        Callers of `analysis_binary()` fall back to the AFL fuzzing binary,
+        which in persistent mode receives nothing offline and reports one
+        identical map for every input. Everything downstream — afl-cmin,
+        byte-influence probing — then produces a confident, wrong answer
+        instead of an error.
+
+        That fallback used to be silent. It is the difference between "we
+        minimised the corpus" and "we ran a no-op and reported success", and on
+        libnmea it stayed invisible for a whole campaign. Anything reporting
+        coverage or corpus quality must be able to see this flag and say so.
+        """
+        self._analysis_degraded_reason = reason
+        self.log.warning(
+            "analysis_binary.degraded",
+            reason=reason,
+            detail=detail,
+            impact=("per-input coverage is unavailable: afl-cmin and byte-influence "
+                    "fall back to the fuzzing binary and silently no-op. Corpus "
+                    "minimisation and any input-influence claim are NOT valid for "
+                    "this run."),
+        )
+
+    @property
+    def analysis_quality(self) -> dict:
+        """Machine-readable analysis-tooling state, for reports and benchmarks."""
+        reason = getattr(self, "_analysis_degraded_reason", None)
+        return {
+            "analysis_quality": "degraded" if reason else "ok",
+            "probe_available": reason is None,
+            "degraded_reason": reason,
+        }
+
+    def _resolve_library_archive(self, build_dir: Path) -> Path | None:
+        """Locate the static archive in a build tree.
+
+        This used to be `build_dir / library_name`, which assumes cmake drops
+        the archive at the build root. libnmea sets ARCHIVE_OUTPUT_DIRECTORY, so
+        the file lands at `build_fuzz/lib/libnmea.a` and the concatenation
+        missed it. The harness compile survived that (it resolves via the
+        symbolic builder's `_find_library`, which knows about `lib/`), so the
+        run looked healthy — but the probe build failed with `undefined
+        reference to nmea_parse`, no analysis binary was produced, and afl-cmin
+        then reported an empty result and minimised nothing. Silent degradation
+        of every per-input coverage consumer.
+
+        Mirrors `SymbolicStage.builder._find_library` resolution order.
+        """
+        name = self.config.target.library_name
+        if not name:
+            return None
+
+        source_subdir = self.config.target.source_subdir
+        candidates = []
+        if source_subdir:
+            candidates.append(build_dir / source_subdir / name)
+        candidates += [build_dir / name, build_dir / "lib" / name]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+
+        # The archive may sit anywhere in the tree (nested subproject builds).
+        found = sorted(build_dir.rglob(Path(name).name))
+        if found:
+            self.log.debug("analysis_binary.library_found_by_search",
+                           path=str(found[0]))
+            return found[0]
+
+        self.log.warning("analysis_binary.library_not_found",
+                         name=name, build_dir=str(build_dir))
+        return None
 
     def _measured_fieldspec(self, seeds_dir: Path) -> dict | None:
         """Derive a fieldspec by probing the instrumented binary, or None.

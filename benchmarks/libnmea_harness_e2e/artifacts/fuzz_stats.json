@@ -1,0 +1,51 @@
+{
+  "instances": {
+    "main": {
+      "run_time": "900",
+      "execs_done": "11853298",
+      "execs_per_sec": "13168.88",
+      "corpus_count": "370",
+      "max_depth": "5",
+      "bitmap_cvg": "72.01%",
+      "saved_crashes": "0",
+      "saved_hangs": "0"
+    },
+    "slave_3": {
+      "run_time": "900",
+      "execs_done": "12013004",
+      "execs_per_sec": "13347.38",
+      "corpus_count": "379",
+      "max_depth": "5",
+      "bitmap_cvg": "72.01%",
+      "saved_crashes": "0",
+      "saved_hangs": "0"
+    },
+    "slave_1": {
+      "run_time": "900",
+      "execs_done": "12055656",
+      "execs_per_sec": "13394.68",
+      "corpus_count": "371",
+      "max_depth": "4",
+      "bitmap_cvg": "72.01%",
+      "saved_crashes": "0",
+      "saved_hangs": "0"
+    },
+    "slave_2": {
+      "run_time": "900",
+      "execs_done": "11941044",
+      "execs_per_sec": "13267.31",
+      "corpus_count": "372",
+      "max_depth": "7",
+      "bitmap_cvg": "72.01%",
+      "saved_crashes": "0",
+      "saved_hangs": "0"
+    }
+  },
+  "totals": {
+    "instances": 4,
+    "execs_done": 47863002,
+    "execs_per_sec": 53178.2,
+    "saved_crashes": 0,
+    "saved_hangs": 0
+  }
+}
