@@ -1053,6 +1053,7 @@ class SymbolicStage:
         is_static: bool = False,
         indirect_reach: bool = False,
         direct_internal: bool = False,  # Fix 123
+        target_declaration: str | None = None,
     ) -> tuple[bool, list[str]]:
         """Pre-flight check on harness source (~1s) before starting cmake/make (~60s).
 
@@ -1125,7 +1126,30 @@ class SymbolicStage:
         # These are only warnings — do NOT add to reasons (non-fatal)
         _ = warnings  # stored for potential future structured logging
 
+        # Variadic arity: a callee reads one argument per format directive, so
+        # passing fewer is undefined behaviour in the harness and every crash it
+        # yields is a false positive. The pipeline shipped exactly that for
+        # minmea_scan; see nemesis/symbolic/variadic_arity.py. Fatal, because a
+        # rejected harness gets regenerated while an accepted one silently
+        # poisons the whole run.
+        if target_declaration and target_func:
+            from nemesis.symbolic import variadic_arity as _va
+            if _va.target_is_variadic(target_declaration):
+                findings = _va.check(harness_code, target_func)
+                if findings:
+                    reasons.extend(str(f) for f in findings)
+                    reasons.append(_va.REGENERATION_HINT)
+
         return len(reasons) == 0, reasons
+
+    def _target_declaration(self, func: str) -> str | None:
+        """The target's declaration, resolved by the builder.
+
+        Delegates rather than keeping a second copy: two implementations of
+        "where does this thing live" is exactly what cost a whole libnmea
+        campaign when the library resolvers diverged.
+        """
+        return self.builder.target_declaration(func)
 
     def _auto_resolve_compile_errors(
         self, harness: HarnessSpec, compile_errors: str,
@@ -1630,17 +1654,37 @@ class SymbolicStage:
         Returns True if the harness binary was successfully built.
         """
         # ── 1. Pre-flight ────────────────────────────────────────
+        target_decl = self._target_declaration(harness.target_func or "")
         ok, reasons = self._preflight_harness(
             harness.c_code, harness.target_func or "",
             is_static=is_static, indirect_reach=indirect_reach,
             direct_internal=direct_internal,
+            target_declaration=target_decl,
         )
+        # Outcome record. Without it the run keeps only the harness that
+        # eventually passed, and six months later there is no trace of why the
+        # first one was rejected — which is the interesting half. Distinguishes
+        # first-pass soundness from soundness-after-repair, because only the
+        # first measures the generator and only the second measures the product.
+        from nemesis.symbolic.variadic_arity import target_is_variadic
+        self._last_validation = {
+            "target": harness.target_func or "",
+            "variadic": bool(target_decl and target_is_variadic(target_decl)),
+            "declaration": target_decl,
+            "first_pass_passed": ok,
+            "first_pass_reasons": list(reasons),
+            "repair_attempted": False,
+            "repair_produced_code": False,
+            "final_passed": ok,
+            "outcome": "first_pass_ok" if ok else "pending",
+        }
         if not ok:
             self.log.warning(
                 "harness.preflight_failed",
                 func=harness.target_func,
                 reasons=reasons,
             )
+            self._last_validation["repair_attempted"] = True
             if self._neural is not None:
                 repaired = self._neural.repair_harness(  # type: ignore[union-attr]
                     harness.c_code,
@@ -1649,12 +1693,19 @@ class SymbolicStage:
                 )
                 if repaired:
                     harness.c_code = repaired
+                    self._last_validation["repair_produced_code"] = True
                     self.log.info("harness.preflight_llm_repair_applied", func=harness.target_func)
                     # Re-check after repair
                     ok2, reasons2 = self._preflight_harness(
                         harness.c_code, harness.target_func or "",
                         is_static=is_static, indirect_reach=indirect_reach,
                         direct_internal=direct_internal,
+                        target_declaration=target_decl,
+                    )
+                    self._last_validation.update(
+                        final_passed=ok2,
+                        final_reasons=list(reasons2),
+                        outcome="repair_ok" if ok2 else "repair_failed",
                     )
                     if not ok2:
                         self.log.warning(
@@ -1662,10 +1713,16 @@ class SymbolicStage:
                         )
                         # Continue anyway — compile will give better errors
                 else:
+                    self._last_validation["outcome"] = "repair_empty"
                     self.log.warning("harness.preflight_llm_repair_empty", func=harness.target_func)
+                    self.log.info("harness.validation", **self._last_validation)
                     return False
             else:
+                self._last_validation["outcome"] = "no_repair_available"
+                self.log.info("harness.validation", **self._last_validation)
                 return False
+
+        self.log.info("harness.validation", **self._last_validation)
 
         # ── 2. First compile attempt ─────────────────────────────
         if self.builder.build_harness(harness, build_dir):
@@ -2458,6 +2515,66 @@ class InstrumentedBuilder:
             self.log.warning("roundtrip.build.error", error=str(exc))
             return False
 
+    def target_declaration(self, func: str) -> str | None:
+        """The target's C declaration from the source tree, or None.
+
+        Used to answer "is this function variadic?". Headers are read first and
+        the result is cached: the scan is a handful of file reads, but it runs
+        on every harness revision and every variant.
+        """
+        if not func:
+            return None
+        cache = getattr(self, "_decl_cache", None)
+        if cache is None:
+            cache = self._decl_cache = {}
+        if func in cache:
+            return cache[func]
+
+        from nemesis.symbolic.variadic_arity import find_declaration
+        source_root = Path(self.config.target.source_root)
+        sources: dict[str, str] = {}
+        try:
+            for pattern in ("**/*.h", "**/*.c"):
+                for path in source_root.glob(pattern):
+                    if any(p in {".git", "build", "test", "tests"} for p in path.parts):
+                        continue
+                    try:
+                        sources[str(path)] = path.read_text(errors="replace")
+                    except OSError:
+                        continue
+                    if len(sources) > 400:      # bound the scan on large trees
+                        break
+        except OSError:
+            pass
+        cache[func] = find_declaration(sources, func) if sources else None
+        return cache[func]
+
+    def _variadic_arity_ok(self, harness: HarnessSpec) -> bool:
+        """False when the harness calls a variadic target with too few args."""
+        func = harness.target_func or ""
+        decl = self.target_declaration(func)
+        if not decl:
+            return True
+
+        from nemesis.symbolic import variadic_arity as _va
+        if not _va.target_is_variadic(decl):
+            return True
+
+        findings = _va.check(harness.c_code, func)
+        if not findings:
+            return True
+
+        self.log.error(
+            "harness.variadic_arity_rejected",
+            func=func,
+            declaration=decl,
+            findings=[str(f) for f in findings],
+            impact=("the callee reads one argument per format directive; passing "
+                    "fewer is undefined behaviour in the harness, so any crash it "
+                    "produces is a false positive. Refusing to build."),
+        )
+        return False
+
     def build_harness(self, harness: HarnessSpec, build_dir: Path) -> bool:
         """
         Compile the fuzzing harness and link it with libarchive.
@@ -2467,6 +2584,15 @@ class InstrumentedBuilder:
         """
         harness_src = build_dir / "fuzz_nemesis.c"
         harness_bin = build_dir / "fuzz_nemesis"
+
+        # Variadic arity, checked here rather than only in the repair wrapper:
+        # this is the one function every path reaches. The harness-variant path
+        # calls it directly, so a gate placed upstream let unsound variants
+        # compile and be profiled as if they were fine. An unsound harness must
+        # not become a binary — every crash it could produce is a false
+        # positive. See nemesis/symbolic/variadic_arity.py.
+        if not self._variadic_arity_ok(harness):
+            return False
 
         # Write harness source with auto-injected includes
         harness_src.parent.mkdir(parents=True, exist_ok=True)

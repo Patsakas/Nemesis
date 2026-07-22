@@ -1,0 +1,99 @@
+[
+  {
+    "model": "openai/gpt-oss-120b",
+    "ok": true,
+    "secs": 75.3,
+    "verdict": "SOUND",
+    "call_sites": 1,
+    "sound_calls": 1,
+    "unsound_calls": 0,
+    "detail": []
+  },
+  {
+    "model": "qwen/qwen3.5-397b-a17b",
+    "ok": true,
+    "secs": 117.3,
+    "verdict": "UNSOUND",
+    "call_sites": 6,
+    "sound_calls": 1,
+    "unsound_calls": 5,
+    "detail": [
+      {
+        "format": "i,f",
+        "needed": 3,
+        "args_passed": 2,
+        "reason": "too few arguments"
+      },
+      {
+        "format": "s,c,d",
+        "needed": 5,
+        "args_passed": 3,
+        "reason": "too few arguments"
+      },
+      {
+        "format": "t,T,D",
+        "needed": 5,
+        "args_passed": 3,
+        "reason": "too few arguments"
+      }
+    ]
+  },
+  {
+    "model": "nvidia/nemotron-3-ultra-550b-a55b",
+    "ok": true,
+    "secs": 116.0,
+    "verdict": "UNSOUND",
+    "call_sites": 1,
+    "sound_calls": 0,
+    "unsound_calls": 1,
+    "detail": [
+      {
+        "format_expr": "format",
+        "args_passed": 1,
+        "reason": "format not statically resolvable \u2014 a fixed argument list cannot be shown to match a varying format"
+      }
+    ]
+  },
+  {
+    "model": "z-ai/glm-5.2",
+    "ok": true,
+    "secs": 144.4,
+    "verdict": "SOUND",
+    "call_sites": 1,
+    "sound_calls": 1,
+    "unsound_calls": 0,
+    "detail": []
+  },
+  {
+    "model": "poolside/laguna-xs-2.1",
+    "ok": true,
+    "secs": 6.6,
+    "verdict": "UNSOUND",
+    "call_sites": 1,
+    "sound_calls": 0,
+    "unsound_calls": 1,
+    "detail": [
+      {
+        "format_expr": "format",
+        "args_passed": 1,
+        "reason": "format not statically resolvable \u2014 a fixed argument list cannot be shown to match a varying format"
+      }
+    ]
+  },
+  {
+    "model": "minimaxai/minimax-m3",
+    "ok": false,
+    "secs": 178.3,
+    "error": "APITimeoutError: Request timed out."
+  },
+  {
+    "model": "mistralai/mistral-large-3-675b-instruct-2512",
+    "ok": true,
+    "secs": 100.3,
+    "verdict": "SOUND",
+    "call_sites": 1,
+    "sound_calls": 1,
+    "unsound_calls": 0,
+    "detail": []
+  }
+]

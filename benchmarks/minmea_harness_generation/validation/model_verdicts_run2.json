@@ -1,0 +1,147 @@
+[
+  {
+    "model": "mistralai/mistral-small-4-119b-2603",
+    "ok": true,
+    "secs": 10.6,
+    "verdict": "UNSOUND",
+    "call_sites": 1,
+    "sound_calls": 0,
+    "unsound_calls": 1,
+    "detail": [
+      {
+        "format_expr": "format",
+        "args_passed": 1,
+        "reason": "format not statically resolvable \u2014 a fixed argument list cannot be shown to match a varying format"
+      }
+    ]
+  },
+  {
+    "model": "mistralai/mistral-small-4-119b-2603",
+    "ok": true,
+    "secs": 9.2,
+    "verdict": "UNSOUND",
+    "call_sites": 1,
+    "sound_calls": 0,
+    "unsound_calls": 1,
+    "detail": [
+      {
+        "format_expr": "format",
+        "args_passed": 1,
+        "reason": "format not statically resolvable \u2014 a fixed argument list cannot be shown to match a varying format"
+      }
+    ]
+  },
+  {
+    "model": "mistralai/mistral-small-4-119b-2603",
+    "ok": true,
+    "secs": 8.1,
+    "verdict": "UNSOUND",
+    "call_sites": 1,
+    "sound_calls": 0,
+    "unsound_calls": 1,
+    "detail": [
+      {
+        "format": "GNGGA",
+        "needed": 5,
+        "args_passed": 1,
+        "reason": "too few arguments"
+      }
+    ]
+  },
+  {
+    "model": "openai/gpt-oss-120b",
+    "ok": true,
+    "secs": 22.7,
+    "verdict": "SOUND",
+    "call_sites": 1,
+    "sound_calls": 1,
+    "unsound_calls": 0,
+    "detail": []
+  },
+  {
+    "model": "openai/gpt-oss-120b",
+    "ok": true,
+    "secs": 19.0,
+    "verdict": "UNSOUND",
+    "call_sites": 1,
+    "sound_calls": 0,
+    "unsound_calls": 1,
+    "detail": [
+      {
+        "format_expr": "fmt",
+        "args_passed": 8,
+        "reason": "format not statically resolvable \u2014 a fixed argument list cannot be shown to match a varying format"
+      }
+    ]
+  },
+  {
+    "model": "openai/gpt-oss-120b",
+    "ok": false,
+    "secs": 178.3,
+    "error": "APITimeoutError: Request timed out."
+  },
+  {
+    "model": "z-ai/glm-5.2",
+    "ok": false,
+    "secs": 174.1,
+    "error": "APITimeoutError: Request timed out."
+  },
+  {
+    "model": "z-ai/glm-5.2",
+    "ok": true,
+    "secs": 147.4,
+    "verdict": "SOUND",
+    "call_sites": 1,
+    "sound_calls": 1,
+    "unsound_calls": 0,
+    "detail": []
+  },
+  {
+    "model": "z-ai/glm-5.2",
+    "ok": true,
+    "secs": 154.4,
+    "verdict": "SOUND",
+    "call_sites": 1,
+    "sound_calls": 1,
+    "unsound_calls": 0,
+    "detail": []
+  },
+  {
+    "model": "mistralai/mistral-large-3-675b-instruct-2512",
+    "ok": false,
+    "secs": 175.2,
+    "error": "APITimeoutError: Request timed out."
+  },
+  {
+    "model": "mistralai/mistral-large-3-675b-instruct-2512",
+    "ok": true,
+    "secs": 164.2,
+    "verdict": "UNSOUND",
+    "call_sites": 1,
+    "sound_calls": 0,
+    "unsound_calls": 1,
+    "detail": [
+      {
+        "format_expr": "format",
+        "args_passed": 8,
+        "reason": "format not statically resolvable \u2014 a fixed argument list cannot be shown to match a varying format"
+      }
+    ]
+  },
+  {
+    "model": "mistralai/mistral-large-3-675b-instruct-2512",
+    "ok": true,
+    "secs": 143.0,
+    "verdict": "UNSOUND",
+    "call_sites": 1,
+    "sound_calls": 0,
+    "unsound_calls": 1,
+    "detail": [
+      {
+        "format_expr": "format",
+        "args_passed": 1,
+        "reason": "format not statically resolvable \u2014 a fixed argument list cannot be shown to match a varying format"
+      }
+    ]
+  }
+]
