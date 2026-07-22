@@ -19,6 +19,11 @@ seeds/oss_fuzz_corpus*/
 
 # Run logs and editor backups
 *.log
+# ...except logs archived as benchmark evidence. A benchmark that cites a run
+# without shipping the log cannot be checked: scripts/pipeline_health_check.py
+# reads exactly these files, and the numbers in the baseline READMEs come from
+# them.
+!benchmarks/**/*.log
 *.bak
 *.bak/
 **/harnesses.bak/
