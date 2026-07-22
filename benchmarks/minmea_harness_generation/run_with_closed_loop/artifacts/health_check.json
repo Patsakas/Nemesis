@@ -1,0 +1,94 @@
+{
+  "healthy": false,
+  "counts": {
+    "pass": 3,
+    "fail": 4,
+    "not_exercised": 1
+  },
+  "by_property": {
+    "wiring": "NOT_EXERCISED",
+    "observability": "PASS",
+    "consumption": "PASS",
+    "interpretability": "FAIL",
+    "provenance": "FAIL",
+    "attribution": "FAIL"
+  },
+  "checks": [
+    {
+      "name": "variadic_gate",
+      "property": "wiring",
+      "status": "not_exercised",
+      "detail": "no rejections \u2014 no unsound harness was generated this run; the gate is not evidenced either way by this log",
+      "rejections": 0
+    },
+    {
+      "name": "closed_loop",
+      "property": "observability",
+      "status": "pass",
+      "detail": "all 3 bitmap exit(s) carry source coverage",
+      "exits": 3,
+      "carrying": 3
+    },
+    {
+      "name": "coverage_recorded",
+      "property": "observability",
+      "status": "pass",
+      "detail": "3 measurement(s) across iteration(s) [0]",
+      "count": 3,
+      "iterations": [
+        0
+      ],
+      "values": [
+        21.35,
+        0.0,
+        31.94
+      ]
+    },
+    {
+      "name": "score_consumes_coverage",
+      "property": "consumption",
+      "status": "pass",
+      "detail": "all 6 score(s) had coverage available (3 normal path, 3 bitmap exit)",
+      "count": 6,
+      "normal_path": 3,
+      "bitmap_path": 3
+    },
+    {
+      "name": "score_explainable",
+      "property": "interpretability",
+      "status": "fail",
+      "detail": "score logs coverage but not reachability/paths/density \u2014 explaining a value still needs offline reconstruction",
+      "missing": [
+        "reachability",
+        "paths",
+        "density"
+      ]
+    },
+    {
+      "name": "metric_provenance",
+      "property": "provenance",
+      "status": "fail",
+      "detail": "3 of 3 reported value(s) carry no measurement event for their own iteration: minmea_scan iteration 1 reported 21.35 with no measurement for that iteration; minmea_getdatetime iteration 1 reported 0.0 with no measurement for that iteration; main iteration 1 reported 31.94 with no measurement for that iteration",
+      "reported": 3,
+      "unbacked": 3
+    },
+    {
+      "name": "reachability_confidence",
+      "property": "provenance",
+      "status": "fail",
+      "detail": "reachability inferred from whole-binary bitmap activity and recorded as measured: 9 variant profile(s) across 2 target(s) \u2014 minmea_getdatetime (6x, bitmap 24.56\u201363.85%); minmea_scan (3x, bitmap 10.0\u201327.46%)",
+      "overrides": 9,
+      "targets": 2,
+      "lowest_bitmap_pct": 10.0
+    },
+    {
+      "name": "coverage_attribution",
+      "property": "attribution",
+      "status": "fail",
+      "detail": "coverage measured for 1 target(s) whose name is also defined by the harness, so the figure may describe the harness rather than the target: main (tests.c)",
+      "targets": 3,
+      "at_risk": 1,
+      "note": "full check needs the measured symbol's file, not logged today"
+    }
+  ]
+}

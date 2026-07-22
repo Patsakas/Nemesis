@@ -1,0 +1,701 @@
+
+
+    _   __ ______ __  ___ ______ _____ ____ _____
+   / | / // ____//  |/  // ____// ___//  _// ___/
+  /  |/ // __/  / /|_/ // __/   \__ \ / /  \__ \
+ / /|  // /___ / /  / // /___  ___/ // /  ___/ /
+/_/ |_//_____//_/  /_//_____/ /____/___/ /____/
+
+Neuro-Symbolic Exploit Mining Engine for Software Insecurities
+v0.1.0 — Georgios Patsakas
+
+╭─────────────────────────── Pipeline Configuration ───────────────────────────╮
+│ Run ID:        3b69e24279e8                                                  │
+│ Target:        minmea                                                        │
+│ Source:        /home/giorg/minmea_clean                                      │
+│ Stages:        1:Recon, 2:Neural, 3:Symbolic, 4:Fuzzing                      │
+│ LLM:           openai/gpt-oss-120b  (+5 fallbacks)                           │
+│ Strategy:      harness                                                       │
+│ Fuzzer:        afl++ × 4                                                     │
+│ Solver:        z3                                                            │
+│ Feedback:      max 3 iterations                                              │
+│ Timeout:       0.25h per target                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+2026-07-22T20:44:20.945086Z [info     ] pipeline.start                           mode=normal run_id=3b69e24279e8 sanitizer_profile=asan_ubsan stage=cli stages=[1, 2, 3, 4] target=minmea
+2026-07-22T20:44:20.959903Z [info     ] execute.start                            resume=False run_id=e73eeb816c0d stage=pipeline
+2026-07-22T20:44:21.007700Z [info     ] startup.strategy_a                       msg='building unpatched library once' stage=pipeline
+2026-07-22T20:44:21.036718Z [info     ] unpatched.build_library.start            build_dir=/home/giorg/minmea_clean/build_debug stage=symbolic
+2026-07-22T20:44:27.949978Z [info     ] unpatched.build_library.done             lib=/home/giorg/minmea_clean/build_debug/libminmea.a stage=symbolic
+2026-07-22T20:44:27.950076Z [info     ] sync.start                               dst=/home/giorg/minmea_work src=/home/giorg/minmea_clean stage=pipeline
+2026-07-22T20:44:28.012237Z [info     ] sync.done                                stage=pipeline
+2026-07-22T20:44:28.012596Z [info     ] configure_fuzz.start                     build_dir=/home/giorg/minmea_work/build_fuzz stage=symbolic.builder
+2026-07-22T20:44:38.084529Z [info     ] configure_fuzz.done                      stage=symbolic.builder
+2026-07-22T20:44:38.084914Z [info     ] build.library.start                      build_dir=/home/giorg/minmea_work/build_fuzz incremental=True stage=symbolic.builder
+2026-07-22T20:44:38.548579Z [info     ] build.library.success                    stage=symbolic.builder
+2026-07-22T20:44:38.582058Z [info     ] oracle.cache_hit                         library=minmea stage=oracle
+Loading faiss with AVX2 support.
+Successfully loaded faiss with AVX2 support.
+2026-07-22T20:44:40.111699Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T20:44:40.112333Z [info     ] oracle.ready                             chunks=83 library=minmea stage=pipeline
+2026-07-22T20:44:40.118825Z [info     ] context_builder.ready                    library=minmea stage=pipeline
+2026-07-22T20:44:40.121332Z [info     ] corpus.downloading                       project=minmea stage=pipeline
+2026-07-22T20:44:40.671084Z [info     ] stage.start                              name=recon stage=1
+2026-07-22T20:44:40.671395Z [info     ] recon.start                              project=minmea stage=recon
+2026-07-22T20:44:40.671438Z [info     ] fetch.start                              api=https://introspector.oss-fuzz.com/api project=minmea stage=recon.introspector
+HTTP Request: GET https://introspector.oss-fuzz.com/api/far-reach-but-low-coverage?project=minmea "HTTP/1.1 200 OK"
+2026-07-22T20:44:41.991750Z [warning  ] fetch.endpoint_error                     endpoint=far-reach-but-low-coverage error="['Project not in OSS-Fuzz (likely only contains a project.yaml file).']" stage=recon.introspector
+HTTP Request: GET https://introspector.oss-fuzz.com/api/easy-params-far-reach?project=minmea "HTTP/1.1 200 OK"
+2026-07-22T20:44:42.301028Z [warning  ] fetch.endpoint_error                     endpoint=easy-params-far-reach error="['Project not found.']" stage=recon.introspector
+HTTP Request: GET https://introspector.oss-fuzz.com/api/optimal-targets?project=minmea "HTTP/1.1 200 OK"
+2026-07-22T20:44:42.595034Z [warning  ] fetch.endpoint_error                     endpoint=optimal-targets error='Project not in the database' stage=recon.introspector
+HTTP Request: GET https://introspector.oss-fuzz.com/api/all-functions?project=minmea "HTTP/1.1 200 OK"
+2026-07-22T20:44:42.891893Z [info     ] fetch.endpoint_ok                        count=0 endpoint=all-functions stage=recon.introspector
+2026-07-22T20:44:42.891982Z [warning  ] fetch.api_failed                         error='All Introspector API endpoints returned empty results' stage=recon.introspector
+2026-07-22T20:44:42.892007Z [info     ] fetch.fallback_local_scan                stage=recon.introspector
+2026-07-22T20:44:42.899279Z [info     ] git_history.indexed                      files=11 fix_files=3 path=/home/giorg/minmea_clean stage=recon.git_history
+2026-07-22T20:44:42.902235Z [info     ] scan.complete                            stage=recon.introspector targets_found=3
+2026-07-22T20:44:42.902309Z [info     ] recon.targets_found                      count=3 stage=recon
+2026-07-22T20:44:42.902497Z [info     ] auto_discover.none_found                 stage=pipeline
+2026-07-22T20:44:42.902527Z [info     ] stage.complete                           stage=1 targets_found=3
+2026-07-22T20:44:42.903795Z [info     ] target.start                             file=minmea.c func=minmea_scan stage=pipeline
+2026-07-22T20:44:42.904046Z [info     ] trace.start                              func=minmea_scan stage=recon.tracer
+2026-07-22T20:44:42.934804Z [info     ] trace.complete                           chain=['assert_float_eq', 'ck_assert', 'minmea_scan'] depth=3 func=minmea_scan stage=recon.tracer
+2026-07-22T20:44:42.963932Z [info     ] git_history.indexed                      files=11 fix_files=3 path=/home/giorg/minmea_clean stage=recon.git_history
+HTTP Request: POST https://integrate.api.nvidia.com/v1/embeddings "HTTP/1.1 200 OK"
+2026-07-22T20:44:51.852856Z [info     ] plan_harness.start                       func=minmea_scan stage=neural
+2026-07-22T20:44:51.918300Z [info     ] stage.start                              func=minmea_scan name=neural stage=2 strategy=harness
+2026-07-22T20:44:51.918699Z [info     ] analyze_harness.start                    func=minmea_scan stage=neural
+2026-07-22T20:44:51.919598Z [info     ] api.call                                 func=minmea_scan model=openai/gpt-oss-120b provider=nvidia-gpt-oss-120b stage=harness_analysis
+Retrying request to /chat/completions in 0.412963 seconds
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T20:46:27.865202Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=nvidia-gpt-oss-120b stage=neural.client tokens_in=3038 tokens_out=459
+HTTP Request: POST https://integrate.api.nvidia.com/v1/embeddings "HTTP/1.1 200 OK"
+2026-07-22T20:46:28.667298Z [info     ] context.built                            budget_pct=41.4 chars=49717 func=minmea_scan sections=5 stage=context_builder
+2026-07-22T20:46:28.744981Z [info     ] api.call                                 func=minmea_scan model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=harness_variant_0
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T20:46:37.476139Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=15977 tokens_out=717
+2026-07-22T20:46:37.476386Z [info     ] harness_variant.generated                func=minmea_scan stage=neural temp=0.2 variant=0
+2026-07-22T20:46:37.479119Z [info     ] api.call                                 func=minmea_scan model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=harness_variant_1
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T20:46:47.804370Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=15977 tokens_out=738
+2026-07-22T20:46:47.804542Z [info     ] harness_variant.generated                func=minmea_scan stage=neural temp=0.5 variant=1
+2026-07-22T20:46:47.822415Z [info     ] api.call                                 func=minmea_scan model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=harness_variant_2
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T20:47:02.968323Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=15977 tokens_out=959
+2026-07-22T20:47:02.968480Z [info     ] harness_variant.generated                func=minmea_scan stage=neural temp=0.8 variant=2
+2026-07-22T20:47:03.028155Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T20:47:03.028612Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T20:47:03.151306Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T20:47:03.214418Z [info     ] api.call                                 func=minmea_scan model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=predicate_synthesis
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T20:47:07.892455Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=1833 tokens_out=340
+2026-07-22T20:47:07.893239Z [info     ] predicate_synthesis.parsed               count=5 names=['has_dollar_sign', 'has_valid_checksum_delimiter', 'has_crlf_termination', 'has_comma_separated_fields', 'has_gga_field_count_gt_10'] stage=symbolic.builder
+2026-07-22T20:47:07.944799Z [info     ] predicate.canary_seeds_loaded            count=0 dirs=['/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_libnmea', '/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_minmea'] stage=symbolic.builder
+2026-07-22T20:47:07.954857Z [warning  ] predicate.canary_no_real_seeds_skip_inject count=5 names=['has_dollar_sign', 'has_valid_checksum_delimiter', 'has_crlf_termination', 'has_comma_separated_fields', 'has_gga_field_count_gt_10'] note='no real seeds available — random-only canary cannot validate format-specific predicates; dropping all to avoid filtering format-correct inputs at the gate' stage=symbolic.builder
+2026-07-22T20:47:07.955000Z [warning  ] harness.predicates_canary_pruned         after=0 before=5 stage=symbolic.builder
+2026-07-22T20:47:07.955212Z [info     ] harness.written                          path=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis.c stage=symbolic.builder
+2026-07-22T20:47:07.957846Z [info     ] harness.compile.start                    cmd='afl-clang-fast -I/home/giorg/minmea_clean -I/home/giorg/minmea_work/build_fuzz -I/mnt/c/Users/giorg/OneDrive/Desktop/Nem' stage=symbolic.builder
+2026-07-22T20:47:08.331758Z [info     ] harness.compile.success                  binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis stage=symbolic.builder
+2026-07-22T20:47:08.332657Z [info     ] variant.profile.start                    func=minmea_scan stage=symbolic.builder timeout_sec=120
+2026-07-22T20:49:08.889648Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T20:49:08.889804Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T20:49:09.200526Z [info     ] variant.profile.bitmap_reach_override    bitmap_pct=10.0 func=minmea_scan reason='GDB breakpoint missed but bitmap indicates code reached' stage=symbolic.builder
+2026-07-22T20:49:09.206016Z [info     ] variant.profile.done                     corpus_paths=700 func=minmea_scan function_reached=True stage=symbolic.builder
+2026-07-22T20:49:09.206143Z [info     ] harness.variant_profiled                 compiled=True corpus_paths=700 coverage_pct=100.0 func=minmea_scan stage=pipeline variant=0
+2026-07-22T20:49:09.206378Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T20:49:09.206427Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T20:49:09.226810Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T20:49:09.274138Z [info     ] api.call                                 func=minmea_scan model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=predicate_synthesis
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T20:49:13.667616Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=1844 tokens_out=319
+2026-07-22T20:49:13.668019Z [info     ] predicate_synthesis.parsed               count=5 names=['has_dollar_start', 'has_crlf_terminator', 'has_comma_separator', 'has_checksum_marker', 'has_string_field_specifier'] stage=symbolic.builder
+2026-07-22T20:49:13.725833Z [info     ] predicate.canary_seeds_loaded            count=0 dirs=['/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_libnmea', '/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_minmea'] stage=symbolic.builder
+2026-07-22T20:49:13.735656Z [warning  ] predicate.canary_no_real_seeds_skip_inject count=5 names=['has_dollar_start', 'has_crlf_terminator', 'has_comma_separator', 'has_checksum_marker', 'has_string_field_specifier'] note='no real seeds available — random-only canary cannot validate format-specific predicates; dropping all to avoid filtering format-correct inputs at the gate' stage=symbolic.builder
+2026-07-22T20:49:13.735835Z [warning  ] harness.predicates_canary_pruned         after=0 before=5 stage=symbolic.builder
+2026-07-22T20:49:13.736103Z [info     ] harness.written                          path=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis.c stage=symbolic.builder
+2026-07-22T20:49:13.737898Z [info     ] harness.compile.start                    cmd='afl-clang-fast -I/home/giorg/minmea_clean -I/home/giorg/minmea_work/build_fuzz -I/mnt/c/Users/giorg/OneDrive/Desktop/Nem' stage=symbolic.builder
+2026-07-22T20:49:14.071858Z [info     ] harness.compile.success                  binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis stage=symbolic.builder
+2026-07-22T20:49:14.072791Z [info     ] variant.profile.start                    func=minmea_scan stage=symbolic.builder timeout_sec=120
+2026-07-22T20:51:14.549818Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T20:51:14.549943Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T20:51:14.840173Z [info     ] variant.profile.bitmap_reach_override    bitmap_pct=10.0 func=minmea_scan reason='GDB breakpoint missed but bitmap indicates code reached' stage=symbolic.builder
+2026-07-22T20:51:14.845578Z [info     ] variant.profile.done                     corpus_paths=700 func=minmea_scan function_reached=True stage=symbolic.builder
+2026-07-22T20:51:14.845779Z [info     ] harness.variant_profiled                 compiled=True corpus_paths=700 coverage_pct=100.0 func=minmea_scan stage=pipeline variant=1
+2026-07-22T20:51:14.846070Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T20:51:14.846131Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T20:51:14.866061Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T20:51:14.912897Z [info     ] api.call                                 func=minmea_scan model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=predicate_synthesis
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T20:51:20.545656Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=1962 tokens_out=387
+2026-07-22T20:51:20.545988Z [info     ] predicate_synthesis.parsed               count=5 names=['has_nmea_prefix', 'has_sentence_id_field', 'has_comma_separated_fields', 'has_latitude_field_start', 'has_longitude_field_start'] stage=symbolic.builder
+2026-07-22T20:51:20.597503Z [info     ] predicate.canary_seeds_loaded            count=0 dirs=['/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_libnmea', '/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_minmea'] stage=symbolic.builder
+2026-07-22T20:51:20.607740Z [warning  ] predicate.canary_no_real_seeds_skip_inject count=5 names=['has_nmea_prefix', 'has_sentence_id_field', 'has_comma_separated_fields', 'has_latitude_field_start', 'has_longitude_field_start'] note='no real seeds available — random-only canary cannot validate format-specific predicates; dropping all to avoid filtering format-correct inputs at the gate' stage=symbolic.builder
+2026-07-22T20:51:20.607888Z [warning  ] harness.predicates_canary_pruned         after=0 before=5 stage=symbolic.builder
+2026-07-22T20:51:20.608075Z [info     ] harness.written                          path=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis.c stage=symbolic.builder
+2026-07-22T20:51:20.610104Z [info     ] harness.compile.start                    cmd='afl-clang-fast -I/home/giorg/minmea_clean -I/home/giorg/minmea_work/build_fuzz -I/mnt/c/Users/giorg/OneDrive/Desktop/Nem' stage=symbolic.builder
+2026-07-22T20:51:20.950096Z [info     ] harness.compile.success                  binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis stage=symbolic.builder
+2026-07-22T20:51:20.951292Z [info     ] variant.profile.start                    func=minmea_scan stage=symbolic.builder timeout_sec=120
+2026-07-22T20:53:21.595591Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T20:53:21.595767Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T20:53:21.933210Z [info     ] variant.profile.bitmap_reach_override    bitmap_pct=27.46 func=minmea_scan reason='GDB breakpoint missed but bitmap indicates code reached' stage=symbolic.builder
+2026-07-22T20:53:21.938876Z [info     ] variant.profile.done                     corpus_paths=714 func=minmea_scan function_reached=True stage=symbolic.builder
+2026-07-22T20:53:21.939043Z [info     ] harness.variant_profiled                 compiled=True corpus_paths=714 coverage_pct=100.0 func=minmea_scan stage=pipeline variant=2
+2026-07-22T20:53:21.939112Z [info     ] harness.variant_selected_with_reach      corpus_paths=714 func=minmea_scan stage=pipeline total_reaching=3 total_variants=3 variant=2
+2026-07-22T20:53:21.939338Z [info     ] stage.start                              func=minmea_scan name=symbolic stage=3
+2026-07-22T20:53:21.939696Z [info     ] stage3.strategy_a_harness_only           func=minmea_scan stage=pipeline
+2026-07-22T20:53:21.940061Z [info     ] harness.validation                       declaration='bool minmea_scan(const char *sentence, const char *format, ...);' final_passed=True first_pass_passed=True first_pass_reasons=[] outcome=first_pass_ok repair_attempted=False repair_produced_code=False stage=symbolic target=minmea_scan variadic=True
+2026-07-22T20:53:21.940285Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T20:53:21.940336Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T20:53:21.959253Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T20:53:22.035529Z [info     ] predicate_synthesis.parsed               count=5 names=['has_nmea_prefix', 'has_sentence_id_field', 'has_comma_separated_fields', 'has_latitude_field_start', 'has_longitude_field_start'] stage=symbolic.builder
+2026-07-22T20:53:22.086405Z [info     ] predicate.canary_seeds_loaded            count=0 dirs=['/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_libnmea', '/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_minmea'] stage=symbolic.builder
+2026-07-22T20:53:22.095843Z [warning  ] predicate.canary_no_real_seeds_skip_inject count=5 names=['has_nmea_prefix', 'has_sentence_id_field', 'has_comma_separated_fields', 'has_latitude_field_start', 'has_longitude_field_start'] note='no real seeds available — random-only canary cannot validate format-specific predicates; dropping all to avoid filtering format-correct inputs at the gate' stage=symbolic.builder
+2026-07-22T20:53:22.095995Z [warning  ] harness.predicates_canary_pruned         after=0 before=5 stage=symbolic.builder
+2026-07-22T20:53:22.096209Z [info     ] harness.written                          path=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis.c stage=symbolic.builder
+2026-07-22T20:53:22.097749Z [info     ] harness.compile.start                    cmd='afl-clang-fast -I/home/giorg/minmea_clean -I/home/giorg/minmea_work/build_fuzz -I/mnt/c/Users/giorg/OneDrive/Desktop/Nem' stage=symbolic.builder
+2026-07-22T20:53:22.428684Z [info     ] harness.compile.success                  binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis stage=symbolic.builder
+2026-07-22T20:53:22.431056Z [info     ] cmplog.compile.start                     binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=symbolic.builder
+2026-07-22T20:53:23.146127Z [info     ] cmplog.compile.success                   binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=symbolic.builder
+2026-07-22T20:53:23.146454Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T20:53:23.146531Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T20:53:23.559239Z [info     ] unpatched.harness_built                  binary=/home/giorg/minmea_clean/build_debug/fuzz_nemesis_debug stage=symbolic
+2026-07-22T20:53:23.559499Z [info     ] unpatched.debug_binary.ready             binary=/home/giorg/minmea_clean/build_debug/fuzz_nemesis_debug stage=pipeline
+2026-07-22T20:53:25.595828Z [info     ] profiling.result                         first_hit_seed=seedgen_0099_146cae7399c7.bin func=minmea_scan hit_rate=1.0 hits=8 reaches_target=True seeds_tested=8 stage=pipeline
+2026-07-22T20:53:25.626076Z [info     ] harness.loaded_saved                     func=minmea_scan path=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/config/targets/minmea/harnesses/minmea_scan.c stage=pipeline
+2026-07-22T20:53:25.626486Z [warning  ] harness.preflight_failed                 func=minmea_scan reasons=['variadic call #1: format_not_resolvable — format argument `formats[i]` is not a literal or a single-assignment constant, so its arity cannot be checked; 6 variadic argument(s) passed', 'The target function is variadic: it reads one argument per directive in its format string. Use a single literal format string and pass exactly one correctly-typed pointer per directive. Do NOT loop a fixed argument list over an array of different format strings — the argument count cannot match every format, and the callee will read past the arguments you passed, which is undefined behaviour in the harness rather than a bug in the library.'] stage=symbolic
+2026-07-22T20:53:25.626615Z [info     ] repair_harness.start                     func=minmea_scan stage=neural
+HTTP Request: POST https://integrate.api.nvidia.com/v1/embeddings "HTTP/1.1 200 OK"
+2026-07-22T20:53:25.982722Z [info     ] api.call                                 func=minmea_scan model=openai/gpt-oss-120b provider=gpt-oss-debugger role=gpt-oss-debugger stage=harness_repair
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T20:59:09.667107Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=gpt-oss-debugger role=gpt-oss-debugger stage=neural.client tokens_in=2837 tokens_out=538
+2026-07-22T20:59:09.667448Z [info     ] repair_harness.success                   func=minmea_scan stage=neural
+2026-07-22T20:59:09.667603Z [info     ] harness.preflight_llm_repair_applied     func=minmea_scan stage=symbolic
+2026-07-22T20:59:09.667837Z [info     ] harness.validation                       declaration='bool minmea_scan(const char *sentence, const char *format, ...);' final_passed=True final_reasons=[] first_pass_passed=False first_pass_reasons=['variadic call #1: format_not_resolvable — format argument `formats[i]` is not a literal or a single-assignment constant, so its arity cannot be checked; 6 variadic argument(s) passed', 'The target function is variadic: it reads one argument per directive in its format string. Use a single literal format string and pass exactly one correctly-typed pointer per directive. Do NOT loop a fixed argument list over an array of different format strings — the argument count cannot match every format, and the callee will read past the arguments you passed, which is undefined behaviour in the harness rather than a bug in the library.'] outcome=repair_ok repair_attempted=True repair_produced_code=True stage=symbolic target=minmea_scan variadic=True
+2026-07-22T20:59:09.687075Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T20:59:09.738229Z [info     ] api.call                                 func=minmea_scan model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=predicate_synthesis
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T20:59:14.743889Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=1797 tokens_out=329
+2026-07-22T20:59:14.747676Z [info     ] predicate_synthesis.parsed               count=5 names=['has_nmea_prefix', 'has_valid_checksum_marker', 'has_crlf_termination', 'has_comma_separated_fields', 'has_gbs_fields'] stage=symbolic.builder
+2026-07-22T20:59:14.817580Z [info     ] predicate.canary_seeds_loaded            count=0 dirs=['/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_libnmea', '/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_minmea'] stage=symbolic.builder
+2026-07-22T20:59:14.827325Z [warning  ] predicate.canary_no_real_seeds_skip_inject count=5 names=['has_nmea_prefix', 'has_valid_checksum_marker', 'has_crlf_termination', 'has_comma_separated_fields', 'has_gbs_fields'] note='no real seeds available — random-only canary cannot validate format-specific predicates; dropping all to avoid filtering format-correct inputs at the gate' stage=symbolic.builder
+2026-07-22T20:59:14.827453Z [warning  ] harness.predicates_canary_pruned         after=0 before=5 stage=symbolic.builder
+2026-07-22T20:59:14.828901Z [info     ] harness.written                          path=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis.c stage=symbolic.builder
+2026-07-22T20:59:14.833705Z [info     ] harness.compile.start                    cmd='afl-clang-fast -I/home/giorg/minmea_clean -I/home/giorg/minmea_work/build_fuzz -I/mnt/c/Users/giorg/OneDrive/Desktop/Nem' stage=symbolic.builder
+2026-07-22T20:59:15.487560Z [info     ] harness.compile.success                  binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis stage=symbolic.builder
+2026-07-22T20:59:15.489432Z [info     ] cmplog.compile.start                     binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=symbolic.builder
+2026-07-22T20:59:15.904950Z [info     ] cmplog.compile.success                   binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=symbolic.builder
+2026-07-22T20:59:15.906931Z [info     ] fuzz_a.start                             func=minmea_scan iteration=0 stage=pipeline
+2026-07-22T20:59:15.907060Z [info     ] seeds.targeted.start                     func=minmea_scan n=3 stage=neural
+2026-07-22T20:59:15.907873Z [info     ] api.call                                 func=minmea_scan model=openai/gpt-oss-120b provider=nvidia-gpt-oss-120b stage=seed_synthesis
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T20:59:58.878937Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=nvidia-gpt-oss-120b stage=neural.client tokens_in=920 tokens_out=77
+2026-07-22T20:59:58.879762Z [info     ] seeds.targeted.generated                 count=1 func=minmea_scan stage=neural
+2026-07-22T20:59:58.880363Z [info     ] seeds.targeted_generated                 count=1 func=minmea_scan stage=pipeline
+2026-07-22T20:59:58.898893Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T20:59:58.932873Z [info     ] roundtrip.skipped_no_encode_api          library=minmea stage=pipeline
+2026-07-22T20:59:58.948204Z [info     ] z3.no_input_spec                         stage=pipeline
+2026-07-22T20:59:59.053768Z [info     ] evolve.no_fitness_breed_all              stage=pipeline
+2026-07-22T20:59:59.055638Z [info     ] evolve.children_written                  count=40 stage=pipeline
+2026-07-22T20:59:59.059293Z [info     ] seed_pipeline.summary                    added=40 roundtrip=True seed_evolve=True seeds_after=732 seeds_before=692 stage=pipeline z3_seedgen=True
+2026-07-22T20:59:59.390235Z [info     ] probe.built                              binary=/home/giorg/nemesis_workspace/fuzzing/probe/probe_ecb865a90014434a compiler=afl-clang-fast stage=recon.probe_build
+2026-07-22T20:59:59.399861Z [info     ] seeds.targeted_added                     count=3 stage=fuzzing.afl
+2026-07-22T20:59:59.474863Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T20:59:59.510792Z [info     ] api.call                                 func=minmea_scan model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=seedgen.synth
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T21:00:38.634618Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=1995 tokens_out=2628
+2026-07-22T21:00:38.789857Z [info     ] seedgen.script_synthesised               length=6626 stage=fuzzing.afl
+2026-07-22T21:00:50.125792Z [info     ] seedgen.produced                         attempted=200 failures=0 stage=fuzzing.afl unique=200
+2026-07-22T21:00:50.125932Z [info     ] seedgen.appended_to_corpus               seeds_dir=/home/giorg/nemesis_workspace/fuzzing/seeds/minmea_scan stage=fuzzing.afl unique=200
+2026-07-22T21:00:53.631178Z [info     ] dict.generated                           path=/home/giorg/nemesis_workspace/fuzzing/dict/minmea_scan/nemesis.dict stage=fuzzing.afl tokens=19
+2026-07-22T21:00:53.640238Z [info     ] afl.binary_snapshot                      debug_size=1733648 size=1822000 snapshot=/home/giorg/nemesis_workspace/fuzzing/findings/e73eeb816c0d/minmea_scan/binary_snapshot stage=fuzzing.afl
+2026-07-22T21:00:53.648878Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T21:00:53.746933Z [info     ] mutator_synthesis.generated              chars=5789 format=NMEA library=minmea stage=fuzzing.afl
+2026-07-22T21:00:54.463230Z [info     ] mutator_synthesis.compile_ok             bytes=16064 so=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.so stage=fuzzing.afl
+2026-07-22T21:00:54.538703Z [info     ] mutator_synthesis.smoke_ok               so=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.so stage=fuzzing.afl
+2026-07-22T21:00:54.538801Z [info     ] afl.custom_mutator_synthesized           source=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.c stage=fuzzing.afl
+2026-07-22T21:00:54.799344Z [info     ] afl.custom_mutator_loaded                so=/home/giorg/nemesis_workspace/fuzzing/mutator/minmea_synth.so source=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.c stage=fuzzing.afl
+2026-07-22T21:00:54.799453Z [info     ] afl.launch                               binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis instances=4 seeds=/home/giorg/nemesis_workspace/fuzzing/seeds/minmea_scan stage=fuzzing.afl timeout_h=0.25
+2026-07-22T21:00:54.801355Z [info     ] afl.cmplog_active                        binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=fuzzing.afl
+2026-07-22T21:15:55.408805Z [info     ] afl.complete                             instances=4 stage=fuzzing.afl
+2026-07-22T21:15:55.412980Z [info     ] triage.start                             crash_count=0 crash_dirs=4 instances=4 stage=fuzzing.triager
+2026-07-22T21:15:55.413074Z [info     ] triage.complete                          stage=fuzzing.triager unique_crashes=0
+2026-07-22T21:15:55.413898Z [info     ] bitmap_coverage.measured                 bitmap_cvg_after=8.57 bitmap_cvg_before=0.0 bitmap_cvg_delta=8.57 growing=False stage=fuzzing.coverage success=True
+2026-07-22T21:15:57.836502Z [info     ] post_fuzz_cov.result                     func=minmea_scan hits=10 pct=100.0 samples=10 stage=pipeline
+2026-07-22T21:15:57.838128Z [info     ] coverage.build_library.start             build_dir=/home/giorg/minmea_clean/build_coverage stage=symbolic
+2026-07-22T21:16:04.161129Z [info     ] coverage.build_library.done              lib=/home/giorg/minmea_clean/build_coverage/libminmea.a stage=symbolic
+2026-07-22T21:16:04.399648Z [info     ] coverage.harness_built                   binary=/home/giorg/minmea_clean/build_coverage/fuzz_nemesis_coverage stage=symbolic
+2026-07-22T21:16:04.465271Z [info     ] source_coverage.measured                 branch_cov='25/136 (18.38%)' corpus_samples=20 func=minmea_scan line_cov='41/192 (21.35%)' region_cov='32/158 (20.25%)' runs_ok=20 stage=symbolic
+2026-07-22T21:16:04.466232Z [info     ] source_coverage.result                   func=minmea_scan iteration=0 line_cov_pct=21.35 stage=pipeline
+2026-07-22T21:16:04.466423Z [info     ] harness.quality_score                    func=minmea_scan iteration=0 line_cov=21.35 score=0.6819 stage=pipeline
+2026-07-22T21:16:04.470397Z [info     ] feedback_a.refining_harness              func=minmea_scan iteration=1 reason=no_coverage_expansion stage=pipeline
+2026-07-22T21:16:04.470703Z [info     ] refine_harness.start                     func=minmea_scan iteration=1 reason=no_crashes stage=neural
+2026-07-22T21:16:04.471203Z [info     ] api.call                                 func=minmea_scan model=openai/gpt-oss-120b provider=gpt-oss-debugger role=gpt-oss-debugger stage=harness_refinement
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T21:20:16.989417Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=gpt-oss-debugger role=gpt-oss-debugger stage=neural.client tokens_in=2048 tokens_out=2004
+2026-07-22T21:20:16.990673Z [info     ] harness_a.start                          format_func= func=minmea_scan stage=neural
+HTTP Request: POST https://integrate.api.nvidia.com/v1/embeddings "HTTP/1.1 200 OK"
+2026-07-22T21:20:17.369568Z [info     ] context.built                            budget_pct=42.6 chars=51113 func=minmea_scan sections=5 stage=context_builder
+2026-07-22T21:20:17.395350Z [info     ] harness.validation                       declaration='bool minmea_scan(const char *sentence, const char *format, ...);' final_passed=True first_pass_passed=True first_pass_reasons=[] outcome=first_pass_ok repair_attempted=False repair_produced_code=False stage=symbolic target=minmea_scan variadic=True
+2026-07-22T21:20:17.395777Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T21:20:17.395874Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T21:20:17.417677Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T21:20:17.466879Z [info     ] predicate_synthesis.parsed               count=5 names=['has_dollar_sign', 'has_comma_separator', 'has_asterisk_checksum', 'has_crlf_termination', 'has_valid_sentence_id'] stage=symbolic.builder
+2026-07-22T21:20:17.528634Z [info     ] predicate.canary_seeds_loaded            count=0 dirs=['/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_libnmea', '/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_minmea'] stage=symbolic.builder
+2026-07-22T21:20:17.545105Z [warning  ] predicate.canary_no_real_seeds_skip_inject count=5 names=['has_dollar_sign', 'has_comma_separator', 'has_asterisk_checksum', 'has_crlf_termination', 'has_valid_sentence_id'] note='no real seeds available — random-only canary cannot validate format-specific predicates; dropping all to avoid filtering format-correct inputs at the gate' stage=symbolic.builder
+2026-07-22T21:20:17.545266Z [warning  ] harness.predicates_canary_pruned         after=0 before=5 stage=symbolic.builder
+2026-07-22T21:20:17.545562Z [info     ] harness.written                          path=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis.c stage=symbolic.builder
+2026-07-22T21:20:17.549995Z [info     ] harness.compile.start                    cmd='afl-clang-fast -I/home/giorg/minmea_clean -I/home/giorg/minmea_work/build_fuzz -I/mnt/c/Users/giorg/OneDrive/Desktop/Nem' stage=symbolic.builder
+2026-07-22T21:20:17.933392Z [info     ] harness.compile.success                  binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis stage=symbolic.builder
+2026-07-22T21:20:17.936849Z [info     ] cmplog.compile.start                     binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=symbolic.builder
+2026-07-22T21:20:18.352898Z [info     ] cmplog.compile.success                   binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=symbolic.builder
+2026-07-22T21:20:18.355326Z [info     ] fuzz_a.start                             func=minmea_scan iteration=1 stage=pipeline
+2026-07-22T21:20:18.392006Z [info     ] seeds.targeted_added                     count=3 stage=fuzzing.afl
+2026-07-22T21:20:18.605624Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T21:20:18.806767Z [info     ] seedgen.script_synthesised               length=7158 stage=fuzzing.afl
+2026-07-22T21:20:32.619116Z [info     ] seedgen.produced                         attempted=200 failures=0 stage=fuzzing.afl unique=200
+2026-07-22T21:20:32.619234Z [info     ] seedgen.appended_to_corpus               seeds_dir=/home/giorg/nemesis_workspace/fuzzing/seeds/minmea_scan stage=fuzzing.afl unique=200
+2026-07-22T21:20:36.421745Z [info     ] dict.generated                           path=/home/giorg/nemesis_workspace/fuzzing/dict/minmea_scan/nemesis.dict stage=fuzzing.afl tokens=19
+2026-07-22T21:20:36.428954Z [info     ] afl.binary_snapshot                      debug_size=1733648 size=1828408 snapshot=/home/giorg/nemesis_workspace/fuzzing/findings/e73eeb816c0d/minmea_scan/binary_snapshot stage=fuzzing.afl
+2026-07-22T21:20:36.429218Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T21:20:36.518779Z [info     ] mutator_synthesis.generated              chars=5789 format=NMEA library=minmea stage=fuzzing.afl
+2026-07-22T21:20:36.904877Z [info     ] mutator_synthesis.compile_ok             bytes=16064 so=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.so stage=fuzzing.afl
+2026-07-22T21:20:36.955918Z [info     ] mutator_synthesis.smoke_ok               so=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.so stage=fuzzing.afl
+2026-07-22T21:20:36.956042Z [info     ] afl.custom_mutator_synthesized           source=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.c stage=fuzzing.afl
+2026-07-22T21:20:37.234099Z [info     ] afl.custom_mutator_loaded                so=/home/giorg/nemesis_workspace/fuzzing/mutator/minmea_synth.so source=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.c stage=fuzzing.afl
+2026-07-22T21:20:37.234218Z [info     ] afl.launch                               binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis instances=4 seeds=/home/giorg/nemesis_workspace/fuzzing/seeds/minmea_scan stage=fuzzing.afl timeout_h=0.25
+2026-07-22T21:20:37.234459Z [info     ] afl.cmplog_active                        binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=fuzzing.afl
+2026-07-22T21:22:07.251989Z [info     ] afl.crash_found_continuing               crashes=1 elapsed_s=60 hint='continuing fuzzing for remaining budget' stage=fuzzing.afl
+2026-07-22T21:35:37.936159Z [info     ] afl.complete                             instances=4 stage=fuzzing.afl
+2026-07-22T21:35:37.938725Z [info     ] triage.start                             crash_count=1 crash_dirs=4 instances=4 stage=fuzzing.triager
+2026-07-22T21:35:38.438177Z [info     ] triage.upstream_check                    current=2dd2cd11a359 detail='HEAD == origin/master: reproduces on the latest upstream code' ref=origin/master stage=fuzzing.triager status=up_to_date upstream=2dd2cd11a359
+2026-07-22T21:36:08.460299Z [warning  ] analyze.failed                           error="Command '['/home/giorg/nemesis_workspace/fuzzing/findings/e73eeb816c0d/minmea_scan/binary_debug_snapshot']' timed out after 30 seconds" file=id:000000,sig:06,src:000944,time:2465,execs:8277,op:minmea_synth.so,pos:0 stage=fuzzing.triager
+2026-07-22T21:36:08.460565Z [info     ] triage.complete                          stage=fuzzing.triager unique_crashes=0
+2026-07-22T21:36:08.461477Z [info     ] bitmap_coverage.measured                 bitmap_cvg_after=44.59 bitmap_cvg_before=0.0 bitmap_cvg_delta=44.59 growing=False stage=fuzzing.coverage success=True
+2026-07-22T21:36:08.461638Z [info     ] fuzz_a.bitmap_expanded                   bitmap_delta=44.59 func=minmea_scan iteration=1 quality_score=0.7247 source_coverage_pct=21.35 stage=pipeline
+2026-07-22T21:36:08.463963Z [info     ] target.start                             file=minmea.c func=minmea_getdatetime stage=pipeline
+2026-07-22T21:36:08.464732Z [info     ] trace.start                              func=minmea_getdatetime stage=recon.tracer
+2026-07-22T21:36:08.549240Z [info     ] trace.complete                           chain=['assert_float_eq', 'ck_assert', 'minmea_getdatetime'] depth=3 func=minmea_getdatetime stage=recon.tracer
+HTTP Request: POST https://integrate.api.nvidia.com/v1/embeddings "HTTP/1.1 200 OK"
+2026-07-22T21:36:08.973928Z [info     ] plan_harness.start                       func=minmea_getdatetime stage=neural
+2026-07-22T21:36:08.978331Z [info     ] stage.start                              func=minmea_getdatetime name=neural stage=2 strategy=harness
+2026-07-22T21:36:08.978829Z [info     ] analyze_harness.start                    func=minmea_getdatetime stage=neural
+2026-07-22T21:36:08.983058Z [info     ] api.call                                 func=minmea_getdatetime model=openai/gpt-oss-120b provider=nvidia-gpt-oss-120b stage=harness_analysis
+Retrying request to /chat/completions in 0.436073 seconds
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T21:37:44.914755Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=nvidia-gpt-oss-120b stage=neural.client tokens_in=2681 tokens_out=298
+HTTP Request: POST https://integrate.api.nvidia.com/v1/embeddings "HTTP/1.1 200 OK"
+2026-07-22T21:37:45.240862Z [info     ] context.built                            budget_pct=39.6 chars=47522 func=minmea_getdatetime sections=5 stage=context_builder
+2026-07-22T21:37:45.248256Z [info     ] api.call                                 func=minmea_getdatetime model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=harness_variant_0
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T21:37:59.265100Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=16925 tokens_out=964
+2026-07-22T21:37:59.265220Z [info     ] harness_variant.generated                func=minmea_getdatetime stage=neural temp=0.2 variant=0
+2026-07-22T21:37:59.275415Z [info     ] api.call                                 func=minmea_getdatetime model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=harness_variant_1
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T21:38:09.092990Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=16925 tokens_out=749
+2026-07-22T21:38:09.093110Z [info     ] harness_variant.generated                func=minmea_getdatetime stage=neural temp=0.5 variant=1
+2026-07-22T21:38:09.097091Z [info     ] api.call                                 func=minmea_getdatetime model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=harness_variant_2
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T21:38:16.328631Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=16925 tokens_out=816
+2026-07-22T21:38:16.328746Z [info     ] harness_variant.generated                func=minmea_getdatetime stage=neural temp=0.8 variant=2
+2026-07-22T21:38:16.337082Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T21:38:16.337193Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T21:38:16.378199Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T21:38:16.422292Z [info     ] api.call                                 func=minmea_getdatetime model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=predicate_synthesis
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T21:38:21.524802Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=2080 tokens_out=463
+2026-07-22T21:38:21.525071Z [info     ] predicate_synthesis.parsed               count=5 names=['has_zda_sentence', 'has_zda_fields', 'has_zda_time_field', 'has_zda_date_field', 'has_zda_checksum_separator'] stage=symbolic.builder
+2026-07-22T21:38:21.569415Z [info     ] predicate.canary_seeds_loaded            count=0 dirs=['/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_libnmea', '/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_minmea'] stage=symbolic.builder
+2026-07-22T21:38:21.576526Z [warning  ] predicate.canary_no_real_seeds_skip_inject count=5 names=['has_zda_sentence', 'has_zda_fields', 'has_zda_time_field', 'has_zda_date_field', 'has_zda_checksum_separator'] note='no real seeds available — random-only canary cannot validate format-specific predicates; dropping all to avoid filtering format-correct inputs at the gate' stage=symbolic.builder
+2026-07-22T21:38:21.576601Z [warning  ] harness.predicates_canary_pruned         after=0 before=5 stage=symbolic.builder
+2026-07-22T21:38:21.576782Z [info     ] harness.written                          path=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis.c stage=symbolic.builder
+2026-07-22T21:38:21.578012Z [info     ] harness.compile.start                    cmd='afl-clang-fast -I/home/giorg/minmea_clean -I/home/giorg/minmea_work/build_fuzz -I/mnt/c/Users/giorg/OneDrive/Desktop/Nem' stage=symbolic.builder
+2026-07-22T21:38:21.862745Z [info     ] harness.compile.success                  binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis stage=symbolic.builder
+2026-07-22T21:38:21.863507Z [info     ] variant.profile.start                    func=minmea_getdatetime stage=symbolic.builder timeout_sec=120
+2026-07-22T21:40:22.037971Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T21:40:22.038245Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T21:40:22.302642Z [info     ] variant.profile.bitmap_reach_override    bitmap_pct=24.56 func=minmea_getdatetime reason='GDB breakpoint missed but bitmap indicates code reached' stage=symbolic.builder
+2026-07-22T21:40:22.305690Z [info     ] variant.profile.done                     corpus_paths=292 func=minmea_getdatetime function_reached=True stage=symbolic.builder
+2026-07-22T21:40:22.305847Z [info     ] harness.variant_profiled                 compiled=True corpus_paths=292 coverage_pct=100.0 func=minmea_getdatetime stage=pipeline variant=0
+2026-07-22T21:40:22.306065Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T21:40:22.306126Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T21:40:22.330379Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T21:40:22.400177Z [info     ] api.call                                 func=minmea_getdatetime model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=predicate_synthesis
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T21:40:26.697841Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=1889 tokens_out=428
+2026-07-22T21:40:26.698149Z [info     ] predicate_synthesis.parsed               count=5 names=['is_nmea_sentence', 'is_zda_or_rmc_sentence', 'has_valid_talker_id', 'has_comma_separated_fields', 'has_date_time_fields'] stage=symbolic.builder
+2026-07-22T21:40:26.882415Z [info     ] predicate.canary_seeds_loaded            count=0 dirs=['/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_libnmea', '/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_minmea'] stage=symbolic.builder
+2026-07-22T21:40:26.889849Z [warning  ] predicate.canary_no_real_seeds_skip_inject count=5 names=['is_nmea_sentence', 'is_zda_or_rmc_sentence', 'has_valid_talker_id', 'has_comma_separated_fields', 'has_date_time_fields'] note='no real seeds available — random-only canary cannot validate format-specific predicates; dropping all to avoid filtering format-correct inputs at the gate' stage=symbolic.builder
+2026-07-22T21:40:26.889974Z [warning  ] harness.predicates_canary_pruned         after=0 before=5 stage=symbolic.builder
+2026-07-22T21:40:26.890192Z [info     ] harness.written                          path=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis.c stage=symbolic.builder
+2026-07-22T21:40:26.891583Z [info     ] harness.compile.start                    cmd='afl-clang-fast -I/home/giorg/minmea_clean -I/home/giorg/minmea_work/build_fuzz -I/mnt/c/Users/giorg/OneDrive/Desktop/Nem' stage=symbolic.builder
+2026-07-22T21:40:27.170592Z [info     ] harness.compile.success                  binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis stage=symbolic.builder
+2026-07-22T21:40:27.171254Z [info     ] variant.profile.start                    func=minmea_getdatetime stage=symbolic.builder timeout_sec=120
+2026-07-22T21:42:27.319887Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T21:42:27.320028Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T21:42:27.571197Z [info     ] variant.profile.bitmap_reach_override    bitmap_pct=51.04 func=minmea_getdatetime reason='GDB breakpoint missed but bitmap indicates code reached' stage=symbolic.builder
+2026-07-22T21:42:27.576630Z [info     ] variant.profile.done                     corpus_paths=349 func=minmea_getdatetime function_reached=True stage=symbolic.builder
+2026-07-22T21:42:27.576744Z [info     ] harness.variant_profiled                 compiled=True corpus_paths=349 coverage_pct=100.0 func=minmea_getdatetime stage=pipeline variant=1
+2026-07-22T21:42:27.576874Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T21:42:27.576929Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T21:42:27.597100Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T21:42:27.625297Z [info     ] api.call                                 func=minmea_getdatetime model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=predicate_synthesis
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T21:42:36.370430Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=1985 tokens_out=753
+2026-07-22T21:42:36.370687Z [info     ] predicate_synthesis.parsed               count=5 names=['has_zda_or_gll_prefix', 'has_zda_comma_separator', 'has_zda_time_field_start', 'has_zda_date_field_start', 'has_zda_valid_date_components'] stage=symbolic.builder
+2026-07-22T21:42:36.418452Z [info     ] predicate.canary_seeds_loaded            count=0 dirs=['/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_libnmea', '/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_minmea'] stage=symbolic.builder
+2026-07-22T21:42:36.425120Z [warning  ] predicate.canary_no_real_seeds_skip_inject count=5 names=['has_zda_or_gll_prefix', 'has_zda_comma_separator', 'has_zda_time_field_start', 'has_zda_date_field_start', 'has_zda_valid_date_components'] note='no real seeds available — random-only canary cannot validate format-specific predicates; dropping all to avoid filtering format-correct inputs at the gate' stage=symbolic.builder
+2026-07-22T21:42:36.425193Z [warning  ] harness.predicates_canary_pruned         after=0 before=5 stage=symbolic.builder
+2026-07-22T21:42:36.425363Z [info     ] harness.written                          path=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis.c stage=symbolic.builder
+2026-07-22T21:42:36.426792Z [info     ] harness.compile.start                    cmd='afl-clang-fast -I/home/giorg/minmea_clean -I/home/giorg/minmea_work/build_fuzz -I/mnt/c/Users/giorg/OneDrive/Desktop/Nem' stage=symbolic.builder
+2026-07-22T21:42:36.667197Z [info     ] harness.compile.success                  binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis stage=symbolic.builder
+2026-07-22T21:42:36.667865Z [info     ] variant.profile.start                    func=minmea_getdatetime stage=symbolic.builder timeout_sec=120
+2026-07-22T21:44:36.786827Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T21:44:36.786931Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T21:44:37.078864Z [info     ] variant.profile.bitmap_reach_override    bitmap_pct=48.76 func=minmea_getdatetime reason='GDB breakpoint missed but bitmap indicates code reached' stage=symbolic.builder
+2026-07-22T21:44:37.081972Z [info     ] variant.profile.done                     corpus_paths=354 func=minmea_getdatetime function_reached=True stage=symbolic.builder
+2026-07-22T21:44:37.082035Z [info     ] harness.variant_profiled                 compiled=True corpus_paths=354 coverage_pct=100.0 func=minmea_getdatetime stage=pipeline variant=2
+2026-07-22T21:44:37.082114Z [info     ] harness.variant_selected_with_reach      corpus_paths=354 func=minmea_getdatetime stage=pipeline total_reaching=3 total_variants=3 variant=2
+2026-07-22T21:44:37.082206Z [info     ] stage.start                              func=minmea_getdatetime name=symbolic stage=3
+2026-07-22T21:44:37.082442Z [info     ] stage3.strategy_a_harness_only           func=minmea_getdatetime stage=pipeline
+2026-07-22T21:44:37.082603Z [info     ] harness.validation                       declaration='int minmea_getdatetime(struct tm *tm, const struct minmea_date *date, const struct minmea_time *time_);' final_passed=True first_pass_passed=True first_pass_reasons=[] outcome=first_pass_ok repair_attempted=False repair_produced_code=False stage=symbolic target=minmea_getdatetime variadic=False
+2026-07-22T21:44:37.082681Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T21:44:37.082724Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T21:44:37.101575Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T21:44:37.159919Z [info     ] predicate_synthesis.parsed               count=5 names=['has_zda_or_gll_prefix', 'has_zda_comma_separator', 'has_zda_time_field_start', 'has_zda_date_field_start', 'has_zda_valid_date_components'] stage=symbolic.builder
+2026-07-22T21:44:37.259022Z [info     ] predicate.canary_seeds_loaded            count=0 dirs=['/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_libnmea', '/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_minmea'] stage=symbolic.builder
+2026-07-22T21:44:37.265797Z [warning  ] predicate.canary_no_real_seeds_skip_inject count=5 names=['has_zda_or_gll_prefix', 'has_zda_comma_separator', 'has_zda_time_field_start', 'has_zda_date_field_start', 'has_zda_valid_date_components'] note='no real seeds available — random-only canary cannot validate format-specific predicates; dropping all to avoid filtering format-correct inputs at the gate' stage=symbolic.builder
+2026-07-22T21:44:37.265888Z [warning  ] harness.predicates_canary_pruned         after=0 before=5 stage=symbolic.builder
+2026-07-22T21:44:37.266047Z [info     ] harness.written                          path=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis.c stage=symbolic.builder
+2026-07-22T21:44:37.267651Z [info     ] harness.compile.start                    cmd='afl-clang-fast -I/home/giorg/minmea_clean -I/home/giorg/minmea_work/build_fuzz -I/mnt/c/Users/giorg/OneDrive/Desktop/Nem' stage=symbolic.builder
+2026-07-22T21:44:37.710711Z [info     ] harness.compile.success                  binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis stage=symbolic.builder
+2026-07-22T21:44:37.713281Z [info     ] cmplog.compile.start                     binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=symbolic.builder
+2026-07-22T21:44:38.049210Z [info     ] cmplog.compile.success                   binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=symbolic.builder
+2026-07-22T21:44:38.049371Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T21:44:38.049424Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T21:44:38.412370Z [info     ] unpatched.harness_built                  binary=/home/giorg/minmea_clean/build_debug/fuzz_nemesis_debug stage=symbolic
+2026-07-22T21:44:38.412501Z [info     ] unpatched.debug_binary.ready             binary=/home/giorg/minmea_clean/build_debug/fuzz_nemesis_debug stage=pipeline
+2026-07-22T21:44:39.859580Z [info     ] profiling.result                         first_hit_seed= func=minmea_getdatetime hit_rate=0.0 hits=0 reaches_target=False seeds_tested=8 stage=pipeline
+2026-07-22T21:44:39.859766Z [info     ] profiling.direct_internal_bypass         direct_internal=False func=minmea_getdatetime hint='trust variant-profile reachability; skip caller escalation, proceed to fuzz' indirect_reach=False is_static=False stage=pipeline variant_coverage_pct=100.0
+2026-07-22T21:44:39.862049Z [info     ] fuzz_a.start                             func=minmea_getdatetime iteration=0 stage=pipeline
+2026-07-22T21:44:39.862200Z [info     ] seeds.targeted.start                     func=minmea_getdatetime n=3 stage=neural
+2026-07-22T21:44:39.862377Z [info     ] api.call                                 func=minmea_getdatetime model=openai/gpt-oss-120b provider=nvidia-gpt-oss-120b stage=seed_synthesis
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T21:44:55.577625Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=nvidia-gpt-oss-120b stage=neural.client tokens_in=1389 tokens_out=580
+2026-07-22T21:44:55.577970Z [info     ] seeds.targeted.generated                 count=3 func=minmea_getdatetime stage=neural
+2026-07-22T21:44:55.578281Z [info     ] seeds.targeted_generated                 count=3 func=minmea_getdatetime stage=pipeline
+2026-07-22T21:44:55.578577Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T21:44:55.589841Z [info     ] roundtrip.skipped_no_encode_api          library=minmea stage=pipeline
+2026-07-22T21:44:55.589963Z [info     ] z3.no_input_spec                         stage=pipeline
+2026-07-22T21:44:55.592686Z [info     ] evolve.no_fitness_breed_all              stage=pipeline
+2026-07-22T21:44:55.595400Z [info     ] evolve.children_written                  count=40 stage=pipeline
+2026-07-22T21:44:55.597102Z [info     ] seed_pipeline.summary                    added=40 roundtrip=True seed_evolve=True seeds_after=301 seeds_before=261 stage=pipeline z3_seedgen=True
+2026-07-22T21:44:55.603493Z [info     ] seeds.targeted_added                     count=3 stage=fuzzing.afl
+2026-07-22T21:44:55.632780Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T21:44:55.665006Z [info     ] api.call                                 func=minmea_getdatetime model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=seedgen.synth
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T21:45:24.693740Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=2162 tokens_out=3785
+2026-07-22T21:45:24.919405Z [info     ] seedgen.script_synthesised               length=8397 stage=fuzzing.afl
+2026-07-22T21:45:34.518410Z [info     ] seedgen.produced                         attempted=200 failures=0 stage=fuzzing.afl unique=200
+2026-07-22T21:45:34.518481Z [info     ] seedgen.appended_to_corpus               seeds_dir=/home/giorg/nemesis_workspace/fuzzing/seeds/minmea_getdatetime stage=fuzzing.afl unique=200
+2026-07-22T21:45:35.807416Z [info     ] dict.generated                           path=/home/giorg/nemesis_workspace/fuzzing/dict/minmea_getdatetime/nemesis.dict stage=fuzzing.afl tokens=19
+2026-07-22T21:45:35.809911Z [info     ] afl.binary_snapshot                      debug_size=1733832 size=1827512 snapshot=/home/giorg/nemesis_workspace/fuzzing/findings/e73eeb816c0d/minmea_getdatetime/binary_snapshot stage=fuzzing.afl
+2026-07-22T21:45:35.810067Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T21:45:35.912352Z [info     ] mutator_synthesis.generated              chars=5789 format=NMEA library=minmea stage=fuzzing.afl
+2026-07-22T21:45:36.174052Z [info     ] mutator_synthesis.compile_ok             bytes=16064 so=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.so stage=fuzzing.afl
+2026-07-22T21:45:36.203720Z [info     ] mutator_synthesis.smoke_ok               so=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.so stage=fuzzing.afl
+2026-07-22T21:45:36.203856Z [info     ] afl.custom_mutator_synthesized           source=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.c stage=fuzzing.afl
+2026-07-22T21:45:36.406199Z [info     ] afl.custom_mutator_loaded                so=/home/giorg/nemesis_workspace/fuzzing/mutator/minmea_synth.so source=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.c stage=fuzzing.afl
+2026-07-22T21:45:36.406323Z [info     ] afl.launch                               binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis instances=4 seeds=/home/giorg/nemesis_workspace/fuzzing/seeds/minmea_getdatetime stage=fuzzing.afl timeout_h=0.25
+2026-07-22T21:45:36.406710Z [info     ] afl.cmplog_active                        binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=fuzzing.afl
+2026-07-22T22:00:36.644000Z [info     ] afl.complete                             instances=4 stage=fuzzing.afl
+2026-07-22T22:00:36.647248Z [info     ] triage.start                             crash_count=0 crash_dirs=4 instances=4 stage=fuzzing.triager
+2026-07-22T22:00:36.647302Z [info     ] triage.complete                          stage=fuzzing.triager unique_crashes=0
+2026-07-22T22:00:36.647839Z [info     ] bitmap_coverage.measured                 bitmap_cvg_after=48.06 bitmap_cvg_before=0.0 bitmap_cvg_delta=48.06 growing=False stage=fuzzing.coverage success=True
+2026-07-22T22:00:38.411568Z [info     ] post_fuzz_cov.result                     func=minmea_getdatetime hits=0 pct=0.0 samples=10 stage=pipeline
+2026-07-22T22:00:38.411704Z [warning  ] harness.low_function_reachability        func=minmea_getdatetime hint='gdb breakpoint check: target function not reached by most AFL inputs' pct=0.0 stage=pipeline
+2026-07-22T22:00:38.416173Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T22:00:38.416319Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T22:00:38.594050Z [info     ] coverage.harness_built                   binary=/home/giorg/minmea_clean/build_coverage/fuzz_nemesis_coverage stage=symbolic
+2026-07-22T22:00:38.640318Z [info     ] source_coverage.measured                 branch_cov='0/8 (0.0%)' corpus_samples=20 func=minmea_getdatetime line_cov='0/18 (0.0%)' region_cov='0/12 (0.0%)' runs_ok=20 stage=symbolic
+2026-07-22T22:00:38.641091Z [info     ] source_coverage.result                   func=minmea_getdatetime iteration=0 line_cov_pct=0.0 stage=pipeline
+2026-07-22T22:00:38.646035Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T22:00:38.646133Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T22:00:38.861207Z [info     ] harness.quality_score                    func=minmea_getdatetime iteration=0 line_cov=0.0 score=0.4 stage=pipeline
+2026-07-22T22:00:38.861974Z [info     ] feedback_a.refining_harness              func=minmea_getdatetime iteration=1 reason=no_coverage_expansion stage=pipeline
+2026-07-22T22:00:38.862254Z [info     ] refine_harness.start                     func=minmea_getdatetime iteration=1 reason=low_function_coverage stage=neural
+2026-07-22T22:00:38.862720Z [info     ] api.call                                 func=minmea_getdatetime model=openai/gpt-oss-120b provider=gpt-oss-debugger role=gpt-oss-debugger stage=harness_refinement
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T22:00:59.808022Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=gpt-oss-debugger role=gpt-oss-debugger stage=neural.client tokens_in=2686 tokens_out=1634
+2026-07-22T22:00:59.808912Z [info     ] harness_a.start                          format_func= func=minmea_getdatetime stage=neural
+HTTP Request: POST https://integrate.api.nvidia.com/v1/embeddings "HTTP/1.1 200 OK"
+2026-07-22T22:01:00.132109Z [info     ] context.built                            budget_pct=39.6 chars=47522 func=minmea_getdatetime sections=5 stage=context_builder
+2026-07-22T22:01:00.143501Z [info     ] api.call                                 func=minmea_getdatetime model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=harness_generation_a
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T22:01:12.851906Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=16865 tokens_out=1141
+2026-07-22T22:01:12.852388Z [info     ] harness.validation                       declaration='int minmea_getdatetime(struct tm *tm, const struct minmea_date *date, const struct minmea_time *time_);' final_passed=True first_pass_passed=True first_pass_reasons=[] outcome=first_pass_ok repair_attempted=False repair_produced_code=False stage=symbolic target=minmea_getdatetime variadic=False
+2026-07-22T22:01:12.852503Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T22:01:12.852548Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T22:01:12.923876Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T22:01:12.985634Z [info     ] api.call                                 func=minmea_getdatetime model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=predicate_synthesis
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T22:01:15.983255Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=2034 tokens_out=408
+2026-07-22T22:01:15.983486Z [info     ] predicate_synthesis.parsed               count=5 names=['has_dollar_sign', 'has_crlf_terminator', 'has_comma_separator', 'has_talker_and_sentence_id', 'has_rmc_gll_zda_gga_sentence_id'] stage=symbolic.builder
+2026-07-22T22:01:16.031805Z [info     ] predicate.canary_seeds_loaded            count=0 dirs=['/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_libnmea', '/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_minmea'] stage=symbolic.builder
+2026-07-22T22:01:16.040268Z [warning  ] predicate.canary_no_real_seeds_skip_inject count=5 names=['has_dollar_sign', 'has_crlf_terminator', 'has_comma_separator', 'has_talker_and_sentence_id', 'has_rmc_gll_zda_gga_sentence_id'] note='no real seeds available — random-only canary cannot validate format-specific predicates; dropping all to avoid filtering format-correct inputs at the gate' stage=symbolic.builder
+2026-07-22T22:01:16.040480Z [warning  ] harness.predicates_canary_pruned         after=0 before=5 stage=symbolic.builder
+2026-07-22T22:01:16.040658Z [info     ] harness.written                          path=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis.c stage=symbolic.builder
+2026-07-22T22:01:16.048707Z [info     ] harness.compile.start                    cmd='afl-clang-fast -I/home/giorg/minmea_clean -I/home/giorg/minmea_work/build_fuzz -I/mnt/c/Users/giorg/OneDrive/Desktop/Nem' stage=symbolic.builder
+2026-07-22T22:01:16.407575Z [info     ] harness.compile.success                  binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis stage=symbolic.builder
+2026-07-22T22:01:16.411547Z [info     ] cmplog.compile.start                     binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=symbolic.builder
+2026-07-22T22:01:16.818638Z [info     ] cmplog.compile.success                   binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=symbolic.builder
+2026-07-22T22:01:16.819011Z [info     ] fuzz_a.start                             func=minmea_getdatetime iteration=1 stage=pipeline
+2026-07-22T22:01:16.855101Z [info     ] seeds.targeted_added                     count=3 stage=fuzzing.afl
+2026-07-22T22:01:16.967941Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T22:01:17.014562Z [info     ] api.call                                 func=minmea_getdatetime model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=seedgen.synth
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T22:01:49.706476Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=2211 tokens_out=3278
+2026-07-22T22:01:49.712076Z [warning  ] seedgen.script_rejected                  excerpt='import sys, random\n\ndef crc_nmea(s):\n    crc = 0\n    for ch in s:\n        crc ^= ord(ch)\n    return "%02X" % (crc & 0xFF)\n\ndef field_token(val):\n    return str(val) if val is not None else ""\n\ndef float_to_nmea(val, scale=1000000):\n    if val is None:\n        return ""\n    scaled = int(round(val * s' reason='import-from not allowed: datetime' stage=fuzzing.afl
+2026-07-22T22:01:49.802750Z [info     ] showmap.input_mode_detected              argv_edges=8 mode=stdin stage=recon.byte_influence stdin_edges=15
+2026-07-22T22:01:50.451238Z [info     ] probe.seed_selected                      bytes=35 considered=40 edges=15 seed=seedgen_0171_03dccbf3ba15.bin stage=recon.byte_influence
+2026-07-22T22:01:53.246220Z [info     ] infer.done                               baseline_edges=15 fields=2 influential_bytes=7 seed_len=35 snapped=1 stage=recon.byte_influence threshold=0.25
+2026-07-22T22:01:53.248017Z [info     ] byte_influence.measured_spec             fields=3 seed=seedgen_0171_03dccbf3ba15.bin stage=fuzzing.afl
+2026-07-22T22:01:53.257873Z [info     ] fieldspec.produced                       requested=200 stage=fuzzing.afl unique=200
+2026-07-22T22:01:53.257944Z [info     ] fieldspec.appended_to_corpus             seeds_dir=/home/giorg/nemesis_workspace/fuzzing/seeds/minmea_getdatetime stage=fuzzing.afl unique=200
+2026-07-22T22:01:55.186347Z [info     ] dict.generated                           path=/home/giorg/nemesis_workspace/fuzzing/dict/minmea_getdatetime/nemesis.dict stage=fuzzing.afl tokens=19
+2026-07-22T22:01:55.192067Z [info     ] afl.binary_snapshot                      debug_size=1733832 size=1828008 snapshot=/home/giorg/nemesis_workspace/fuzzing/findings/e73eeb816c0d/minmea_getdatetime/binary_snapshot stage=fuzzing.afl
+2026-07-22T22:01:55.192321Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T22:01:55.272855Z [info     ] mutator_synthesis.generated              chars=5789 format=NMEA library=minmea stage=fuzzing.afl
+2026-07-22T22:01:55.572012Z [info     ] mutator_synthesis.compile_ok             bytes=16064 so=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.so stage=fuzzing.afl
+2026-07-22T22:01:55.595645Z [info     ] mutator_synthesis.smoke_ok               so=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.so stage=fuzzing.afl
+2026-07-22T22:01:55.595729Z [info     ] afl.custom_mutator_synthesized           source=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.c stage=fuzzing.afl
+2026-07-22T22:01:55.781178Z [info     ] afl.custom_mutator_loaded                so=/home/giorg/nemesis_workspace/fuzzing/mutator/minmea_synth.so source=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.c stage=fuzzing.afl
+2026-07-22T22:01:55.781318Z [info     ] afl.launch                               binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis instances=4 seeds=/home/giorg/nemesis_workspace/fuzzing/seeds/minmea_getdatetime stage=fuzzing.afl timeout_h=0.25
+2026-07-22T22:01:55.781611Z [info     ] afl.cmplog_active                        binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=fuzzing.afl
+2026-07-22T22:16:56.118433Z [info     ] afl.complete                             instances=4 stage=fuzzing.afl
+2026-07-22T22:16:56.120401Z [info     ] triage.start                             crash_count=0 crash_dirs=4 instances=4 stage=fuzzing.triager
+2026-07-22T22:16:56.120455Z [info     ] triage.complete                          stage=fuzzing.triager unique_crashes=0
+2026-07-22T22:16:56.120821Z [info     ] bitmap_coverage.measured                 bitmap_cvg_after=56.64 bitmap_cvg_before=0.0 bitmap_cvg_delta=56.64 growing=False stage=fuzzing.coverage success=True
+2026-07-22T22:16:56.120914Z [info     ] fuzz_a.bitmap_expanded                   bitmap_delta=56.64 func=minmea_getdatetime iteration=1 quality_score=0.4 source_coverage_pct=0.0 stage=pipeline
+2026-07-22T22:16:56.121962Z [info     ] target.start                             file=tests.c func=main stage=pipeline
+2026-07-22T22:16:56.122253Z [info     ] trace.start                              func=main stage=recon.tracer
+2026-07-22T22:16:56.146299Z [info     ] trace.complete                           chain=['main'] depth=1 func=main stage=recon.tracer
+HTTP Request: POST https://integrate.api.nvidia.com/v1/embeddings "HTTP/1.1 200 OK"
+2026-07-22T22:16:56.562209Z [info     ] plan_harness.start                       func=main stage=neural
+2026-07-22T22:16:56.564881Z [info     ] stage.start                              func=main name=neural stage=2 strategy=harness
+2026-07-22T22:16:56.565171Z [info     ] analyze_harness.start                    func=main stage=neural
+HTTP Request: POST https://integrate.api.nvidia.com/v1/embeddings "HTTP/1.1 200 OK"
+2026-07-22T22:16:56.885499Z [info     ] context.built                            budget_pct=65.6 chars=78719 func=main sections=5 stage=context_builder
+2026-07-22T22:16:56.891443Z [info     ] api.call                                 func=main model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=harness_variant_0
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T22:17:06.471068Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=30650 tokens_out=743
+2026-07-22T22:17:06.471200Z [info     ] harness_variant.generated                func=main stage=neural temp=0.2 variant=0
+2026-07-22T22:17:06.472819Z [info     ] api.call                                 func=main model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=harness_variant_1
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T22:17:28.833193Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=30650 tokens_out=1210
+2026-07-22T22:17:28.833570Z [info     ] harness_variant.generated                func=main stage=neural temp=0.5 variant=1
+2026-07-22T22:17:28.835231Z [info     ] api.call                                 func=main model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=harness_variant_2
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T22:17:49.863589Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=30650 tokens_out=1457
+2026-07-22T22:17:49.863725Z [info     ] harness_variant.generated                func=main stage=neural temp=0.8 variant=2
+2026-07-22T22:17:49.868353Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T22:17:49.868440Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T22:17:49.925309Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T22:17:49.953055Z [info     ] api.call                                 func=minmea_getdatetime model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=predicate_synthesis
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T22:17:54.865392Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=1886 tokens_out=539
+2026-07-22T22:17:54.865778Z [info     ] predicate_synthesis.parsed               count=5 names=['is_nmea_sentence', 'is_rmc_or_zda_sentence', 'has_valid_talker_and_fields', 'has_date_time_fields', 'has_non_empty_date_time_tokens'] stage=symbolic.builder
+2026-07-22T22:17:54.990582Z [info     ] predicate.canary_seeds_loaded            count=0 dirs=['/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_libnmea', '/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_minmea'] stage=symbolic.builder
+2026-07-22T22:17:54.997254Z [warning  ] predicate.canary_no_real_seeds_skip_inject count=5 names=['is_nmea_sentence', 'is_rmc_or_zda_sentence', 'has_valid_talker_and_fields', 'has_date_time_fields', 'has_non_empty_date_time_tokens'] note='no real seeds available — random-only canary cannot validate format-specific predicates; dropping all to avoid filtering format-correct inputs at the gate' stage=symbolic.builder
+2026-07-22T22:17:54.997310Z [warning  ] harness.predicates_canary_pruned         after=0 before=5 stage=symbolic.builder
+2026-07-22T22:17:54.997434Z [info     ] harness.written                          path=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis.c stage=symbolic.builder
+2026-07-22T22:17:54.998190Z [info     ] harness.compile.start                    cmd='afl-clang-fast -I/home/giorg/minmea_clean -I/home/giorg/minmea_work/build_fuzz -I/mnt/c/Users/giorg/OneDrive/Desktop/Nem' stage=symbolic.builder
+2026-07-22T22:17:55.397556Z [info     ] harness.compile.success                  binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis stage=symbolic.builder
+2026-07-22T22:17:55.398389Z [info     ] variant.profile.start                    func=minmea_getdatetime stage=symbolic.builder timeout_sec=120
+2026-07-22T22:19:55.667351Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T22:19:55.667496Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T22:19:55.943419Z [info     ] variant.profile.bitmap_reach_override    bitmap_pct=51.76 func=minmea_getdatetime reason='GDB breakpoint missed but bitmap indicates code reached' stage=symbolic.builder
+2026-07-22T22:19:55.949414Z [info     ] variant.profile.done                     corpus_paths=789 func=minmea_getdatetime function_reached=True stage=symbolic.builder
+2026-07-22T22:19:55.949625Z [info     ] harness.variant_profiled                 compiled=True corpus_paths=789 coverage_pct=100.0 func=main stage=pipeline variant=0
+2026-07-22T22:19:55.949760Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T22:19:55.949838Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T22:19:55.964342Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T22:19:55.988954Z [info     ] api.call                                 func=minmea_getdatetime model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=predicate_synthesis
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T22:20:02.402621Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=2026 tokens_out=661
+2026-07-22T22:20:02.402916Z [info     ] predicate_synthesis.parsed               count=5 names=['has_zda_sentence', 'has_zda_fields', 'has_valid_zda_time', 'has_valid_zda_date', 'has_zda_checksum'] stage=symbolic.builder
+2026-07-22T22:20:02.434182Z [info     ] predicate.canary_seeds_loaded            count=0 dirs=['/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_libnmea', '/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_minmea'] stage=symbolic.builder
+2026-07-22T22:20:02.440884Z [warning  ] predicate.canary_no_real_seeds_skip_inject count=5 names=['has_zda_sentence', 'has_zda_fields', 'has_valid_zda_time', 'has_valid_zda_date', 'has_zda_checksum'] note='no real seeds available — random-only canary cannot validate format-specific predicates; dropping all to avoid filtering format-correct inputs at the gate' stage=symbolic.builder
+2026-07-22T22:20:02.440963Z [warning  ] harness.predicates_canary_pruned         after=0 before=5 stage=symbolic.builder
+2026-07-22T22:20:02.441149Z [info     ] harness.written                          path=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis.c stage=symbolic.builder
+2026-07-22T22:20:02.449875Z [info     ] harness.compile.start                    cmd='afl-clang-fast -I/home/giorg/minmea_clean -I/home/giorg/minmea_work/build_fuzz -I/mnt/c/Users/giorg/OneDrive/Desktop/Nem' stage=symbolic.builder
+2026-07-22T22:20:02.750442Z [info     ] harness.compile.success                  binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis stage=symbolic.builder
+2026-07-22T22:20:02.751094Z [info     ] variant.profile.start                    func=minmea_getdatetime stage=symbolic.builder timeout_sec=120
+2026-07-22T22:22:03.020060Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T22:22:03.020174Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T22:22:03.355943Z [info     ] variant.profile.bitmap_reach_override    bitmap_pct=27.14 func=minmea_getdatetime reason='GDB breakpoint missed but bitmap indicates code reached' stage=symbolic.builder
+2026-07-22T22:22:03.361269Z [info     ] variant.profile.done                     corpus_paths=725 func=minmea_getdatetime function_reached=True stage=symbolic.builder
+2026-07-22T22:22:03.361392Z [info     ] harness.variant_profiled                 compiled=True corpus_paths=725 coverage_pct=100.0 func=main stage=pipeline variant=1
+2026-07-22T22:22:03.361530Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T22:22:03.361586Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T22:22:03.381120Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T22:22:03.432491Z [info     ] api.call                                 func=minmea_getdatetime model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=predicate_synthesis
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T22:22:08.136365Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=2303 tokens_out=547
+2026-07-22T22:22:08.136634Z [info     ] predicate_synthesis.parsed               count=5 names=['has_nmea_prefix', 'has_comma_after_id', 'has_date_fields', 'date_field_nonempty', 'date_field_valid_digits'] stage=symbolic.builder
+2026-07-22T22:22:08.219106Z [info     ] predicate.canary_seeds_loaded            count=0 dirs=['/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_libnmea', '/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_minmea'] stage=symbolic.builder
+2026-07-22T22:22:08.227334Z [warning  ] predicate.canary_no_real_seeds_skip_inject count=5 names=['has_nmea_prefix', 'has_comma_after_id', 'has_date_fields', 'date_field_nonempty', 'date_field_valid_digits'] note='no real seeds available — random-only canary cannot validate format-specific predicates; dropping all to avoid filtering format-correct inputs at the gate' stage=symbolic.builder
+2026-07-22T22:22:08.227424Z [warning  ] harness.predicates_canary_pruned         after=0 before=5 stage=symbolic.builder
+2026-07-22T22:22:08.227667Z [info     ] harness.written                          path=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis.c stage=symbolic.builder
+2026-07-22T22:22:08.230645Z [info     ] harness.compile.start                    cmd='afl-clang-fast -I/home/giorg/minmea_clean -I/home/giorg/minmea_work/build_fuzz -I/mnt/c/Users/giorg/OneDrive/Desktop/Nem' stage=symbolic.builder
+2026-07-22T22:22:08.526193Z [info     ] harness.compile.success                  binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis stage=symbolic.builder
+2026-07-22T22:22:08.526870Z [info     ] variant.profile.start                    func=minmea_getdatetime stage=symbolic.builder timeout_sec=120
+2026-07-22T22:24:08.795442Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T22:24:08.795556Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T22:24:09.136042Z [info     ] variant.profile.bitmap_reach_override    bitmap_pct=63.85 func=minmea_getdatetime reason='GDB breakpoint missed but bitmap indicates code reached' stage=symbolic.builder
+2026-07-22T22:24:09.141926Z [info     ] variant.profile.done                     corpus_paths=810 func=minmea_getdatetime function_reached=True stage=symbolic.builder
+2026-07-22T22:24:09.142084Z [info     ] harness.variant_profiled                 compiled=True corpus_paths=810 coverage_pct=100.0 func=main stage=pipeline variant=2
+2026-07-22T22:24:09.142141Z [info     ] harness.variant_selected_with_reach      corpus_paths=810 func=main stage=pipeline total_reaching=3 total_variants=3 variant=2
+2026-07-22T22:24:09.142206Z [info     ] stage.start                              func=main name=symbolic stage=3
+2026-07-22T22:24:09.142616Z [info     ] stage3.strategy_a_harness_only           func=main stage=pipeline
+2026-07-22T22:24:09.142771Z [info     ] harness.validation                       declaration='int minmea_getdatetime(struct tm *tm, const struct minmea_date *date, const struct minmea_time *time_);' final_passed=True first_pass_passed=True first_pass_reasons=[] outcome=first_pass_ok repair_attempted=False repair_produced_code=False stage=symbolic target=minmea_getdatetime variadic=False
+2026-07-22T22:24:09.142882Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T22:24:09.142965Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T22:24:09.162787Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T22:24:09.223167Z [info     ] predicate_synthesis.parsed               count=5 names=['has_nmea_prefix', 'has_comma_after_id', 'has_date_fields', 'date_field_nonempty', 'date_field_valid_digits'] stage=symbolic.builder
+2026-07-22T22:24:09.270836Z [info     ] predicate.canary_seeds_loaded            count=0 dirs=['/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_libnmea', '/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_minmea'] stage=symbolic.builder
+2026-07-22T22:24:09.277675Z [warning  ] predicate.canary_no_real_seeds_skip_inject count=5 names=['has_nmea_prefix', 'has_comma_after_id', 'has_date_fields', 'date_field_nonempty', 'date_field_valid_digits'] note='no real seeds available — random-only canary cannot validate format-specific predicates; dropping all to avoid filtering format-correct inputs at the gate' stage=symbolic.builder
+2026-07-22T22:24:09.277740Z [warning  ] harness.predicates_canary_pruned         after=0 before=5 stage=symbolic.builder
+2026-07-22T22:24:09.277885Z [info     ] harness.written                          path=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis.c stage=symbolic.builder
+2026-07-22T22:24:09.281626Z [info     ] harness.compile.start                    cmd='afl-clang-fast -I/home/giorg/minmea_clean -I/home/giorg/minmea_work/build_fuzz -I/mnt/c/Users/giorg/OneDrive/Desktop/Nem' stage=symbolic.builder
+2026-07-22T22:24:09.548202Z [info     ] harness.compile.success                  binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis stage=symbolic.builder
+2026-07-22T22:24:09.553375Z [info     ] cmplog.compile.start                     binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=symbolic.builder
+2026-07-22T22:24:09.783273Z [info     ] cmplog.compile.success                   binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=symbolic.builder
+2026-07-22T22:24:09.783474Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T22:24:09.783537Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T22:24:10.059529Z [info     ] unpatched.harness_built                  binary=/home/giorg/minmea_clean/build_debug/fuzz_nemesis_debug stage=symbolic
+2026-07-22T22:24:10.059661Z [info     ] unpatched.debug_binary.ready             binary=/home/giorg/minmea_clean/build_debug/fuzz_nemesis_debug stage=pipeline
+2026-07-22T22:24:10.756880Z [info     ] profiling.result                         first_hit_seed=seed3.txt func=main hit_rate=0.25 hits=1 reaches_target=True seeds_tested=4 stage=pipeline
+2026-07-22T22:24:10.759025Z [info     ] fuzz_a.start                             func=main iteration=0 stage=pipeline
+2026-07-22T22:24:10.759216Z [info     ] seeds.targeted.start                     func=main n=3 stage=neural
+2026-07-22T22:24:10.759424Z [info     ] api.call                                 func=main model=openai/gpt-oss-120b provider=nvidia-gpt-oss-120b stage=seed_synthesis
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T22:24:16.790501Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=nvidia-gpt-oss-120b stage=neural.client tokens_in=1359 tokens_out=99
+2026-07-22T22:24:16.790745Z [info     ] seeds.targeted.generated                 count=3 func=main stage=neural
+2026-07-22T22:24:16.791001Z [info     ] seeds.targeted_generated                 count=3 func=main stage=pipeline
+2026-07-22T22:24:16.791113Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T22:24:16.819795Z [info     ] roundtrip.skipped_no_encode_api          library=minmea stage=pipeline
+2026-07-22T22:24:16.819870Z [info     ] z3.no_input_spec                         stage=pipeline
+2026-07-22T22:24:16.819985Z [info     ] evolve.no_fitness_breed_all              stage=pipeline
+2026-07-22T22:24:16.821304Z [info     ] evolve.children_written                  count=40 stage=pipeline
+2026-07-22T22:24:16.821552Z [info     ] seed_pipeline.summary                    added=40 roundtrip=True seed_evolve=True seeds_after=44 seeds_before=4 stage=pipeline z3_seedgen=True
+2026-07-22T22:24:16.834376Z [info     ] seeds.targeted_added                     count=3 stage=fuzzing.afl
+2026-07-22T22:24:16.898381Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T22:24:16.928792Z [info     ] api.call                                 func=minmea_getdatetime model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=seedgen.synth
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T22:24:50.111446Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=2480 tokens_out=2810
+2026-07-22T22:24:50.178059Z [info     ] seedgen.script_synthesised               length=6764 stage=fuzzing.afl
+2026-07-22T22:24:59.920509Z [info     ] seedgen.produced                         attempted=200 failures=0 stage=fuzzing.afl unique=200
+2026-07-22T22:24:59.920591Z [info     ] seedgen.appended_to_corpus               seeds_dir=/home/giorg/nemesis_workspace/fuzzing/seeds/main stage=fuzzing.afl unique=200
+2026-07-22T22:25:01.082202Z [info     ] seeds.cmin_complete                      after=4 before=251 stage=fuzzing.afl
+2026-07-22T22:25:01.101791Z [info     ] dict.generated                           path=/home/giorg/nemesis_workspace/fuzzing/dict/main/nemesis.dict stage=fuzzing.afl tokens=7
+2026-07-22T22:25:01.104685Z [info     ] afl.binary_snapshot                      debug_size=1735456 size=1829232 snapshot=/home/giorg/nemesis_workspace/fuzzing/findings/e73eeb816c0d/main/binary_snapshot stage=fuzzing.afl
+2026-07-22T22:25:01.105040Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T22:25:01.168717Z [info     ] mutator_synthesis.generated              chars=5789 format=NMEA library=minmea stage=fuzzing.afl
+2026-07-22T22:25:01.413773Z [info     ] mutator_synthesis.compile_ok             bytes=16064 so=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.so stage=fuzzing.afl
+2026-07-22T22:25:01.454341Z [info     ] mutator_synthesis.smoke_ok               so=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.so stage=fuzzing.afl
+2026-07-22T22:25:01.454421Z [info     ] afl.custom_mutator_synthesized           source=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.c stage=fuzzing.afl
+2026-07-22T22:25:01.649644Z [info     ] afl.custom_mutator_loaded                so=/home/giorg/nemesis_workspace/fuzzing/mutator/minmea_synth.so source=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.c stage=fuzzing.afl
+2026-07-22T22:25:01.649721Z [info     ] afl.launch                               binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis instances=4 seeds=/home/giorg/nemesis_workspace/fuzzing/seeds/main_cmin stage=fuzzing.afl timeout_h=0.25
+2026-07-22T22:25:01.650033Z [info     ] afl.cmplog_active                        binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=fuzzing.afl
+2026-07-22T22:40:01.703656Z [info     ] afl.complete                             instances=4 stage=fuzzing.afl
+2026-07-22T22:40:01.706356Z [info     ] triage.start                             crash_count=0 crash_dirs=4 instances=4 stage=fuzzing.triager
+2026-07-22T22:40:01.706410Z [info     ] triage.complete                          stage=fuzzing.triager unique_crashes=0
+2026-07-22T22:40:01.706723Z [info     ] bitmap_coverage.measured                 bitmap_cvg_after=8.5 bitmap_cvg_before=0.0 bitmap_cvg_delta=8.5 growing=False stage=fuzzing.coverage success=True
+2026-07-22T22:40:02.373505Z [info     ] post_fuzz_cov.result                     func=main hits=0 pct=0.0 samples=4 stage=pipeline
+2026-07-22T22:40:02.373629Z [warning  ] harness.low_function_reachability        func=main hint='gdb breakpoint check: target function not reached by most AFL inputs' pct=0.0 stage=pipeline
+2026-07-22T22:40:02.374106Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T22:40:02.374234Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T22:40:02.582680Z [info     ] coverage.harness_built                   binary=/home/giorg/minmea_clean/build_coverage/fuzz_nemesis_coverage stage=symbolic
+2026-07-22T22:40:02.621227Z [info     ] source_coverage.measured                 branch_cov='9/42 (21.43%)' corpus_samples=4 func=main line_cov='23/72 (31.94%)' region_cov='21/46 (45.65%)' runs_ok=4 stage=symbolic
+2026-07-22T22:40:02.621539Z [info     ] source_coverage.result                   func=main iteration=0 line_cov_pct=31.94 stage=pipeline
+2026-07-22T22:40:02.621815Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T22:40:02.621880Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T22:40:02.787385Z [info     ] harness.quality_score                    func=main iteration=0 line_cov=31.94 score=0.4237 stage=pipeline
+2026-07-22T22:40:02.788073Z [info     ] feedback_a.refining_harness              func=main iteration=1 reason=no_coverage_expansion stage=pipeline
+2026-07-22T22:40:02.788292Z [info     ] refine_harness.start                     func=main iteration=1 reason=low_function_coverage stage=neural
+2026-07-22T22:40:02.788613Z [info     ] api.call                                 func=main model=openai/gpt-oss-120b provider=gpt-oss-debugger role=gpt-oss-debugger stage=harness_refinement
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T22:44:18.201472Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=gpt-oss-debugger role=gpt-oss-debugger stage=neural.client tokens_in=2623 tokens_out=1573
+2026-07-22T22:44:18.202161Z [info     ] harness_a.start                          format_func= func=main stage=neural
+HTTP Request: POST https://integrate.api.nvidia.com/v1/embeddings "HTTP/1.1 200 OK"
+2026-07-22T22:44:18.539392Z [info     ] context.built                            budget_pct=65.6 chars=78719 func=main sections=5 stage=context_builder
+2026-07-22T22:44:18.548899Z [info     ] api.call                                 func=main model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=harness_generation_a
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T22:44:38.395959Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=30513 tokens_out=1055
+2026-07-22T22:44:38.405296Z [info     ] harness.validation                       declaration='ifdef ID_VOID_MAIN void main() {' final_passed=True first_pass_passed=True first_pass_reasons=[] outcome=first_pass_ok repair_attempted=False repair_produced_code=False stage=symbolic target=main variadic=False
+2026-07-22T22:44:38.405465Z [info     ] harness.includes_injected                count=3 stage=symbolic.builder
+2026-07-22T22:44:38.405524Z [info     ] harness.afl_loop_syntax_fixed            stage=symbolic.builder
+2026-07-22T22:44:38.424012Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T22:44:38.480404Z [info     ] api.call                                 func=main model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=predicate_synthesis
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T22:44:42.581800Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=2131 tokens_out=369
+2026-07-22T22:44:42.582039Z [info     ] predicate_synthesis.parsed               count=5 names=['has_dollar_sign', 'has_crlf_termination', 'has_valid_checksum_delimiter', 'has_rmc_or_zda_sentence_id', 'has_date_time_fields_non_empty'] stage=symbolic.builder
+2026-07-22T22:44:42.673933Z [info     ] predicate.canary_seeds_loaded            count=0 dirs=['/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_libnmea', '/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/seeds/oss_fuzz_corpus_minmea'] stage=symbolic.builder
+2026-07-22T22:44:42.680731Z [warning  ] predicate.canary_no_real_seeds_skip_inject count=5 names=['has_dollar_sign', 'has_crlf_termination', 'has_valid_checksum_delimiter', 'has_rmc_or_zda_sentence_id', 'has_date_time_fields_non_empty'] note='no real seeds available — random-only canary cannot validate format-specific predicates; dropping all to avoid filtering format-correct inputs at the gate' stage=symbolic.builder
+2026-07-22T22:44:42.680826Z [warning  ] harness.predicates_canary_pruned         after=0 before=5 stage=symbolic.builder
+2026-07-22T22:44:42.680996Z [info     ] harness.written                          path=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis.c stage=symbolic.builder
+2026-07-22T22:44:42.682089Z [info     ] harness.compile.start                    cmd='afl-clang-fast -I/home/giorg/minmea_clean -I/home/giorg/minmea_work/build_fuzz -I/mnt/c/Users/giorg/OneDrive/Desktop/Nem' stage=symbolic.builder
+2026-07-22T22:44:42.982599Z [info     ] harness.compile.success                  binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis stage=symbolic.builder
+2026-07-22T22:44:42.989275Z [info     ] cmplog.compile.start                     binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=symbolic.builder
+2026-07-22T22:44:43.415637Z [info     ] cmplog.compile.success                   binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=symbolic.builder
+2026-07-22T22:44:43.415984Z [info     ] fuzz_a.start                             func=main iteration=1 stage=pipeline
+2026-07-22T22:44:43.425754Z [info     ] seeds.targeted_added                     count=3 stage=fuzzing.afl
+2026-07-22T22:44:43.458524Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T22:44:43.482629Z [info     ] api.call                                 func=main model=mistralai/mistral-small-4-119b-2603 provider=mistral-architect role=mistral-architect stage=seedgen.synth
+HTTP Request: POST https://integrate.api.nvidia.com/v1/chat/completions "HTTP/1.1 200 OK"
+2026-07-22T22:45:29.114221Z [info     ] api.complete                             cost='$0.00 (free tier)' provider=mistral-architect role=mistral-architect stage=neural.client tokens_in=2312 tokens_out=3366
+2026-07-22T22:45:29.116580Z [warning  ] seedgen.script_rejected                  excerpt='import sys, random, string\n\ndef crc_nmea(s):\n    crc = 0\n    for ch in s:\n        crc ^= ord(ch)\n    return f"{crc:02X}"\n\ndef rand_float_str(rng, scale=1000.0, min_val=-1e6, max_val=1e6):\n    v = min_val + (max_val - min_val) * random.random()\n    return f"{v:.{rng}f"\n\ndef rand_int_str(rng, min_val=' reason="unparseable script: f-string: expecting '}', or format specs (<unknown>, line 11)" stage=fuzzing.afl
+2026-07-22T22:45:29.151168Z [info     ] showmap.input_mode_detected              argv_edges=8 mode=stdin stage=recon.byte_influence stdin_edges=15
+2026-07-22T22:45:29.734398Z [info     ] probe.seed_selected                      bytes=34 considered=40 edges=15 seed=seedgen_0061_f98424add651.bin stage=recon.byte_influence
+2026-07-22T22:45:32.285562Z [info     ] infer.done                               baseline_edges=15 fields=2 influential_bytes=7 seed_len=34 snapped=1 stage=recon.byte_influence threshold=0.25
+2026-07-22T22:45:32.286333Z [info     ] byte_influence.measured_spec             fields=3 seed=seedgen_0061_f98424add651.bin stage=fuzzing.afl
+2026-07-22T22:45:32.297221Z [info     ] fieldspec.produced                       requested=200 stage=fuzzing.afl unique=200
+2026-07-22T22:45:32.297272Z [info     ] fieldspec.appended_to_corpus             seeds_dir=/home/giorg/nemesis_workspace/fuzzing/seeds/main stage=fuzzing.afl unique=200
+2026-07-22T22:45:33.549886Z [info     ] dict.generated                           path=/home/giorg/nemesis_workspace/fuzzing/dict/main/nemesis.dict stage=fuzzing.afl tokens=7
+2026-07-22T22:45:33.556020Z [info     ] afl.binary_snapshot                      debug_size=1735456 size=1828792 snapshot=/home/giorg/nemesis_workspace/fuzzing/findings/e73eeb816c0d/main/binary_snapshot stage=fuzzing.afl
+2026-07-22T22:45:33.556284Z [info     ] provider.chain                           count=4 providers=['nvidia-gpt-oss-120b', 'nvidia-qwen3.5-397b', 'nvidia-mistral-small-4', 'groq'] stage=neural.client
+2026-07-22T22:45:33.632408Z [info     ] mutator_synthesis.generated              chars=5789 format=NMEA library=minmea stage=fuzzing.afl
+2026-07-22T22:45:33.879071Z [info     ] mutator_synthesis.compile_ok             bytes=16064 so=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.so stage=fuzzing.afl
+2026-07-22T22:45:33.896697Z [info     ] mutator_synthesis.smoke_ok               so=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.so stage=fuzzing.afl
+2026-07-22T22:45:33.896774Z [info     ] afl.custom_mutator_synthesized           source=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.c stage=fuzzing.afl
+2026-07-22T22:45:34.092242Z [info     ] afl.custom_mutator_loaded                so=/home/giorg/nemesis_workspace/fuzzing/mutator/minmea_synth.so source=/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis/templates/mutator/adapters/minmea_synth.c stage=fuzzing.afl
+2026-07-22T22:45:34.092371Z [info     ] afl.launch                               binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis instances=4 seeds=/home/giorg/nemesis_workspace/fuzzing/seeds/main stage=fuzzing.afl timeout_h=0.25
+2026-07-22T22:45:34.092678Z [info     ] afl.cmplog_active                        binary=/home/giorg/minmea_work/build_fuzz/fuzz_nemesis_cmplog stage=fuzzing.afl
+2026-07-22T23:00:34.328490Z [info     ] afl.complete                             instances=4 stage=fuzzing.afl
+2026-07-22T23:00:34.331016Z [info     ] triage.start                             crash_count=0 crash_dirs=4 instances=4 stage=fuzzing.triager
+2026-07-22T23:00:34.331078Z [info     ] triage.complete                          stage=fuzzing.triager unique_crashes=0
+2026-07-22T23:00:34.331428Z [info     ] bitmap_coverage.measured                 bitmap_cvg_after=54.55 bitmap_cvg_before=0.0 bitmap_cvg_delta=54.55 growing=False stage=fuzzing.coverage success=True
+2026-07-22T23:00:34.331515Z [info     ] fuzz_a.bitmap_expanded                   bitmap_delta=54.55 func=main iteration=1 quality_score=0.5118 source_coverage_pct=31.94 stage=pipeline
+2026-07-22T23:00:34.332722Z [warning  ] run.degraded                             reasons=['all processed targets failed'] stage=pipeline status=failed
+2026-07-22T23:00:34.334286Z [info     ] results.saved                            path=/home/giorg/nemesis_workspace/e73eeb816c0d/results.json stage=pipeline
+         Pipeline Results         
+┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┓
+┃ Metric               ┃   Value ┃
+┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━┩
+│ Targets processed    │       3 │
+│ Targets with crashes │       0 │
+│ Total crashes        │       0 │
+│ CVE candidates       │       0 │
+│ LLM cost             │ $0.0000 │
+│ Duration             │ 8173.4s │
+└──────────────────────┴─────────┘
+
+No crashes found in this run.
+2026-07-22T23:00:34.344205Z [info     ] pipeline.complete                        duration_s=8173.4 run_id=3b69e24279e8 stage=cli
+2026-07-22T23:00:34.362811Z [info     ] reporter.saved                           count=0 path=findings.yaml stage=reporter
+
+Reporter: findings.yaml up-to-date (0 total) — 
+/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/findings.yaml
+
+Run did not succeed: all processed targets failed
+2026-07-22T23:00:34.368045Z [error    ] pipeline.unsuccessful                    reasons=['all processed targets failed'] run_id=3b69e24279e8 stage=cli
