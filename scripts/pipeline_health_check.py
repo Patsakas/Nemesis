@@ -325,9 +325,69 @@ def check_reachability_confidence(log: str) -> Check:
         lowest_bitmap_pct=min(min(v) for v in by_func.values()))
 
 
+# Names an AFL harness necessarily defines. A target sharing one of these
+    # cannot be told apart from the harness by symbol name alone.
+HARNESS_OWN_SYMBOLS = frozenset({"main", "LLVMFuzzerTestOneInput",
+                                 "LLVMFuzzerInitialize"})
+
+
+def check_coverage_attribution(log: str) -> Check:
+    """Attribution. Does the coverage belong to the target, or to the harness?
+
+    Measured on minmea target 3: the target was `main` from `tests.c`, ten lines
+    long. `source_coverage` reported 23/72 lines — 72 being the generated
+    harness's own `main`. GDB was right that the target was never reached;
+    llvm-cov was right about a function called `main`; they measured different
+    functions, and the score credited 0.35 x 31.94% of exploration for the
+    harness executing itself.
+
+    The full invariant is `coverage.entity.file == target.file` and cannot be
+    evaluated here: `source_coverage.result` records the function name but not
+    the file the symbol was resolved in. Until the pipeline logs the measured
+    entity, this flags the collision that makes attribution ambiguous rather
+    than proving a specific misattribution.
+
+    `main` is the obvious case. `init`, `parse`, `process` and `run` collide
+    just as easily once a harness grows helpers.
+    """
+    c = Check("coverage_attribution", "attribution")
+    targets: dict[str, str] = {}
+    for e in _events(log, "target.start"):
+        func = re.search(r"\bfunc=(\S+)", e)
+        path = re.search(r"\bfile=(\S+)", e)
+        if func:
+            targets[func.group(1)] = path.group(1) if path else "?"
+
+    if not targets:
+        return c.na("no targets recorded")
+
+    colliding = {f: p for f, p in targets.items() if f in HARNESS_OWN_SYMBOLS}
+    measured = {re.search(r"\bfunc=(\S+)", e).group(1)
+                for e in _events(log, "source_coverage.result")
+                if re.search(r"\bfunc=(\S+)", e)}
+    at_risk = {f: p for f, p in colliding.items() if f in measured}
+
+    if not at_risk:
+        if colliding:
+            return c.ok(
+                f"{len(colliding)} target(s) share a harness symbol but none had "
+                "coverage measured against them", targets=len(targets))
+        return c.ok(f"no target among {len(targets)} shares a name with a "
+                    "harness-defined symbol", targets=len(targets))
+
+    detail = "; ".join(f"{f} ({p})" for f, p in sorted(at_risk.items()))
+    return c.fail(
+        f"coverage measured for {len(at_risk)} target(s) whose name is also "
+        f"defined by the harness, so the figure may describe the harness "
+        f"rather than the target: {detail}",
+        targets=len(targets), at_risk=len(at_risk),
+        note="full check needs the measured symbol's file, not logged today")
+
+
 CHECKS = [check_variadic_gate, check_closed_loop, check_coverage_recorded,
           check_score_consumes_coverage, check_score_explainable,
-          check_metric_provenance, check_reachability_confidence]
+          check_metric_provenance, check_reachability_confidence,
+          check_coverage_attribution]
 
 
 def main() -> int:
@@ -385,6 +445,7 @@ def main() -> int:
         print()
         print("By property:")
         for prop in ("wiring", "observability", "consumption", "provenance",
+                     "attribution",
                      "interpretability"):
             if prop in by_property:
                 print(f"  {prop:<18}{by_property[prop]}")

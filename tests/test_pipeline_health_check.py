@@ -249,6 +249,42 @@ def test_inference_does_not_disturb_the_other_checks(tmp_path):
     assert status_of(r, "reachability_confidence") == "fail"
 
 
+# ── coverage_attribution [attribution] ──────────────────────
+
+TARGET_MAIN = "target.start file=tests.c func=main stage=pipeline"
+TARGET_LIB = "target.start file=src/nmea/nmea.c func=nmea_parse stage=pipeline"
+COV_MAIN = ("source_coverage.result func=main line_cov_pct=31.94 iteration=0 "
+            "stage=pipeline")
+COV_LIB = ("source_coverage.result func=nmea_parse line_cov_pct=81.82 "
+           "iteration=0 stage=pipeline")
+
+
+def test_attribution_fails_when_the_target_shares_the_harness_entry_point(tmp_path):
+    """The measured case: target `main` from tests.c is ten lines; the reported
+    23/72 is the generated harness's own `main`. Two functions, one name."""
+    r = run(tmp_path, [TARGET_MAIN, COV_MAIN, SCORE_FULL])
+    assert status_of(r, "coverage_attribution") == "fail"
+
+
+def test_attribution_passes_for_an_ordinary_target(tmp_path):
+    r = run(tmp_path, [TARGET_LIB, COV_LIB, SCORE_FULL])
+    assert status_of(r, "coverage_attribution") == "pass"
+
+
+def test_a_colliding_target_never_measured_is_not_a_failure(tmp_path):
+    """The collision only matters once coverage is attributed to it."""
+    r = run(tmp_path, [TARGET_MAIN, TARGET_LIB, COV_LIB, SCORE_FULL])
+    assert status_of(r, "coverage_attribution") == "pass"
+
+
+def test_attribution_is_independent_of_coverage_being_present(tmp_path):
+    """`coverage_recorded` passes on the same log — a number exists and is in
+    range. The objection is to whose number it is."""
+    r = run(tmp_path, [TARGET_MAIN, COV_MAIN, SCORE_FULL])
+    assert status_of(r, "coverage_recorded") == "pass"
+    assert status_of(r, "coverage_attribution") == "fail"
+
+
 # ── rollup ──────────────────────────────────────────────────
 
 

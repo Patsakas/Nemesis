@@ -149,6 +149,72 @@ reachability there will not, on its own, distinguish "reached `main`" from
 
 ---
 
+## target_relevance — exploration counts the wrong code
+
+**Status:** open. A dimension the score has no term for.
+
+**Evidence.** minmea run 2026-07-22, target 3: `main` from `tests.c`, which
+recon had ranked last at **−4.80**.
+
+| | `main` (test runner) | `minmea_getdatetime` (library) |
+|---|---|---|
+| reachability | 0% (0 of 4 inputs) | 0% (0 of 10) |
+| line coverage | **31.94%** (23/72) | 0% |
+| quality score | **0.4237** | 0.4000 |
+
+The test-suite entry point scored *higher* than a real library function. It
+earned 0.1118 of exploration credit for covering 32% of a test runner — real
+executable surface, and none of it the library's attack surface.
+
+`main` is not a mislabelled library function. It is the thing under which the
+library's own tests run, so exercising it is close to worthless for finding
+bugs in the library, and the score has no way to say so.
+
+**Why this is not the acceptance-threshold gap.** A threshold would have
+dropped `main` on its −4.80 recon score. It would not help against a test
+driver with rich control flow that scores positively — the score would still
+reward exploring it. Ranking and relevance are different questions.
+
+**The 31.94% is not test-suite coverage — it is the harness measuring itself.**
+The two measurements looked contradictory (GDB: 0 of 4 inputs reached `main`;
+llvm-cov: 31.94% of `main` executed) until the line counts are compared:
+
+| function named `main` | lines |
+|---|---|
+| `tests.c:1271` — the target | **10** |
+| the generated AFL harness | **68** |
+| what `source_coverage` reported | **23 / 72** |
+
+72 cannot be a 10-line function. llvm-cov measured the harness's own `main`,
+because every AFL harness defines one and the target here is also called `main`.
+GDB was right that the target was never reached; llvm-cov was right about a
+function called `main`; they were measuring different functions.
+
+So the exploration credit was not for exercising test infrastructure. It was
+for executing the harness itself — the score rewarded the harness for existing.
+Any target whose name collides with a symbol the harness defines is exposed to
+this, and `main` is the obvious case but not necessarily the only one.
+
+**Required direction.** Two separate things.
+
+Coverage must be attributed by definition site, not by symbol name, so a
+collision cannot silently redirect the measurement. That is a correctness fix.
+
+And exploration needs scoping to code that belongs to the library's attack
+surface rather than whatever the binary executed — a Layer 1 question, resolved
+before fuzzing rather than inside the score.
+
+**Related observation.** Given `reason=low_function_coverage` for this target,
+the refinement produced a harness calling `minmea_parse_rmc`, `minmea_scan`,
+`minmea_getdatetime`, `minmea_gettime`, `minmea_parse_zda` and
+`minmea_tofloat` — real library entry points, and not `main` at all. Asked to
+reach a bad target, the generator quietly went and harnessed the library
+instead. That is the right instinct and the wrong mechanism: nothing in the
+pipeline sanctioned changing the target, and the result will still be scored,
+logged and attributed as a `main` harness.
+
+---
+
 ## metric_provenance — values carried between iterations
 
 **Status:** the immediate bug is fixed; the model behind it is not.
