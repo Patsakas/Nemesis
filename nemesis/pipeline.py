@@ -1995,31 +1995,70 @@ class NemesisPipeline:
     def _compute_harness_quality_score(result: TargetResult) -> float:
         """Composite harness quality score [0.0–1.0].
 
-        Four observable signals, no LLM interpretation needed:
-          compiled              (0.30) — binary gate: did it build at all?
-          function_coverage_pct (0.30) — log-scaled to reward first gains over saturation
-          corpus_paths          (0.20) — smooth: how much did AFL explore? (capped at 10)
-          map_density_pct       (0.20) — proxy for execution depth (capped at 20%)
+        Four signals that answer four different questions:
 
-        Log scaling on coverage: log1p(5%) / log1p(100%) ≈ 0.37, whereas
-        log1p(25%) / log1p(100%) ≈ 0.61 — distinguishes "dead" from "almost working".
+          validity     (0.25) — did it build at all?
+          reachability (0.25) — do fuzzer inputs arrive at the target?
+                                `function_coverage_pct` is the gdb measurement of
+                                *what fraction of corpus inputs reach the target*,
+                                not code coverage, despite the name.
+          exploration  (0.35) — how much of the target did it actually exercise?
+                                `source_coverage_pct`, llvm line coverage.
+          efficiency   (0.15) — corpus paths and AFL map density.
+
+        The previous weighting had no exploration term at all: it spent 0.30 on
+        reachability and 0.20 on map density, and read line coverage nowhere.
+        Measured on minmea_scan, where refinement took line coverage from 21.35%
+        to 76.56%:
+
+            iteration 0   reach 100%  paths 10   density  8.24   score 0.8824
+            iteration 1   reach 100%  paths 726  density 44.26   score 1.0000
+
+        Reachability was saturated at 100% in both and `paths` was already past
+        its cap of 10, so the entire 0.12 rise came from map density. A harness
+        adding eight calls that all fail immediately produces the same edges and
+        scores identically — the score could not distinguish 21% exploration
+        from 76%.
+
+        Exploration carries the largest weight because it is the only term that
+        measures the thing a harness exists to do. Log scaling is kept for
+        reachability (first gains matter more than saturation) but *not* for
+        exploration: 40%-to-80% should read as a real doubling, and log scaling
+        flattens exactly the range worth optimising.
         """
         import math
 
         compiled = result.status not in ("failed",) and result.harness is not None
         afl = result.afl_stats
 
-        coverage_pct = max(result.function_coverage_pct, 0.0)  # treat -1 (not measured) as 0
-        coverage_score = math.log1p(coverage_pct) / math.log1p(100.0)
+        reach_pct = max(result.function_coverage_pct, 0.0)   # -1 = not measured
+        reach_score = math.log1p(reach_pct) / math.log1p(100.0)
+
+        # Not measured is not the same as zero: falling back to the old
+        # signals beats reporting a confident 0 for something never observed.
+        explore_pct = getattr(result, "source_coverage_pct", -1.0)
+        explored = explore_pct >= 0.0
+        explore_score = min(max(explore_pct, 0.0), 100.0) / 100.0 if explored else 0.0
 
         paths_score = min((afl.total_paths if afl else 0), 10) / 10.0
         density_score = min((afl.map_density_pct if afl else 0.0), 20.0) / 20.0
+        efficiency_score = (paths_score + density_score) / 2.0
+
+        if not explored:
+            # Redistribute exploration's weight over what *was* observed, rather
+            # than penalising a harness for a measurement the run skipped.
+            return round(
+                (1.0 if compiled else 0.0) * 0.35
+                + reach_score * 0.40
+                + efficiency_score * 0.25,
+                4,
+            )
 
         score = (
-            (1.0 if compiled else 0.0) * 0.30
-            + coverage_score * 0.30
-            + paths_score * 0.20
-            + density_score * 0.20
+            (1.0 if compiled else 0.0) * 0.25
+            + reach_score * 0.25
+            + explore_score * 0.35
+            + efficiency_score * 0.15
         )
         return round(score, 4)
 
@@ -2286,11 +2325,31 @@ class NemesisPipeline:
             coverage_delta = self.fuzzing.measure_coverage()
 
             if coverage_delta.success and iteration > 0:
+                # Bitmap expansion is a reason to MEASURE, not a reason to stop.
+                # AFL's map counts edges inside the harness too, so "the bitmap
+                # grew" does not answer "did the refinement help the target".
+                # Returning here skipped source-coverage measurement entirely:
+                # on minmea_scan the refinement took line coverage 21.35% →
+                # 76.56% and the run recorded neither number, exiting 2ms after
+                # the bitmap check. Had coverage *fallen*, this path would have
+                # been equally satisfied.
+                if not result.crashes and result.source_coverage_pct < 0.0:
+                    src_cov = self._measure_source_coverage(target, result)
+                    result.source_coverage_pct = src_cov
+                    if src_cov >= 0:
+                        self.log.info(
+                            "source_coverage.result",
+                            func=target.func_name,
+                            line_cov_pct=round(src_cov, 2),
+                            iteration=iteration,
+                        )
                 self.log.info(
                     "fuzz_a.bitmap_expanded",
                     func=target.func_name,
                     bitmap_delta=coverage_delta.total_expansion_pct,
                     iteration=iteration,
+                    source_coverage_pct=round(result.source_coverage_pct, 2),
+                    quality_score=self._compute_harness_quality_score(result),
                 )
                 return result
 
