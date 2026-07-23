@@ -336,12 +336,18 @@ class SymbolicStage:
         templates_dir = Path(__file__).parent.parent / "templates"
         if templates_dir.exists():
             include_flags += f" -I{templates_dir}"
-        # Fix 123: internal include dirs for direct internal function harnessing
-        if getattr(harness, 'direct_internal', False):
-            for idir in self.config.target.internal_include_dirs:
-                ipath = source_root / idir
-                if ipath.is_dir():
-                    include_flags += f" -I{ipath}"
+        # Fix 123 / Fix 157: internal include dirs. No longer gated on
+        # `direct_internal` — that flag marks a deliberate pin from the
+        # dashboard, but a generated harness reaches into internal headers
+        # whenever the public API alone cannot exercise the target, which is
+        # the common case. Gating on the pin meant the ordinary path compiled
+        # without them and died on the first internal header (bcg729: "cng.h"
+        # not found, reproduced across two runs). Appended after include_subdir
+        # so the public directory still wins on a basename clash.
+        for idir in self.config.target.internal_include_dirs:
+            ipath = source_root / idir
+            if ipath.is_dir() and f"-I{ipath}" not in include_flags:
+                include_flags += f" -I{ipath}"
         # Fix 133: propagate extra -I flags from auto-resolve (compile_flags)
         if harness.compile_flags:
             import re as _re_dbg
@@ -457,12 +463,18 @@ class SymbolicStage:
         templates_dir = Path(__file__).parent.parent / "templates"
         if templates_dir.exists():
             include_flags += f" -I{templates_dir}"
-        # Fix 123: internal include dirs for direct internal function harnessing
-        if getattr(harness, 'direct_internal', False):
-            for idir in self.config.target.internal_include_dirs:
-                ipath = source_root / idir
-                if ipath.is_dir():
-                    include_flags += f" -I{ipath}"
+        # Fix 123 / Fix 157: internal include dirs. No longer gated on
+        # `direct_internal` — that flag marks a deliberate pin from the
+        # dashboard, but a generated harness reaches into internal headers
+        # whenever the public API alone cannot exercise the target, which is
+        # the common case. Gating on the pin meant the ordinary path compiled
+        # without them and died on the first internal header (bcg729: "cng.h"
+        # not found, reproduced across two runs). Appended after include_subdir
+        # so the public directory still wins on a basename clash.
+        for idir in self.config.target.internal_include_dirs:
+            ipath = source_root / idir
+            if ipath.is_dir() and f"-I{ipath}" not in include_flags:
+                include_flags += f" -I{ipath}"
         # Fix 133: propagate extra -I flags from auto-resolve (compile_flags)
         if harness.compile_flags:
             import re as _re133b
@@ -589,12 +601,18 @@ class SymbolicStage:
         templates_dir = Path(__file__).parent.parent / "templates"
         if templates_dir.exists():
             include_flags += f" -I{templates_dir}"
-        # Fix 123: internal include dirs for direct internal function harnessing
-        if getattr(harness, 'direct_internal', False):
-            for idir in self.config.target.internal_include_dirs:
-                ipath = source_root / idir
-                if ipath.is_dir():
-                    include_flags += f" -I{ipath}"
+        # Fix 123 / Fix 157: internal include dirs. No longer gated on
+        # `direct_internal` — that flag marks a deliberate pin from the
+        # dashboard, but a generated harness reaches into internal headers
+        # whenever the public API alone cannot exercise the target, which is
+        # the common case. Gating on the pin meant the ordinary path compiled
+        # without them and died on the first internal header (bcg729: "cng.h"
+        # not found, reproduced across two runs). Appended after include_subdir
+        # so the public directory still wins on a basename clash.
+        for idir in self.config.target.internal_include_dirs:
+            ipath = source_root / idir
+            if ipath.is_dir() and f"-I{ipath}" not in include_flags:
+                include_flags += f" -I{ipath}"
         # Fix 133: propagate extra -I flags from auto-resolve (compile_flags)
         if harness.compile_flags:
             import re as _re133c
@@ -1252,9 +1270,11 @@ class SymbolicStage:
         incl_sub = self.config.target.include_subdir or self.config.target.source_subdir
         if incl_sub:
             known_dirs.add(source_root / incl_sub)
-        if getattr(harness, "direct_internal", False):
-            for idir in self.config.target.internal_include_dirs:
-                known_dirs.add(source_root / idir)
+        # Ungated to match the -I emission above: these directories are now
+        # always passed to the compiler, so treating them as uncovered here
+        # would make this pass re-resolve headers that already compile.
+        for idir in self.config.target.internal_include_dirs:
+            known_dirs.add(source_root / idir)
         if harness.compile_flags:
             for m in _re133.finditer(r"-I(\S+)", harness.compile_flags):
                 known_dirs.add(Path(m.group(1)))
@@ -2812,12 +2832,18 @@ class InstrumentedBuilder:
         if templates_dir.exists():
             include_flags += f" -I{templates_dir}"
 
-        # Fix 123: internal include dirs for direct internal function harnessing
-        if getattr(harness, 'direct_internal', False):
-            for idir in self.config.target.internal_include_dirs:
-                ipath = source_root / idir
-                if ipath.is_dir():
-                    include_flags += f" -I{ipath}"
+        # Fix 123 / Fix 157: internal include dirs. No longer gated on
+        # `direct_internal` — that flag marks a deliberate pin from the
+        # dashboard, but a generated harness reaches into internal headers
+        # whenever the public API alone cannot exercise the target, which is
+        # the common case. Gating on the pin meant the ordinary path compiled
+        # without them and died on the first internal header (bcg729: "cng.h"
+        # not found, reproduced across two runs). Appended after include_subdir
+        # so the public directory still wins on a basename clash.
+        for idir in self.config.target.internal_include_dirs:
+            ipath = source_root / idir
+            if ipath.is_dir() and f"-I{ipath}" not in include_flags:
+                include_flags += f" -I{ipath}"
         # Fix 133: propagate extra -I flags from auto-resolve (compile_flags)
         if harness.compile_flags:
             import re as _re133d
@@ -2965,12 +2991,18 @@ class InstrumentedBuilder:
         if templates_dir.exists():
             include_flags += f" -I{templates_dir}"
 
-        # Fix 123: internal include dirs for direct internal function harnessing
-        if getattr(harness, 'direct_internal', False):
-            for idir in self.config.target.internal_include_dirs:
-                ipath = source_root / idir
-                if ipath.is_dir():
-                    include_flags += f" -I{ipath}"
+        # Fix 123 / Fix 157: internal include dirs. No longer gated on
+        # `direct_internal` — that flag marks a deliberate pin from the
+        # dashboard, but a generated harness reaches into internal headers
+        # whenever the public API alone cannot exercise the target, which is
+        # the common case. Gating on the pin meant the ordinary path compiled
+        # without them and died on the first internal header (bcg729: "cng.h"
+        # not found, reproduced across two runs). Appended after include_subdir
+        # so the public directory still wins on a basename clash.
+        for idir in self.config.target.internal_include_dirs:
+            ipath = source_root / idir
+            if ipath.is_dir() and f"-I{ipath}" not in include_flags:
+                include_flags += f" -I{ipath}"
         # Fix 133: propagate extra -I flags from auto-resolve (compile_flags)
         if harness.compile_flags:
             import re as _re133e
@@ -3066,12 +3098,18 @@ class InstrumentedBuilder:
         if templates_dir.exists():
             include_flags += f" -I{templates_dir}"
 
-        # Fix 123: internal include dirs for direct internal function harnessing
-        if getattr(harness, 'direct_internal', False):
-            for idir in self.config.target.internal_include_dirs:
-                ipath = source_root / idir
-                if ipath.is_dir():
-                    include_flags += f" -I{ipath}"
+        # Fix 123 / Fix 157: internal include dirs. No longer gated on
+        # `direct_internal` — that flag marks a deliberate pin from the
+        # dashboard, but a generated harness reaches into internal headers
+        # whenever the public API alone cannot exercise the target, which is
+        # the common case. Gating on the pin meant the ordinary path compiled
+        # without them and died on the first internal header (bcg729: "cng.h"
+        # not found, reproduced across two runs). Appended after include_subdir
+        # so the public directory still wins on a basename clash.
+        for idir in self.config.target.internal_include_dirs:
+            ipath = source_root / idir
+            if ipath.is_dir() and f"-I{ipath}" not in include_flags:
+                include_flags += f" -I{ipath}"
         # Fix 133: propagate extra -I flags from auto-resolve (compile_flags)
         if harness.compile_flags:
             import re as _re133f
@@ -3187,12 +3225,18 @@ class InstrumentedBuilder:
         templates_dir = Path(__file__).parent.parent / "templates"
         if templates_dir.exists():
             include_flags += f" -I{templates_dir}"
-        # Fix 123: internal include dirs for direct internal function harnessing
-        if getattr(harness, 'direct_internal', False):
-            for idir in self.config.target.internal_include_dirs:
-                ipath = source_root / idir
-                if ipath.is_dir():
-                    include_flags += f" -I{ipath}"
+        # Fix 123 / Fix 157: internal include dirs. No longer gated on
+        # `direct_internal` — that flag marks a deliberate pin from the
+        # dashboard, but a generated harness reaches into internal headers
+        # whenever the public API alone cannot exercise the target, which is
+        # the common case. Gating on the pin meant the ordinary path compiled
+        # without them and died on the first internal header (bcg729: "cng.h"
+        # not found, reproduced across two runs). Appended after include_subdir
+        # so the public directory still wins on a basename clash.
+        for idir in self.config.target.internal_include_dirs:
+            ipath = source_root / idir
+            if ipath.is_dir() and f"-I{ipath}" not in include_flags:
+                include_flags += f" -I{ipath}"
         # Fix 133: propagate extra -I flags from auto-resolve (compile_flags)
         if harness.compile_flags:
             import re as _re133g

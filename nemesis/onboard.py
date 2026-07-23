@@ -751,6 +751,7 @@ class TargetOnboarder:
             "library_name": f"lib{_base}.a",
             "source_subdir": "",
             "include_subdir": "",
+            "internal_include_dirs": [],
             "harness_includes": [],
             "link_libs": "-lm",
         }
@@ -917,11 +918,32 @@ class TargetOnboarder:
         # Also try source_subdir/include patterns (libtiff: libtiff/ holds both .c and .h)
         if result["source_subdir"]:
             inc_candidates.append(result["source_subdir"])
+        # A library commonly splits its headers: the public API in include/{name}/
+        # and the internals it is built from in src/. The ranked list above finds
+        # both, but taking only the first and breaking threw the rest away — and
+        # a harness that reaches past the public API then fails to compile.
+        #
+        # Measured on bcg729 (benchmarks/onboard_suite baseline): the generated
+        # harness included <decoder.h> from include/bcg729 *and* "cng.h",
+        # "codebooks.h", "LP2LSPConversion.h" from src/. include_subdir resolved
+        # to include/bcg729 — correct for decoder.h — and the compile died on
+        # cng.h. One directory cannot express a two-directory layout.
+        #
+        # The first match stays include_subdir so every existing consumer is
+        # unaffected; the remainder populate internal_include_dirs, a field that
+        # already existed in the schema and that nothing had ever filled.
+        matched_inc: list[str] = []
+        seen_inc: set[str] = set()
         for inc_candidate in inc_candidates:
+            if inc_candidate in seen_inc:
+                continue
+            seen_inc.add(inc_candidate)
             inc_path = source_root / inc_candidate
             if inc_path.is_dir() and list(inc_path.glob("*.h")):
-                result["include_subdir"] = inc_candidate
-                break
+                matched_inc.append(inc_candidate)
+        if matched_inc:
+            result["include_subdir"] = matched_inc[0]
+            result["internal_include_dirs"] = matched_inc[1:]
         if not result["include_subdir"]:
             result["include_subdir"] = result["source_subdir"]
 
@@ -1810,6 +1832,7 @@ class TargetOnboarder:
                 "repro_args": [],
                 "source_subdir": info["source_subdir"],
                 "include_subdir": info["include_subdir"],
+                "internal_include_dirs": info.get("internal_include_dirs", []),
                 "library_name": info["library_name"],
                 "link_libs": info["link_libs"],
                 "harness_includes": final_includes,
