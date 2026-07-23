@@ -70,7 +70,11 @@ TIER_TIMEOUT_SEC: dict[Tier, int] = {
     Tier.ACQUIRED: 300,
     Tier.CONFIG_GENERATED: 900,     # includes LLM round-trips
     Tier.LIBRARY_BUILT: 1800,
-    Tier.HARNESS_GENERATED: 1200,
+    # 1800, not 1200. Observed T3 durations for one repository across three
+    # runs: 745s, 1013s, >1200s — the old budget sat inside the spread, so the
+    # outcome turned on how fast the provider answered rather than on anything
+    # NEMESIS did. A timeout should catch a hang, not arbitrate a coin flip.
+    Tier.HARNESS_GENERATED: 1800,
     Tier.HARNESS_COMPILED: 900,
     Tier.FUZZ_READY: 300,
 }
@@ -153,9 +157,18 @@ def run_cmd(cmd: list[str], *, cwd: Path, timeout: int, env: dict[str, str] | No
             print(out[-3000:])
         return p.returncode, out, time.monotonic() - t0
     except subprocess.TimeoutExpired as e:
-        partial = (e.stdout or "") + (e.stderr or "")
-        if isinstance(partial, bytes):
-            partial = partial.decode(errors="replace")
+        # TimeoutExpired carries stdout/stderr as *bytes* even when the call
+        # passed text=True — the decoding only happens on the normal return
+        # path. Decoding each side before concatenating rather than after: the
+        # earlier version tested `isinstance(partial, bytes)` on the result,
+        # which never ran because `bytes + str` raises first. That turned every
+        # tier timeout into a crash of the whole suite.
+        def _text(v: bytes | str | None) -> str:
+            if v is None:
+                return ""
+            return v.decode(errors="replace") if isinstance(v, bytes) else v
+
+        partial = _text(e.stdout) + _text(e.stderr)
         return 124, partial, time.monotonic() - t0
     except FileNotFoundError as e:
         return 127, f"executable not found: {e}", time.monotonic() - t0
