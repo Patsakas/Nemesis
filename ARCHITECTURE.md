@@ -144,6 +144,29 @@ prompts in `nemesis/neural/` — so the fix survives the next rsync and applies 
 budgets, and `pinned_funcs` (including `indirect_reach` for functions only reachable through
 a public API) are all config. Generic pipeline code must contain no library's API names.
 
+**9. Anything the analysis computes must reach the artifact that consumes it.** A stage that
+derives a fact and then narrows it — takes the first match, breaks out of a loop, collapses a
+list to a scalar — has discarded work the pipeline already paid for, and the loss surfaces
+much later as an unrelated-looking error.
+
+The onboarder ranks candidate header directories and used to keep only the winner. For a
+library that splits its headers between `include/{name}/` and `src/` that is correct for the
+public API and wrong for everything else, and the failure appeared several stages later as
+`fatal error: cng.h: file not found` during harness compilation. The field to hold the
+remainder, `internal_include_dirs`, already existed — nothing had ever written to it, and the
+builder applied it only behind a flag set by hand from the dashboard.
+
+Worth separating two failures that produce identical error messages and need opposite fixes:
+
+| | The schema | The fix |
+|---|---|---|
+| **Representation limitation** | cannot express the fact | evolve the schema |
+| **Utilization failure** | can, but nothing wires it | connect the data flow |
+
+Audit for the second before adding machinery to rediscover what was already known. A repair
+loop that re-derives a fact the system computed ten lines earlier pays inference cost for
+nothing, and its measured "improvement" is really the cost of the discarded value.
+
 ## Subsystems
 
 ### Validation-gate extraction & harness augmentation
@@ -300,6 +323,37 @@ Every crash is replayed standalone to filter AFL persistent-mode artifacts, then
 from the sanitizer report (with a signal-to-CWE fallback), and finally replayed against the
 unmodified library. Only what reproduces there is reported. Hangs get the same treatment
 with a timeout.
+
+### Onboarding evaluation
+
+`benchmarks/onboard_suite/` measures how far NEMESIS carries an arbitrary C repository with
+no human in the loop. It is the counterpart to FINDINGS.md: that appendix measures whether a
+constructed harness reaches deeper code, this measures how often one gets constructed at all.
+
+Six tiers, each strictly harder than the last — cloned, config generated, library built,
+harness source emitted, harness compiled and linked, binary consumed input. Two of the
+splits cost a tier deliberately. `T3`/`T4` are separate because emitting C that never links
+is the failure mode benchmarks most often score as a success. `T2` is separate because the
+library must build before anything can link against it, so a missing system dependency and a
+badly generated harness would otherwise be indistinguishable.
+
+Three properties make the numbers mean something:
+
+- **The tool does not choose its own exam.** Candidates come from mechanical GitHub
+  predicates frozen before any repository was inspected, and the sample is a
+  content-addressed draw over the whole eligible pool — not `nemesis scout`, which ranks
+  targets by how promising they look *to NEMESIS*.
+- **`intervention = 0` holds by construction.** The runner has no code path to retry, install
+  a dependency or edit a generated artifact. Assisted runs are a separate results file.
+- **Two independent identities.** `experiment_id` records what NEMESIS was (commit, working
+  diff, prompt hashes, provider chain, per-role models); `benchmark_instance_id` records
+  which repositories it met (OSS-Fuzz exclusion snapshot, pool digest, sampling salt). Both
+  are needed before two runs can be called a comparison, and they are kept separate so one
+  instance can host several NEMESIS versions.
+
+`CRITERIA.md` holds the predicates and the run protocol; the preflight gate refuses to lock a
+baseline against a warm LLM cache, an unverifiable pool, or a toolchain missing any build
+system the sample is allowed to select.
 
 ## Adding a target
 

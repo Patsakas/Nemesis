@@ -213,6 +213,53 @@ worth keeping them apart:
   [benchmark write-up](docs/benchmarks/fieldspec_seed_quality.md) documents the negative
   results in full, including two that were retracted once their controls were corrected.
 
+### How often does a harness get built at all — `benchmarks/onboard_suite/`
+
+The results above measure whether a *constructed* harness reaches deeper code. They say
+nothing about how often one gets constructed. That is a separate question with its own frozen
+benchmark, and **the first baseline is still running — no numbers are claimed here yet.**
+What is finished is the measurement apparatus, which is the part that decides whether any
+eventual number is worth reading.
+
+Six tiers, each strictly harder than the last:
+
+| Tier | Reached when |
+|------|--------------|
+| `T0` | the pinned commit was cloned |
+| `T1` | `nemesis onboard` produced a target config |
+| `T2` | the instrumented and debug library builds compiled |
+| `T3` | harness **source** was emitted |
+| `T4` | the harness compiled **and linked** into a binary |
+| `T5` | that binary ran and consumed at least one input |
+
+`T3` and `T4` are separate on purpose: emitting C that never links is the failure mode
+benchmarks most often score as a success.
+
+**25 repositories, drawn without NEMESIS's involvement.** Candidates come from mechanical
+GitHub predicates written before any repository was inspected — C, not archived, active
+within 24 months, 50–5000 stars, a recognised build entry point, a license, and not already
+an OSS-Fuzz project. 4561 candidates survived to a pool of 1210, from which 25 were taken by
+a content-addressed draw. `nemesis scout` is deliberately **not** used here: it ranks targets
+by how promising they look *to NEMESIS*, which would let the tool pick its own exam.
+
+The sample is not a parser corpus — 5 of 25 look like input parsers, the rest are firmware
+ports, emulators, tools and one VR mod. That makes it a harder test than a curated set, and
+any result has to be read against the `NEMESIS_LIMITATION` bucket rather than as a flat
+success rate.
+
+**`intervention = 0` holds by construction, not by assertion.** The runner has no code path
+to retry a stage, install a missing dependency, or edit a generated config or harness. If a
+repository needs a human, that is the result. Runs with human help go to a separate file and
+are never mixed into the unattended numbers.
+
+Every run records two independent identities — `experiment_id` (which NEMESIS: commit,
+working diff, prompt hashes, provider chain, per-role models) and `benchmark_instance_id`
+(which repositories: OSS-Fuzz exclusion snapshot, pool digest, sampling salt). Both must
+match before two runs can be called a comparison.
+
+Full predicates, run protocol and threats to validity:
+**[benchmarks/onboard_suite/CRITERIA.md](benchmarks/onboard_suite/CRITERIA.md)**.
+
 ### Earlier experiments — CVE backtests
 
 These predate the controlled A/B above and are weaker evidence: rediscovery time has no
@@ -729,6 +776,14 @@ ruff format nemesis/ tests/ # format
       explanation rather than mutation targeting
 - [x] Git-history analysis: recently changed functions, past bug locations
 - [x] Auto-draft vulnerability report + PoC (`nemesis disclose`)
+- [x] Frozen onboarding benchmark — 25 mechanically selected repositories, six tiers,
+      unattended by construction, two-part experiment identity
+      ([benchmarks/onboard_suite/](benchmarks/onboard_suite/)). *Apparatus done; first
+      baseline in progress.*
+- [ ] Feedback-guided onboarding repair — classify a build failure deterministically before
+      spending an LLM call on it, and bail out early when no configuration can fix it
+      (a missing SDK is not a repairable config). Ordered **after** the baseline so the
+      improvement is measurable rather than asserted.
 
 ---
 
