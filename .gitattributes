@@ -1,0 +1,48 @@
+# Line-ending policy. Without this file, Windows git (core.autocrlf=true) and
+# WSL/Linux git (unset) disagree about the same working tree — one reports 2
+# modified files, the other 30 with ~11k phantom line changes. That makes any
+# diff-derived identity depend on the checkout environment rather than on what
+# actually changed, which matters here because the benchmark's experiment_id
+# includes the diff hash (benchmarks/onboard_suite/CRITERIA.md).
+* text=auto eol=lf
+
+# ── Never normalise fuzzing artifacts ──────────────────────────────────────
+# These are byte-exact program inputs. `text=auto` misclassifies many of them
+# as text — verified: a plain `* text=auto eol=lf` restaged 309 AFL corpus
+# files, rewriting bytes inside them. A reproducer that has had CRLF collapsed
+# to LF no longer reproduces, and the corruption is silent.
+*.bin           -text
+*.compressed    -text
+*.raw           -text
+*.poc           -text
+
+# AFL++ working directories: queue entries, crash and hang reproducers,
+# minimised corpora. Outputs, not sources.
+**/corpus/**    -text
+**/queue/**     -text
+**/crashes/**   -text
+**/hangs/**     -text
+seeds/**        -text
+
+# ── Binary sample inputs used by the benchmarks ────────────────────────────
+*.png binary
+*.tiff binary
+*.tif binary
+*.jpg binary
+*.gif binary
+*.webp binary
+*.7z binary
+*.rar binary
+*.zip binary
+*.tar binary
+*.gz binary
+*.xz binary
+*.zst binary
+*.pdf binary
+*.wav binary
+*.flac binary
+*.ttf binary
+*.otf binary
+*.so binary
+*.a binary
+*.o binary

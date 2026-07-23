@@ -20,6 +20,12 @@ that harness is manual expert work; NEMESIS automates it. You point it at a C/C+
 builds the harness, instruments it, fuzzes it, and reports only crashes that reproduce on the
 unmodified library.
 
+That end-to-end run is the default, not the only way in. Every stage is a separate CLI
+command over the same config, so a security engineer can take the parts that help and keep
+the rest of their existing workflow — rank targets, generate a harness and stop, verify a
+crash from another fuzzer, draft a disclosure. See
+**[The toolkit](#the-toolkit)**.
+
 ### The idea in one picture
 
 ```mermaid
@@ -138,12 +144,59 @@ config opts in:
 
 ## Validation
 
-> **The core evaluation — the harness-construction A/B experiments, the analyzer loop, the
-> LLM capability ladder, and the MAGMA ground-truth cross-check — lives in
-> [experiments/harness_autonomy/FINDINGS.md](experiments/harness_autonomy/FINDINGS.md).**
-> That is the scientific appendix and the primary evidence for the claim above. The section
-> below documents the *earlier* structural-inference and CVE-backtest experiments, kept in
-> full including the refuted and retracted results.
+### The core result — the harness decides reachability
+
+Two harnesses, identical but for one line. Same libpng 1.6.34, same clang `-O0`, same
+trigger input, CVE-2018-13785:
+
+```
+arm A (default limits)                 → exit 0    NOT triggered  (width rejected)
+arm B (png_set_user_limits 0x7FFFFFFF) → exit 136  SIGFPE         (reaches the divide)
+```
+
+Independently confirmed against **MAGMA's ground truth**, whose canary oracle separates
+*reached* from *triggered* — so "not triggered" is a real measurement, never inferred from
+the absence of a crash:
+
+| arm | `user_width_max` | reached | triggered |
+|-----|------------------|---------|-----------|
+| default (stock 1,000,000) | 1e6 | **0** | **0** |
+| NEMESIS (`png_set_user_limits`) | 2³¹−1 | **1** | **1** |
+
+The augmentation flips the bug from not-even-reached to reached-and-triggered. Three
+independent oracles agree that the width limit is the barrier: the stock-libpng SIGFPE,
+MAGMA's canary A/B, and MAGMA's own config choice — MAGMA ships `PNG_USER_WIDTH_MAX`
+already raised to `0x7FFFFFFF`, because it *had to* raise that exact limit to make the bug
+benchmarkable at all.
+
+### Who produces the harness — and where it stops
+
+Scored on *raising* the limit, not on the API call merely appearing (an earlier
+"name appears" metric counted hardening that **lowered** the cap, and was retracted):
+
+| condition | unlocks the bug |
+|-----------|-----------------|
+| neutral goal, LLM only | **0/5** |
+| + guard source surfaced, fix not named | **3/5** |
+| + constraint named in prose | **5/5** |
+| deterministic analyzer, raw source, no LLM, no human | **triggers** (exit 136) |
+
+The system is neuro-symbolic, not autonomous: from a neutral goal the model *never* raises
+the limit — it reaches for the right API 60 % of the time and points it the wrong way. And
+the boundary is sharp in both directions. The deterministic extractor finds
+`png_set_user_limits` unaided, but scores **0/3** on libtiff, libxml2 and libsndfile: it is
+tuned to libpng's shape (restrictive default + snake_case raise-setter), not
+library-agnostic. The LLM covers exactly where the heuristic structurally cannot
+(libxml2's `XML_PARSE_HUGE` parse flag, 5/5) — and collapses to **0/5** once the
+flag→limit structure is hidden, with recalled answers reasoned *backwards*.
+
+**Full setup, tables, and threats to validity:
+[experiments/harness_autonomy/FINDINGS.md](experiments/harness_autonomy/FINDINGS.md).**
+
+---
+
+The rest of this section documents the *earlier* structural-inference and CVE-backtest
+experiments, kept in full including the refuted and retracted results.
 
 This repository holds two separable things, at different levels of maturity, and it is
 worth keeping them apart:
@@ -159,6 +212,13 @@ worth keeping them apart:
   weaknesses in how results were measured, and the
   [benchmark write-up](docs/benchmarks/fieldspec_seed_quality.md) documents the negative
   results in full, including two that were retracted once their controls were corrected.
+
+### Earlier experiments — CVE backtests
+
+These predate the controlled A/B above and are weaker evidence: rediscovery time has no
+matched baseline, so it cannot separate "NEMESIS helped" from "the bug was easy". The
+libpng row in particular was superseded by the confound-free experiment above. Kept in
+full because the failure modes are the useful part.
 
 The backtests below **rediscover already-published CVEs**: point NEMESIS at the vulnerable
 version of a library and measure whether it independently rediscovers the bug, and how long
@@ -346,10 +406,25 @@ Useful flags:
 
 ---
 
-## Other commands
+## The toolkit
 
-Beyond the core `onboard` / `run` loop, the CLI ships a few helpers. Run any of them with
+Every stage standalone. `nemesis run` chains them, but nothing forces you through it. Each command below
+reads the same target config and does one job, so the pieces are usable on their own —
+including against harnesses and crashes NEMESIS did not produce. Run any of them with
 `--help` for the full flag list.
+
+| Command | Use it on its own when you want to… |
+|---------|--------------------------------------|
+| `scout` | pick a library worth fuzzing at all, excluding what OSS-Fuzz already covers |
+| `onboard` | turn a source tree into a build + harness config, then stop and read it |
+| `setup` | prepare a workspace and confirm the instrumented and debug builds compile |
+| `recon` | rank functions inside one target — churn, past fixes, bug class, call graph |
+| `verify-crashes` | replay crashes against the unpatched library to drop harness artifacts |
+| `report` | export findings as markdown or JSON |
+| `disclose` | draft the maintainer report and reproducer for a confirmed finding |
+| `benchmark-ab` | A/B a NEMESIS feature flag against a matched control |
+| `serve` | browse per-function coverage in the dashboard ([details](#web-dashboard)) |
+| `daemon` | run the pipeline unattended on a schedule |
 
 ### `nemesis scout` — find something worth fuzzing
 
@@ -372,6 +447,18 @@ instrumented and debug builds compile. See [Adding a New Target](#adding-a-new-t
 nemesis setup -t libfoo
 nemesis setup -t libfoo --url https://github.com/some/libfoo   # clone if source is missing
 nemesis setup -t libfoo --skip-build                           # workspace only
+```
+
+### `nemesis recon` — rank the functions inside one target
+
+Stage 1 on its own: walks the source tree and scores candidate entry points by bug class,
+call-graph reachability, and git history (recent churn and past memory-safety fixes both
+raise a file's rank). No build, no fuzzing — useful as a reading list before you commit a
+budget to anything.
+
+```bash
+nemesis recon -t libfoo                 # ranked table to the terminal
+nemesis recon -t libfoo -o recon.json   # also write the ranked targets as JSON
 ```
 
 ### `nemesis verify-crashes` — separate real bugs from patch artifacts
@@ -406,6 +493,20 @@ nemesis disclose --all --project-url <repo-url>     # every confirmed finding
 ```
 
 Review before sending — coordinated disclosure means the maintainer hears it first.
+
+### `nemesis benchmark-ab` — measure whether a feature actually helps
+
+Runs the same target once per configuration with the relevant `NEMESIS_DISABLE_*` flags
+set, then parses saved crashes, AFL bitmap %, line coverage, target reach and predicate
+count into `summary.json` + `summary.md`. This is the harness the project's own negative
+results were produced with — the mutation-placement hypothesis was refuted here rather
+than quietly dropped.
+
+```bash
+nemesis benchmark-ab -t libfoo                        # vanilla vs full, 15 min per arm
+nemesis benchmark-ab -t libfoo --preset ablation -d 60
+nemesis benchmark-ab -t libfoo --write-preset ab.yaml # dump the preset, edit, re-run with -c
+```
 
 ### `nemesis daemon` — scheduled scans
 

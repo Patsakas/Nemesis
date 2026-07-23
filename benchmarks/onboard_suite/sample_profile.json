@@ -1,0 +1,425 @@
+{
+  "generated_utc": "2026-07-23T13:38:29+00:00",
+  "suite": "nemesis-onboard-v1",
+  "sample_size": 25,
+  "pool_size": 1210,
+  "sampling_fraction_pct": 2.1,
+  "unresolved_in_pool": [],
+  "build_systems": {
+    "CMakeLists.txt": 16,
+    "Makefile.am": 6,
+    "meson.build": 3
+  },
+  "licenses": {
+    "GPL-3.0": 6,
+    "MIT": 6,
+    "GPL-2.0": 5,
+    "NOASSERTION": 4,
+    "LGPL-2.1": 1,
+    "BSD-3-Clause": 1,
+    "Apache-2.0": 1,
+    "Unlicense": 1
+  },
+  "repo_size_kb": {
+    "min": 178,
+    "median": 4184,
+    "mean": 9349.4,
+    "max": 49715
+  },
+  "stars": {
+    "min": 55,
+    "median": 240,
+    "mean": 888.7,
+    "max": 4986
+  },
+  "days_since_last_push": {
+    "min": 0.1,
+    "median": 8.1,
+    "mean": 41.6,
+    "max": 657.2
+  },
+  "parser_like": {
+    "count": 5,
+    "pct": 20.0,
+    "note": "keyword heuristic over name+description; indicative only"
+  },
+  "scope_caveats": [
+    "No single dimension dominates the sample."
+  ],
+  "search_frame": {
+    "bands": {
+      "50-120": 1000,
+      "121-300": 1000,
+      "301-800": 1000,
+      "801-2000": 1000,
+      "2001-5000": 561
+    },
+    "search_result_cap": 1000,
+    "saturated_bands": [
+      "50-120",
+      "121-300",
+      "301-800",
+      "801-2000"
+    ],
+    "total_unique": 4561,
+    "note": "GitHub search returns at most 1000 results per query. Bands that hit that number were truncated, so the frame is the most-recently-updated 1000 per band rather than every matching repository. Any claim from this benchmark is bounded by that frame."
+  },
+  "dataset_construction_audit": {
+    "funnel": [
+      {
+        "step": "raw candidates in the search frame",
+        "removed": null,
+        "remaining": 4561
+      },
+      {
+        "step": "repository larger than the size cap",
+        "removed": 1303,
+        "remaining": 3258
+      },
+      {
+        "step": "no license",
+        "removed": 356,
+        "remaining": 2902
+      },
+      {
+        "step": "already an OSS-Fuzz project",
+        "removed": 132,
+        "remaining": 2770
+      },
+      {
+        "step": "no recognised build entry point",
+        "removed": 1560,
+        "remaining": 1210
+      },
+      {
+        "step": "commit SHA could not be pinned",
+        "removed": 0,
+        "remaining": 1210
+      }
+    ],
+    "final_pool": 1210,
+    "sample_size": 25,
+    "exclusion_snapshot": "1353ef81adbf35f89d600ea7c087169c79b02b08",
+    "dominant_filter": "dropped_no_build_entry"
+  },
+  "eligible_by_star_band": [
+    {
+      "band": "50-120 stars",
+      "searched": 1000,
+      "saturated": true,
+      "eligible": 240,
+      "survival_pct": 24.0,
+      "in_sample": 6
+    },
+    {
+      "band": "121-300 stars",
+      "searched": 1000,
+      "saturated": true,
+      "eligible": 281,
+      "survival_pct": 28.1,
+      "in_sample": 9
+    },
+    {
+      "band": "301-800 stars",
+      "searched": 1000,
+      "saturated": true,
+      "eligible": 292,
+      "survival_pct": 29.2,
+      "in_sample": 3
+    },
+    {
+      "band": "801-2000 stars",
+      "searched": 1000,
+      "saturated": true,
+      "eligible": 254,
+      "survival_pct": 25.4,
+      "in_sample": 4
+    },
+    {
+      "band": "2001-5000 stars",
+      "searched": 561,
+      "saturated": false,
+      "eligible": 143,
+      "survival_pct": 25.5,
+      "in_sample": 3
+    }
+  ],
+  "boundary_analysis": {
+    "note": "Boundary counts, not a reason to move any threshold. Build-entry detection records the first recognised file only, so repositories carrying several build systems are not distinguishable here.",
+    "pool": {
+      "size_vs_50mb_cap": {
+        "under_10_pct_of_cap": 567,
+        "10_to_50_pct": 457,
+        "over_50_pct": 186,
+        "within_10_pct_of_cap": 23
+      },
+      "stars_vs_band_edges": {
+        "at_floor_50_to_60": 51,
+        "near_ceiling_4500_to_5000": 14
+      },
+      "recency_vs_24_month_cutoff": {
+        "pushed_within_90d": 1120,
+        "pushed_within_last_60d_of_window": 2
+      },
+      "build_entry": {
+        "CMakeLists.txt": 740,
+        "Makefile.am": 255,
+        "meson.build": 175,
+        "configure.ac": 40
+      }
+    },
+    "sample": {
+      "size_vs_50mb_cap": {
+        "under_10_pct_of_cap": 15,
+        "10_to_50_pct": 7,
+        "over_50_pct": 3,
+        "within_10_pct_of_cap": 1
+      },
+      "stars_vs_band_edges": {
+        "at_floor_50_to_60": 1,
+        "near_ceiling_4500_to_5000": 2
+      },
+      "recency_vs_24_month_cutoff": {
+        "pushed_within_90d": 23,
+        "pushed_within_last_60d_of_window": 0
+      },
+      "build_entry": {
+        "CMakeLists.txt": 16,
+        "Makefile.am": 6,
+        "meson.build": 3
+      }
+    }
+  },
+  "artifact_integrity": {
+    "all_pass": true,
+    "checks": [
+      {
+        "check": "pool passes every freeze-gate check",
+        "pass": true,
+        "detail": "1210 candidates"
+      },
+      {
+        "check": "OSS-Fuzz snapshot pinned",
+        "pass": true,
+        "detail": "1366 projects, tree 1353ef81"
+      },
+      {
+        "check": "freeze-time leakage re-check ran",
+        "pass": true,
+        "detail": "independent re-query at freeze time, not a re-read of pool.json"
+      },
+      {
+        "check": "every selected repo has a commit SHA",
+        "pass": true,
+        "detail": "25/25 pinned"
+      },
+      {
+        "check": "benchmark instance identified",
+        "pass": true,
+        "detail": "491eaad8d49c3244"
+      }
+    ]
+  },
+  "sample_covariates": [
+    {
+      "full_name": "BelledonneCommunications/bcg729",
+      "stars": 135,
+      "size_kb": 496,
+      "build_entry": "CMakeLists.txt",
+      "days_since_last_push": 8,
+      "parser_like": false
+    },
+    {
+      "full_name": "Crementif/BotW-BetterVR",
+      "stars": 1181,
+      "size_kb": 9866,
+      "build_entry": "CMakeLists.txt",
+      "days_since_last_push": 9,
+      "parser_like": false
+    },
+    {
+      "full_name": "TurboVNC/turbovnc",
+      "stars": 1022,
+      "size_kb": 37191,
+      "build_entry": "CMakeLists.txt",
+      "days_since_last_push": 1,
+      "parser_like": false
+    },
+    {
+      "full_name": "allkern/iris",
+      "stars": 465,
+      "size_kb": 30471,
+      "build_entry": "CMakeLists.txt",
+      "days_since_last_push": 12,
+      "parser_like": false
+    },
+    {
+      "full_name": "carlossless/smk",
+      "stars": 128,
+      "size_kb": 596,
+      "build_entry": "meson.build",
+      "days_since_last_push": 5,
+      "parser_like": false
+    },
+    {
+      "full_name": "cminyard/gensio",
+      "stars": 112,
+      "size_kb": 10403,
+      "build_entry": "Makefile.am",
+      "days_since_last_push": 2,
+      "parser_like": true
+    },
+    {
+      "full_name": "dbmail/dbmail",
+      "stars": 185,
+      "size_kb": 18663,
+      "build_entry": "Makefile.am",
+      "days_since_last_push": 1,
+      "parser_like": false
+    },
+    {
+      "full_name": "dosemu2/fdpp",
+      "stars": 240,
+      "size_kb": 4335,
+      "build_entry": "meson.build",
+      "days_since_last_push": 12,
+      "parser_like": false
+    },
+    {
+      "full_name": "greenbone/gvm-libs",
+      "stars": 100,
+      "size_kb": 8275,
+      "build_entry": "CMakeLists.txt",
+      "days_since_last_push": 0,
+      "parser_like": false
+    },
+    {
+      "full_name": "idolpx/meatloaf",
+      "stars": 107,
+      "size_kb": 49715,
+      "build_entry": "CMakeLists.txt",
+      "days_since_last_push": 1,
+      "parser_like": true
+    },
+    {
+      "full_name": "kohler/gifsicle",
+      "stars": 4278,
+      "size_kb": 3720,
+      "build_entry": "Makefile.am",
+      "days_since_last_push": 174,
+      "parser_like": true
+    },
+    {
+      "full_name": "kokke/tiny-AES-c",
+      "stars": 4986,
+      "size_kb": 178,
+      "build_entry": "CMakeLists.txt",
+      "days_since_last_push": 657,
+      "parser_like": false
+    },
+    {
+      "full_name": "llnl/H5Z-ZFP",
+      "stars": 55,
+      "size_kb": 487,
+      "build_entry": "CMakeLists.txt",
+      "days_since_last_push": 8,
+      "parser_like": true
+    },
+    {
+      "full_name": "lvgl/lv_port_pc_vscode",
+      "stars": 506,
+      "size_kb": 239,
+      "build_entry": "CMakeLists.txt",
+      "days_since_last_push": 9,
+      "parser_like": false
+    },
+    {
+      "full_name": "lvgl/lv_port_stm32f746_disco",
+      "stars": 61,
+      "size_kb": 3026,
+      "build_entry": "CMakeLists.txt",
+      "days_since_last_push": 9,
+      "parser_like": false
+    },
+    {
+      "full_name": "mbroemme/vdi-stream-client",
+      "stars": 141,
+      "size_kb": 1106,
+      "build_entry": "Makefile.am",
+      "days_since_last_push": 1,
+      "parser_like": true
+    },
+    {
+      "full_name": "microsoft/ProcMon-for-Linux",
+      "stars": 4707,
+      "size_kb": 6782,
+      "build_entry": "CMakeLists.txt",
+      "days_since_last_push": 77,
+      "parser_like": false
+    },
+    {
+      "full_name": "neoxic/ESCape32",
+      "stars": 296,
+      "size_kb": 298,
+      "build_entry": "CMakeLists.txt",
+      "days_since_last_push": 4,
+      "parser_like": false
+    },
+    {
+      "full_name": "onomondo/onomondo-uicc",
+      "stars": 70,
+      "size_kb": 456,
+      "build_entry": "CMakeLists.txt",
+      "days_since_last_push": 1,
+      "parser_like": false
+    },
+    {
+      "full_name": "picocomputer/rp6502",
+      "stars": 122,
+      "size_kb": 4518,
+      "build_entry": "CMakeLists.txt",
+      "days_since_last_push": 1,
+      "parser_like": false
+    },
+    {
+      "full_name": "pspdev/pspsdk",
+      "stars": 1145,
+      "size_kb": 15972,
+      "build_entry": "Makefile.am",
+      "days_since_last_push": 1,
+      "parser_like": false
+    },
+    {
+      "full_name": "seahorn/clam",
+      "stars": 287,
+      "size_kb": 3987,
+      "build_entry": "CMakeLists.txt",
+      "days_since_last_push": 9,
+      "parser_like": false
+    },
+    {
+      "full_name": "sraoss/pg_ivm",
+      "stars": 1463,
+      "size_kb": 258,
+      "build_entry": "meson.build",
+      "days_since_last_push": 15,
+      "parser_like": false
+    },
+    {
+      "full_name": "subsurface/libdc",
+      "stars": 125,
+      "size_kb": 4184,
+      "build_entry": "Makefile.am",
+      "days_since_last_push": 8,
+      "parser_like": false
+    },
+    {
+      "full_name": "tek256/astera",
+      "stars": 301,
+      "size_kb": 18514,
+      "build_entry": "CMakeLists.txt",
+      "days_since_last_push": 18,
+      "parser_like": false
+    }
+  ]
+}

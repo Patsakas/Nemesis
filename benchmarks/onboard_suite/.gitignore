@@ -1,0 +1,23 @@
+# Run outputs. Regenerable from the committed suite definition, and large —
+# a single baseline writes 25 repos x 6 tiers of full build logs.
+results/
+
+# Quarantined artifact from the truncated-exclusion bug (contents API capped
+# the OSS-Fuzz project list at 1000 of 1366). Kept on disk as a debugging
+# record, deliberately not committed: it is a superseded and invalid dataset,
+# and a copy in the repository invites someone to sample from it.
+pool.json.INVALID-*
+*.bak
+
+# What IS committed, and must stay committed — the suite definition:
+#   CRITERIA.md            the frozen predicates and protocol
+#   build_pool.py          pool construction and deterministic sampling
+#   schema.py              tier / failure vocabulary
+#   run_suite.py           the runner
+#   preflight.py           the freeze gate
+#   characterise.py        the descriptive layer
+#   pool.json              the eligible population these 25 were drawn from
+#   repos.yaml             the frozen sample
+#   sample_profile.json    the sample profile
+#   SAMPLE_PROFILE.md      its human-readable form
+#   baseline.lock          the experiment identity at freeze time

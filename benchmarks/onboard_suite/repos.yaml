@@ -1,0 +1,400 @@
+suite: nemesis-onboard-v1
+frozen: true
+benchmark_instance_id: 491eaad8d49c3244
+oss_fuzz_leakage_check:
+  performed_utc: '2026-07-23T13:35:40+00:00'
+  method: independent re-query at freeze time, not a re-read of pool.json
+  projects_checked: 1367
+  projects_tree_sha: 21b5fd5c03effc9c077008624bca6d6dd44e39b8
+  leaked: []
+  matches_pool_snapshot: false
+instance_inputs:
+  oss_fuzz_projects_tree_sha: 1353ef81adbf35f89d600ea7c087169c79b02b08
+  pool_digest: b262a0cda406bfdb
+  salt: nemesis-onboard-suite-v1
+salt: nemesis-onboard-suite-v1
+pool_size: 1210
+pool_generated_utc: '2026-07-23T12:08:53+00:00'
+note: "Frozen suite \u2014 see CRITERIA.md. Do not add, remove or re-pin entries: every NEMESIS version\
+  \ must run against these exact commits for the numbers to be comparable. Comparability requires all\
+  \ three of oss_fuzz_projects_tree_sha, pool_digest and salt to be unchanged \u2014 together they are\
+  \ benchmark_instance_id. A run against a different instance_id measured different repositories and is\
+  \ a new benchmark, not a re-run of this one."
+repos:
+- full_name: BelledonneCommunications/bcg729
+  clone_url: https://github.com/BelledonneCommunications/bcg729.git
+  commit: fb195811fe630415c9bf433c0c0bebde14314ff2
+  build_entry: CMakeLists.txt
+  stars: 135
+  license: GPL-3.0
+  selection_context:
+    stars: 135
+    size_kb: 496
+    pushed_at: '2026-07-15T07:55:44Z'
+    build_entry: CMakeLists.txt
+    license: GPL-3.0
+    description: ' Linphone.org mirror for bcg729 (git://git.linphone.org/bcg729.git)'
+    pool_rank: 5
+    pool_size: 1210
+- full_name: Crementif/BotW-BetterVR
+  clone_url: https://github.com/Crementif/BotW-BetterVR.git
+  commit: bcff81048e0843bf3e241153a6f0e9f1215bac98
+  build_entry: CMakeLists.txt
+  stars: 1181
+  license: MIT
+  selection_context:
+    stars: 1181
+    size_kb: 9866
+    pushed_at: '2026-07-14T03:09:12Z'
+    build_entry: CMakeLists.txt
+    license: MIT
+    description: A project aimed at providing a better PC VR mode for BotW using the Cemu emulator
+    pool_rank: 8
+    pool_size: 1210
+- full_name: TurboVNC/turbovnc
+  clone_url: https://github.com/TurboVNC/turbovnc.git
+  commit: 76a179be674934777caa95d908ddda9ddb4854cc
+  build_entry: CMakeLists.txt
+  stars: 1022
+  license: GPL-2.0
+  selection_context:
+    stars: 1022
+    size_kb: 37191
+    pushed_at: '2026-07-22T17:55:26Z'
+    build_entry: CMakeLists.txt
+    license: GPL-2.0
+    description: Main TurboVNC repository
+    pool_rank: 0
+    pool_size: 1210
+- full_name: allkern/iris
+  clone_url: https://github.com/allkern/iris.git
+  commit: 90dae6afaa055444bdf89fa04f14cffafc271f9f
+  build_entry: CMakeLists.txt
+  stars: 465
+  license: MIT
+  selection_context:
+    stars: 465
+    size_kb: 30471
+    pushed_at: '2026-07-11T14:09:18Z'
+    build_entry: CMakeLists.txt
+    license: MIT
+    description: Sony PlayStation 2 emulator for Windows, Linux and macOS
+    pool_rank: 23
+    pool_size: 1210
+- full_name: carlossless/smk
+  clone_url: https://github.com/carlossless/smk.git
+  commit: 08f4d0253389551b9ae9aad2464e2d7cacaf662e
+  build_entry: meson.build
+  stars: 128
+  license: GPL-2.0
+  selection_context:
+    stars: 128
+    size_kb: 596
+    pushed_at: '2026-07-18T19:55:31Z'
+    build_entry: meson.build
+    license: GPL-2.0
+    description: A keyboard firmware for sinowealth-8051-based devices
+    pool_rank: 4
+    pool_size: 1210
+- full_name: cminyard/gensio
+  clone_url: https://github.com/cminyard/gensio.git
+  commit: 040cefc11227c989702587d795e82fdc43b1c0aa
+  build_entry: Makefile.am
+  stars: 112
+  license: GPL-2.0
+  selection_context:
+    stars: 112
+    size_kb: 10403
+    pushed_at: '2026-07-21T18:48:20Z'
+    build_entry: Makefile.am
+    license: GPL-2.0
+    description: A library to abstract stream I/O like serial port, TCP, telnet, UDP, SSL, IPMI SOL, etc.
+    pool_rank: 16
+    pool_size: 1210
+- full_name: dbmail/dbmail
+  clone_url: https://github.com/dbmail/dbmail.git
+  commit: 2336612e822b67215e56c8f7f4e4df69a14eef29
+  build_entry: Makefile.am
+  stars: 185
+  license: NOASSERTION
+  selection_context:
+    stars: 185
+    size_kb: 18663
+    pushed_at: '2026-07-22T14:13:51Z'
+    build_entry: Makefile.am
+    license: NOASSERTION
+    description: 'DBMail: fast and scalable email services'
+    pool_rank: 3
+    pool_size: 1210
+- full_name: dosemu2/fdpp
+  clone_url: https://github.com/dosemu2/fdpp.git
+  commit: e00e886cb44fa8a0ef2e54937f72ea628377f8c4
+  build_entry: meson.build
+  stars: 240
+  license: GPL-3.0
+  selection_context:
+    stars: 240
+    size_kb: 4335
+    pushed_at: '2026-07-11T08:40:54Z'
+    build_entry: meson.build
+    license: GPL-3.0
+    description: FreeDOS plus-plus, 64bit DOS
+    pool_rank: 15
+    pool_size: 1210
+- full_name: greenbone/gvm-libs
+  clone_url: https://github.com/greenbone/gvm-libs.git
+  commit: 3bf30fe7e173d03705ddfcc4f2713ca2cf328e21
+  build_entry: CMakeLists.txt
+  stars: 100
+  license: GPL-2.0
+  selection_context:
+    stars: 100
+    size_kb: 8275
+    pushed_at: '2026-07-23T10:57:15Z'
+    build_entry: CMakeLists.txt
+    license: GPL-2.0
+    description: Greenbone Vulnerability Management Libraries
+    pool_rank: 9
+    pool_size: 1210
+- full_name: idolpx/meatloaf
+  clone_url: https://github.com/idolpx/meatloaf.git
+  commit: 2e50d5443ec97dd11d5a48b2291eac891e7595a1
+  build_entry: CMakeLists.txt
+  stars: 107
+  license: GPL-3.0
+  selection_context:
+    stars: 107
+    size_kb: 49715
+    pushed_at: '2026-07-23T01:04:51Z'
+    build_entry: CMakeLists.txt
+    license: GPL-3.0
+    description: A Commodore IEC serial multi-device emulator
+    pool_rank: 13
+    pool_size: 1210
+- full_name: kohler/gifsicle
+  clone_url: https://github.com/kohler/gifsicle.git
+  commit: 07f5c4c3de1306156e1d8f33e62971d4664c8f7d
+  build_entry: Makefile.am
+  stars: 4278
+  license: GPL-2.0
+  selection_context:
+    stars: 4278
+    size_kb: 3720
+    pushed_at: '2026-01-31T00:02:42Z'
+    build_entry: Makefile.am
+    license: GPL-2.0
+    description: Create, manipulate, and optimize GIF images and animations
+    pool_rank: 17
+    pool_size: 1210
+- full_name: kokke/tiny-AES-c
+  clone_url: https://github.com/kokke/tiny-AES-c.git
+  commit: 23856752fbd139da0b8ca6e471a13d5bcc99a08d
+  build_entry: CMakeLists.txt
+  stars: 4986
+  license: Unlicense
+  selection_context:
+    stars: 4986
+    size_kb: 178
+    pushed_at: '2024-10-04T09:45:23Z'
+    build_entry: CMakeLists.txt
+    license: Unlicense
+    description: Small portable AES128/192/256 in C
+    pool_rank: 6
+    pool_size: 1210
+- full_name: llnl/H5Z-ZFP
+  clone_url: https://github.com/llnl/H5Z-ZFP.git
+  commit: 891e6ac83c464a7e55a0b8673b24a08d058d903a
+  build_entry: CMakeLists.txt
+  stars: 55
+  license: NOASSERTION
+  selection_context:
+    stars: 55
+    size_kb: 487
+    pushed_at: '2026-07-15T21:31:54Z'
+    build_entry: CMakeLists.txt
+    license: NOASSERTION
+    description: A registered ZFP compression plugin for HDF5
+    pool_rank: 1
+    pool_size: 1210
+- full_name: lvgl/lv_port_pc_vscode
+  clone_url: https://github.com/lvgl/lv_port_pc_vscode.git
+  commit: b5f3851285c59fe1b24c3748d8bef9c54c426643
+  build_entry: CMakeLists.txt
+  stars: 506
+  license: MIT
+  selection_context:
+    stars: 506
+    size_kb: 239
+    pushed_at: '2026-07-15T00:25:47Z'
+    build_entry: CMakeLists.txt
+    license: MIT
+    description: ''
+    pool_rank: 18
+    pool_size: 1210
+- full_name: lvgl/lv_port_stm32f746_disco
+  clone_url: https://github.com/lvgl/lv_port_stm32f746_disco.git
+  commit: 2bf18c5486acbb4d18c7ffd4e497ceaebddc4633
+  build_entry: CMakeLists.txt
+  stars: 61
+  license: MIT
+  selection_context:
+    stars: 61
+    size_kb: 3026
+    pushed_at: '2026-07-15T00:26:49Z'
+    build_entry: CMakeLists.txt
+    license: MIT
+    description: LVGL ported to STM32F746G-DISCO using STM32CubeIDE
+    pool_rank: 22
+    pool_size: 1210
+- full_name: mbroemme/vdi-stream-client
+  clone_url: https://github.com/mbroemme/vdi-stream-client.git
+  commit: 849b25d65636b491ec8a4e121b34e17711cdb945
+  build_entry: Makefile.am
+  stars: 141
+  license: GPL-3.0
+  selection_context:
+    stars: 141
+    size_kb: 1106
+    pushed_at: '2026-07-22T23:35:54Z'
+    build_entry: Makefile.am
+    license: GPL-3.0
+    description: VDI Stream Client is a very tiny, low latency and GPU accelerated client to connect to
+      Windows running Parsec Host.
+    pool_rank: 11
+    pool_size: 1210
+- full_name: microsoft/ProcMon-for-Linux
+  clone_url: https://github.com/microsoft/ProcMon-for-Linux.git
+  commit: ae978c33ba45a98a24c41079d5c2c27a34eaee85
+  build_entry: CMakeLists.txt
+  stars: 4707
+  license: MIT
+  selection_context:
+    stars: 4707
+    size_kb: 6782
+    pushed_at: '2026-05-07T17:47:31Z'
+    build_entry: CMakeLists.txt
+    license: MIT
+    description: A Linux version of the Procmon Sysinternals tool
+    pool_rank: 24
+    pool_size: 1210
+- full_name: neoxic/ESCape32
+  clone_url: https://github.com/neoxic/ESCape32.git
+  commit: e865cfb9525eaac5f403b88b5b1244e7b7424be0
+  build_entry: CMakeLists.txt
+  stars: 296
+  license: GPL-3.0
+  selection_context:
+    stars: 296
+    size_kb: 298
+    pushed_at: '2026-07-19T11:06:36Z'
+    build_entry: CMakeLists.txt
+    license: GPL-3.0
+    description: BLDC motor control firmware for 32-bit ESCs
+    pool_rank: 19
+    pool_size: 1210
+- full_name: onomondo/onomondo-uicc
+  clone_url: https://github.com/onomondo/onomondo-uicc.git
+  commit: a27d61f331d8ad7f90d384e3950f2add0d4425b0
+  build_entry: CMakeLists.txt
+  stars: 70
+  license: GPL-3.0
+  selection_context:
+    stars: 70
+    size_kb: 456
+    pushed_at: '2026-07-22T06:51:06Z'
+    build_entry: CMakeLists.txt
+    license: GPL-3.0
+    description: Onomondo UICC - a software implementation of SIM/UICC/USIM
+    pool_rank: 14
+    pool_size: 1210
+- full_name: picocomputer/rp6502
+  clone_url: https://github.com/picocomputer/rp6502.git
+  commit: d8822cd06605e0d19e63ffa6a16df20be8485070
+  build_entry: CMakeLists.txt
+  stars: 122
+  license: BSD-3-Clause
+  selection_context:
+    stars: 122
+    size_kb: 4518
+    pushed_at: '2026-07-22T19:57:34Z'
+    build_entry: CMakeLists.txt
+    license: BSD-3-Clause
+    description: Emulator and Firmware
+    pool_rank: 7
+    pool_size: 1210
+- full_name: pspdev/pspsdk
+  clone_url: https://github.com/pspdev/pspsdk.git
+  commit: 8c74232c1db67ffb3253cb9cc7a0e38298b4cf57
+  build_entry: Makefile.am
+  stars: 1145
+  license: NOASSERTION
+  selection_context:
+    stars: 1145
+    size_kb: 15972
+    pushed_at: '2026-07-22T14:30:25Z'
+    build_entry: Makefile.am
+    license: NOASSERTION
+    description: An open-source SDK for PSP homebrew development.
+    pool_rank: 21
+    pool_size: 1210
+- full_name: seahorn/clam
+  clone_url: https://github.com/seahorn/clam.git
+  commit: 9ce8172cb1658a62687d0420121e038f793ae4fc
+  build_entry: CMakeLists.txt
+  stars: 287
+  license: Apache-2.0
+  selection_context:
+    stars: 287
+    size_kb: 3987
+    pushed_at: '2026-07-14T12:03:33Z'
+    build_entry: CMakeLists.txt
+    license: Apache-2.0
+    description: 'Static Analyzer for LLVM bitcode based on Abstract Interpretation.  **Update**: clam
+      is still actively maintained. Please use branch dev14. '
+    pool_rank: 20
+    pool_size: 1210
+- full_name: sraoss/pg_ivm
+  clone_url: https://github.com/sraoss/pg_ivm.git
+  commit: e13618b299d981e93333d7596cbcf9c89ee0a318
+  build_entry: meson.build
+  stars: 1463
+  license: NOASSERTION
+  selection_context:
+    stars: 1463
+    size_kb: 258
+    pushed_at: '2026-07-09T00:51:34Z'
+    build_entry: meson.build
+    license: NOASSERTION
+    description: IVM (Incremental View Maintenance) implementation as a PostgreSQL extension
+    pool_rank: 12
+    pool_size: 1210
+- full_name: subsurface/libdc
+  clone_url: https://github.com/subsurface/libdc.git
+  commit: ffb7cab4c15d91b5009e7fff11b9326d1e71599d
+  build_entry: Makefile.am
+  stars: 125
+  license: LGPL-2.1
+  selection_context:
+    stars: 125
+    size_kb: 4184
+    pushed_at: '2026-07-15T11:13:03Z'
+    build_entry: Makefile.am
+    license: LGPL-2.1
+    description: Subsurface version of libdivecomputer, upstream at github.com/libdivecomputer/libdivecomputer
+    pool_rank: 10
+    pool_size: 1210
+- full_name: tek256/astera
+  clone_url: https://github.com/tek256/astera.git
+  commit: 8f256468d4dfc48b0f592fec38af0a010a159cdb
+  build_entry: CMakeLists.txt
+  stars: 301
+  license: MIT
+  selection_context:
+    stars: 301
+    size_kb: 18514
+    pushed_at: '2026-07-05T06:40:47Z'
+    build_entry: CMakeLists.txt
+    license: MIT
+    description: A C99 Cross Platform 2D Game Library
+    pool_rank: 2
+    pool_size: 1210
