@@ -175,7 +175,14 @@ class RepoRun:
         self.full_name: str = spec["full_name"]
         self.slug = self.full_name.replace("/", "__")
         self.project = self.full_name.split("/")[1].replace(".", "_").replace("-", "_")
-        self.src = workdir / "src" / self.slug
+        # `nemesis onboard` writes `source_root: $HOME/{project}_clean` into the
+        # generated config as a hardcoded convention (nemesis/onboard.py:1798) —
+        # it reads the tree from --source-root but does not record that path.
+        # Cloning anywhere else makes `nemesis setup` look for a directory that
+        # does not exist, and every repository fails at T2 with a configure
+        # error that says nothing about the repository. Clone where the tool
+        # expects rather than fighting it.
+        self.src = Path.home() / f"{self.project}_clean"
         self.workdir = workdir
         self.verbose = verbose
         self.results: dict[Tier, TierResult] = {t: TierResult(t) for t in Tier}
