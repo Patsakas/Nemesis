@@ -24,7 +24,18 @@ from typing import Any
 
 import yaml
 
-REQUIRED_BINARIES = ("git", "clang", "cmake", "afl-fuzz", "nemesis")
+# Every build system named in CRITERIA.md predicate 6 must be executable here,
+# not merely selectable. The first baseline attempt selected three meson projects
+# and then failed all of them with "meson: not found" — recorded as
+# COMPILE_FAILURE, indistinguishable from a genuine build failure. A benchmark
+# that admits a build system it cannot run measures the evaluator's environment.
+REQUIRED_BINARIES = (
+    "git", "clang", "afl-fuzz", "nemesis",
+    "cmake", "make",                        # CMakeLists.txt targets
+    "meson", "ninja",                       # meson.build targets
+    "autoconf", "automake", "libtool",      # configure.ac / Makefile.am targets
+    "pkg-config",
+)
 MIN_FREE_GB = 20
 
 
@@ -161,12 +172,15 @@ def run(here: Path, env: dict[str, Any], *, suite_path: Path,
     # ── toolchain ───────────────────────────────────────────
     tools = env.get("tools", {})
     for binary in REQUIRED_BINARIES:
-        if binary == "nemesis":
-            pf.add("nemesis on PATH", shutil.which("nemesis") is not None,
-                   "run inside WSL with the venv active")
-        else:
-            pf.add(f"{binary} available", bool(tools.get(binary)),
-                   str(tools.get(binary) or "not found — are you inside WSL?"))
+        # environment.py probes a subset by version string; fall back to a PATH
+        # lookup so adding a tool here does not silently pass by being unprobed.
+        found = bool(tools.get(binary)) or shutil.which(binary) is not None
+        label = "nemesis on PATH" if binary == "nemesis" else f"{binary} available"
+        detail = (str(tools.get(binary)) if tools.get(binary)
+                  else (shutil.which(binary) or
+                        "not found — install it, or the suite will score its "
+                        "absence as a target failure"))
+        pf.add(label, found, detail)
 
     plat = env.get("platform", {})
     pf.add("running on Linux/WSL", plat.get("system") == "Linux",
