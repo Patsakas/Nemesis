@@ -4,6 +4,8 @@
 this first is that the sample cannot be adjusted after seeing which repositories NEMESIS
 happens to handle well.
 
+> Baseline results and the verified failure taxonomy are in **[FINDINGS.md](FINDINGS.md)**.
+
 ## What this benchmark measures
 
 How often, and how quickly, NEMESIS turns an *arbitrary* C project into something a fuzzer
