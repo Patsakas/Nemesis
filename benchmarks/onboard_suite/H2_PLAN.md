@@ -38,9 +38,10 @@ success only if **all** of the following hold. Each is measurable against the fr
    repair operators to reach T2 is a warning about the approach, not a win.
 4. **False-success rate does not increase** — spurious / wrong-target "T2" builds must not
    grow; ideally they fall (H2a should remove astera's).
-5. **Every improvement is attributable to a specific recorded repair operator** — via the
-   Repair-independence invariant and the repair trace. An unattributable gain is not a
-   result.
+5. **Every improvement is attributable to the declared operator under frozen configuration
+   conditions** — via the Repair-independence and Config-freezing invariants and the repair
+   trace. A gain that cannot be tied to a specific operator, or that could be explained by
+   regenerated configuration, is not a result.
 
 A partial outcome (e.g. genuine T2 unchanged, but false-success rate falls and repair
 traces become interpretable) is reported honestly as such — not relabelled a success.
@@ -63,6 +64,38 @@ noisy.
 - **Repair independence.** Every repair capability must be **independently disableable and
   independently measurable** (a config flag per operator). This is what makes later
   ablations possible: if H2c fails but H2a succeeds, the results must say so.
+
+### Config-freezing invariant
+
+Discovered from the H1 run: the benchmark **regenerates** `config/targets` at T1 on every
+run, and T1 is LLM-driven and nondeterministic. H1 survived only because its variation was
+confined to T3+ fields (`harness_template`, recon scoring, seeds) while the T2-critical
+fields (`configure` / `make` / `library_name`) stayed stable. H2's intervention surface moves
+*into* those T3+ fields, so this is no longer a survivable coincidence — it is a required
+invariant.
+
+> **All H2 experiments MUST execute against committed frozen T1 configurations.**
+>
+> The benchmark configuration generated during setup is part of the experimental *input*, not
+> part of the treatment. H2 runs MUST NOT regenerate target configs, harness specifications,
+> or target metadata during execution.
+
+**Rationale.**
+- T1 generation is LLM-driven and therefore potentially nondeterministic.
+- Regenerated configs introduce uncontrolled variation in fields unrelated to the evaluated
+  operator.
+- Any H2 comparison requires that the **only** changed variable is the declared intervention.
+
+**Required procedure.**
+1. Generate configs once.
+2. Review and validate the generated configs.
+3. Commit the frozen configs alongside the experiment protocol.
+4. All H2 operators run against the same frozen configuration set.
+5. Any config modification requires a **new experiment revision** (new experiment id), never an
+   in-place change.
+
+**A run that regenerates configuration during execution is invalid and cannot be used as H2
+evidence.**
 
 ## The system is a set of repair operators, not "a smart agent"
 
