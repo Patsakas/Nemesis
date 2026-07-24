@@ -1,0 +1,31 @@
+File layout (binary test vector for tiny_AES_c):
+  magic:        4 bytes, ASCII "TAES" (fixed)
+  version:      1 byte, currently 0x01
+  mode:         1 byte, enum {0=ECB,1=CBC,2=CTR}
+  key_len:      1 byte, must be 16 (AES128) – library only supports 16‑byte keys
+  key:         16 bytes, raw key material
+  iv_present:   1 byte, 0 = no IV, 1 = IV follows (required for CBC/CTR)
+  iv:          16 bytes, present only if iv_present==1
+  data_len:    4 bytes, big‑endian unsigned integer, length of payload buffer
+  data:        <data_len> bytes, raw plaintext/ciphertext buffer
+  // optional padding for alignment – ignored by parser
+
+Structural fields:
+  - magic and version are framing, must stay unchanged for parser acceptance.
+  - mode selects which API is invoked; values outside {0,1,2} are treated as invalid and cause early abort.
+  - key_len must equal 16; mutator may corrupt to trigger key‑size validation.
+  - iv_present must be 0 for ECB, 1 for CBC/CTR; mismatches are structural errors.
+  - data_len must be a multiple of 16 for CBC/CTR, any value for ECB; library checks length before processing.
+  - data_len is limited to 2^24‑1 to keep file size reasonable.
+
+Mutator strategy:
+  - Preserve first 4‑byte magic and 1‑byte version (framing).
+  - Target mode byte: flip among 0,1,2 and also try 0xFF to hit invalid path.
+  - Corrupt key bytes individually; also toggle key_len byte to 0x10 (valid) or other values.
+  - Toggle iv_present and, if present, fuzz each IV byte.
+  - Mutate data_len: try zero, non‑multiple‑of‑16 values, huge values (up to 0x00FFFFFF), and off‑by‑one lengths.
+  - Mutate payload data bytes arbitrarily; focus on first and last 16‑byte blocks.
+  - When mode is CBC or CTR, ensure iv_present==1; if mutating iv_present, also adjust presence of IV bytes accordingly (mutator must add/remove 16 bytes to keep offsets correct).
+  - No checksums to recompute; only structural invariants (magic, version, mode‑IV consistency, key_len, alignment of data_len) must be preserved for the parser to reach the crypto routine.
+
+PER-MUTATION COST: keep each mutation tiny — at most ~16 bytes of write. AFL's havoc/cmplog will compose larger runs across iterations.

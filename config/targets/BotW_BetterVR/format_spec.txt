@@ -1,0 +1,79 @@
+File layout (binary blob, typically sent over IPC to the BetterVR library):
+  header: 0x4D 0x42 0x56 0x52   ("MBVR" magic, 4 bytes, fixed)
+  version: uint8_t            (currently 0x01)
+  reserved: uint8_t[3]        (must be zero)
+  payload_len: uint16_t LE    (length of the following VPADStatus payload, must be 0xAC)
+  payload: VPADStatus struct (0xAC bytes, see below)
+  checksum: uint32_t LE       (simple additive checksum of header+version+payload_len+payload, modulo 2^32)
+
+VPADStatus struct (0xAC bytes, little‑endian unless explicitly marked BE):
+  0x00  hold            : uint32_t LE   (bitmask of VPADButtons currently held)
+  0x04  trig            : uint32_t LE   (buttons newly pressed this frame)
+  0x08  release         : uint32_t LE   (buttons released this frame)
+  0x0C  leftStick.x     : int16_t LE   (X axis, -32768..32767)
+  0x0E  leftStick.y     : int16_t LE   (Y axis)
+  0x10  rightStick.x    : int16_t LE   (X axis)
+  0x12  rightStick.y    : int16_t LE   (Y axis)
+  0x14  acc.x           : int16_t LE   (accelerometer X)
+  0x16  acc.y           : int16_t LE   (accelerometer Y)
+  0x18  acc.z           : int16_t LE   (accelerometer Z)
+  0x1A  accMagnitude    : float LE    (overall magnitude)
+  0x1E  accAcceleration : float LE    (linear acceleration)
+  0x22  accXY.x         : int16_t LE   (XY plane accel X)
+  0x24  accXY.y         : int16_t LE   (XY plane accel Y)
+  0x26  gyroChange.x    : int16_t LE   (gyro delta X)
+  0x28  gyroChange.y    : int16_t LE   (gyro delta Y)
+  0x2A  gyroChange.z    : int16_t LE   (gyro delta Z)
+  0x2C  gyroOrientation.x : int16_t LE
+  0x2E  gyroOrientation.y : int16_t LE
+  0x30  gyroOrientation.z : int16_t LE
+  0x32  vpadErr         : int8_t      (error code, signed)
+  0x33  padding1[1]     : uint8_t     (must be 0)
+  // Touch data blocks (each 8 bytes, BE‑encoded uint16 fields)
+  0x34  tpData.x        : uint16_t BE
+  0x36  tpData.y        : uint16_t BE
+  0x38  tpData.touch    : uint16_t BE
+  0x3A  tpData.validity : uint16_t BE
+  0x3C  tpProcessed1.x  : uint16_t BE
+  0x3E  tpProcessed1.y  : uint16_t BE
+  0x40  tpProcessed1.touch : uint16_t BE
+  0x42  tpProcessed1.validity : uint16_t BE
+  0x44  tpProcessed2.x  : uint16_t BE
+  0x46  tpProcessed2.y  : uint16_t BE
+  0x48  tpProcessed2.touch : uint16_t BE
+  0x4A  tpProcessed2.validity : uint16_t BE
+  0x4C  padding2[2]     : uint8_t[2] (must be 0)
+  // Direction vectors (each 3 * int16 BE)
+  0x4E  dir.x.x         : int16_t BE
+  0x50  dir.x.y         : int16_t BE
+  0x52  dir.x.z         : int16_t BE
+  0x54  dir.y.x         : int16_t BE
+  0x56  dir.y.y         : int16_t BE
+  0x58  dir.y.z         : int16_t BE
+  0x5A  dir.z.x         : int16_t BE
+  0x5C  dir.z.y         : int16_t BE
+  0x5E  dir.z.z         : int16_t BE
+  0x60  headphoneStatus: uint8_t    (bitmask, 0‑255)
+  0x61  padding3[3]     : uint8_t[3] (must be 0)
+  // Magnet vector (3 * int16 BE)
+  0x64  magnet.x        : int16_t BE
+  0x66  magnet.y        : int16_t BE
+  0x68  magnet.z        : int16_t BE
+  0x6A  slideVolume     : uint8_t    (0‑100)
+  0x6B  batteryLevel    : uint8_t    (0‑100)
+  0x6C  micStatus       : uint8_t    (0=off,1=on)
+  0x6D  slideVolume2    : uint8_t    (duplicate, same range)
+  0x6E  padding4[8]     : uint8_t[8] (must be 0)
+  // Total size 0xAC (172) bytes.
+
+Mutator strategy:
+  - Preserve the 4‑byte magic, version, reserved zeros, and payload_len (must stay 0xAC).
+  - Recompute the final checksum after any mutation; it is a simple sum modulo 2^32 of all preceding bytes.
+  - Target button bitmasks (hold, trig, release): flip individual bits, set to all‑ones, or zero to explore edge cases.
+  - Mutate joystick axes and accelerometer/gyro fields with extreme int16 values (0x8000, 0x7FFF) and small offsets to trigger overflow handling.
+  - For BE‑encoded touch and direction fields, flip high‑byte/low‑byte independently; also try invalid values like 0xFFFF for validity.
+  - Corrupt padding bytes sparingly (they must be zero for normal operation) to test robustness of length/CRC checks.
+  - Keep payload_len consistent with actual payload size; if you change payload size, also adjust length field and checksum accordingly.
+  - Do NOT alter the checksum field directly; let the mutator recalc it.
+
+PER-MUTATION COST: keep each mutation tiny — at most ~16 bytes of write. AFL's havoc/cmplog will compose larger runs across iterations.

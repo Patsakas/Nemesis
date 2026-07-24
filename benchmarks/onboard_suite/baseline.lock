@@ -1,0 +1,212 @@
+{
+  "locked_utc": "2026-07-23T17:22:35+00:00",
+  "experiment_id": "b8b7cf70ab005860",
+  "benchmark_instance_id": "491eaad8d49c3244",
+  "instance_inputs": {
+    "oss_fuzz_projects_tree_sha": "1353ef81adbf35f89d600ea7c087169c79b02b08",
+    "pool_digest": "b262a0cda406bfdb",
+    "salt": "nemesis-onboard-suite-v1"
+  },
+  "suite": "nemesis-onboard-v1",
+  "repos": 25,
+  "identity": {
+    "nemesis_commit": "c2647853373bd8c8383d0ffa46c7741b441e80c6",
+    "diff_hash": null,
+    "dirty": null,
+    "prompts_sha256": "35c48fb6abd588f2",
+    "provider_chain": [
+      "openai/gpt-oss-120b",
+      "qwen/qwen3.5-397b-a17b",
+      "mistralai/mistral-small-4-119b-2603",
+      "qwen-3-235b-a22b-instruct-2507",
+      "llama-3.3-70b-versatile",
+      "gemini-2.5-flash"
+    ],
+    "onboarder_model": "mistralai/mistral-medium-3.5-128b"
+  },
+  "checks": [
+    {
+      "name": "sample frozen",
+      "ok": true,
+      "fatal": true,
+      "detail": "25 repos, all pinned=True"
+    },
+    {
+      "name": "benchmark instance identified",
+      "ok": true,
+      "fatal": true,
+      "detail": "instance 491eaad8d49c3244 (oss-fuzz tree 1353ef81, pool b262a0cda406bfdb)"
+    },
+    {
+      "name": "pool recorded",
+      "ok": true,
+      "fatal": true,
+      "detail": "pool.json documents the attrition curve"
+    },
+    {
+      "name": "sample profiled",
+      "ok": true,
+      "fatal": false,
+      "detail": "run characterise.py before the baseline, not after"
+    },
+    {
+      "name": "git state captured",
+      "ok": true,
+      "fatal": true,
+      "detail": "commit=c2647853"
+    },
+    {
+      "name": "working tree clean",
+      "ok": true,
+      "fatal": true,
+      "detail": ""
+    },
+    {
+      "name": "diff free of line-ending noise",
+      "ok": true,
+      "fatal": true,
+      "detail": "clean"
+    },
+    {
+      "name": "prompts/templates hashed",
+      "ok": true,
+      "fatal": true,
+      "detail": "24 files -> 35c48fb6abd588f2"
+    },
+    {
+      "name": "LLM config resolved",
+      "ok": true,
+      "fatal": true,
+      "detail": "config/default.yaml loaded"
+    },
+    {
+      "name": "provider chain recorded",
+      "ok": true,
+      "fatal": true,
+      "detail": "6 providers, head=openai/gpt-oss-120b"
+    },
+    {
+      "name": "onboarder model pinned",
+      "ok": true,
+      "fatal": true,
+      "detail": "mistralai/mistral-medium-3.5-128b @ temp 0.1"
+    },
+    {
+      "name": "head provider credential",
+      "ok": true,
+      "fatal": true,
+      "detail": "NVIDIA_API_KEY for nvidia-gpt-oss-120b"
+    },
+    {
+      "name": "onboarder credential",
+      "ok": true,
+      "fatal": true,
+      "detail": "NVIDIA_API_KEY \u2014 the role this benchmark measures"
+    },
+    {
+      "name": "providers with credentials",
+      "ok": true,
+      "fatal": true,
+      "detail": "GROQ_API_KEY, NVIDIA_API_KEY"
+    },
+    {
+      "name": "LLM cache cold",
+      "ok": true,
+      "fatal": true,
+      "detail": "0 entries in /home/giorg/nemesis_workspace/llm_cache \u2014 clear it or set cache_enabled: false; pass --allow-warm-cache to override deliberately"
+    },
+    {
+      "name": "git available",
+      "ok": true,
+      "fatal": true,
+      "detail": "2.43.0"
+    },
+    {
+      "name": "clang available",
+      "ok": true,
+      "fatal": true,
+      "detail": "18.1.3"
+    },
+    {
+      "name": "afl-fuzz available",
+      "ok": true,
+      "fatal": true,
+      "detail": "afl-fuzz [ options ] -- /path/to/fuzzed_app [ ... ]"
+    },
+    {
+      "name": "nemesis on PATH",
+      "ok": true,
+      "fatal": true,
+      "detail": "/mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis-env/bin/nemesis"
+    },
+    {
+      "name": "cmake available",
+      "ok": true,
+      "fatal": true,
+      "detail": "3.28.3"
+    },
+    {
+      "name": "make available",
+      "ok": true,
+      "fatal": true,
+      "detail": "4.3"
+    },
+    {
+      "name": "meson available",
+      "ok": true,
+      "fatal": true,
+      "detail": "1.3.2"
+    },
+    {
+      "name": "ninja available",
+      "ok": true,
+      "fatal": true,
+      "detail": "/usr/bin/ninja"
+    },
+    {
+      "name": "autoconf available",
+      "ok": true,
+      "fatal": true,
+      "detail": "autoconf (GNU Autoconf) 2.71"
+    },
+    {
+      "name": "automake available",
+      "ok": true,
+      "fatal": true,
+      "detail": "/usr/bin/automake"
+    },
+    {
+      "name": "libtool available",
+      "ok": true,
+      "fatal": true,
+      "detail": "/usr/bin/libtool"
+    },
+    {
+      "name": "pkg-config available",
+      "ok": true,
+      "fatal": true,
+      "detail": "1.8.1"
+    },
+    {
+      "name": "running on Linux/WSL",
+      "ok": true,
+      "fatal": true,
+      "detail": "Linux (is_wsl=True)"
+    },
+    {
+      "name": "disk space",
+      "ok": true,
+      "fatal": true,
+      "detail": "85 GB free, need >= 20 for 25 clones + builds"
+    }
+  ],
+  "warnings": [],
+  "llm_cache_at_lock": {
+    "enabled": true,
+    "dir": "/home/giorg/nemesis_workspace/llm_cache",
+    "exists": false,
+    "entries": 0,
+    "warm": false
+  },
+  "note": "The baseline starts here. Results produced under a different experiment_id are not comparable to it."
+}

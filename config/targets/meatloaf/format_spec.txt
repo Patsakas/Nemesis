@@ -1,0 +1,34 @@
+Top-level layout: a sequence of 32-bit words (little-endian) representing a linked-list of heap allocations in PSRAM.
+
+Word 0 (header):
+  bits 0-31: magic value 0x50535241 (ASCII "PSRA")
+
+Word 1 (control):
+  bits 0-15:  allocation index (0-based, wraps at 65536)
+  bits 16-23: allocation size class (1..255, 0 reserved)
+  bits 24-31: flags (bit 24: is_psram, bit 25: is_zeroed, bits 26-31: reserved)
+
+Word 2 (payload pointer):
+  bits 0-31: 32-bit aligned virtual address in PSRAM (0x3F800000..0x3FFFFFFF on ESP32)
+
+Word 3 (size):
+  bits 0-31: exact byte size of the allocation (must be multiple of 4, max 16 MB)
+
+Word 4 (next pointer):
+  bits 0-31: 32-bit aligned virtual address of next node (0 for tail)
+
+Word 5 (checksum):
+  bits 0-31: 32-bit additive checksum over words 0..4 (mod 2^32)
+
+The list is terminated by a node whose next pointer is 0.
+
+Mutator strategy:
+- Keep the magic word (word 0) and checksum (word 5) invariant; mutate only words 1..4.
+- Target the size field (word 3) with overflow-prone values (near 0, near 16 MB, near multiples of page size).
+- Target the size-class field (word 1 bits 16-23) with values 1..255 and a few invalid edges (0, 256).
+- Flip the is_psram and is_zeroed flags (word 1 bits 24-25) through all four combinations.
+- Mutate the allocation index (word 1 bits 0-15) by small increments/decrements and wrap-around.
+- Mutate the payload pointer (word 2) to nearby aligned addresses within the ESP32 PSRAM range.
+- After any mutation to words 1..4, recompute the checksum (word 5) to preserve structural integrity.
+
+PER-MUTATION COST: keep each mutation tiny — at most ~16 bytes of write. AFL's havoc/cmplog will compose larger runs across iterations.

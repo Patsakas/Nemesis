@@ -1,0 +1,28 @@
+signature: \x00\x00\x00\x00 (4 bytes, fixed, little-endian) followed by a sequence of variable-length blocks called "swizzle records":
+record ::= <4-byte LE length> <4-byte LE type tag (ASCII, e.g. "METH" "CLAS" "INVO")> <length bytes of data>
+
+Top-level layout:
+- 4-byte LE length prefix for the entire payload (excluding the 4-byte signature)
+- 0 or more records concatenated back-to-back
+
+Record types and data layouts:
+- "METH" (method swizzle):
+  - 4-byte LE selector length N
+  - N bytes of UTF-8 selector name
+  - 4-byte LE block length M
+  - M bytes of UTF-8 block source (Objective-C block literal)
+- "CLAS" (class method swizzle): same as METH but applies to class methods
+- "INVO" (invocation wrapper):
+  - 4-byte LE selector length N
+  - N bytes of UTF-8 selector name
+  - 4-byte LE block length M
+  - M bytes of UTF-8 block source (Objective-C block literal)
+
+Mutator strategy:
+- keep the 4-byte LE payload length and the 4-byte signature fixed
+- target the selector names and block literals in METH/CLAS/INVO records
+- flip single bytes in selector names and block literals (ASCII ranges 0x20-0x7E plus control bytes 0x00-0x1F, 0x7F-0xFF)
+- avoid creating invalid UTF-8 by ensuring high-bit bytes appear only in valid multi-byte sequences
+- do NOT recompute any checksums; the library parses records strictly by length prefixes
+
+PER-MUTATION COST: keep each mutation tiny — at most ~16 bytes of write. AFL's havoc/cmplog will compose larger runs across iterations.

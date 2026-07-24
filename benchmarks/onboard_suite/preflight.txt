@@ -1,0 +1,32 @@
+ok  sample frozen                      25 repos, all pinned=True
+ok  benchmark instance identified      instance 491eaad8d49c3244 (oss-fuzz tree 1353ef81, pool b262a0cda406bfdb)
+ok  pool recorded                      pool.json documents the attrition curve
+ok  sample profiled                    run characterise.py before the baseline, not after
+ok  git state captured                 commit=c2647853
+ok  working tree clean                 
+ok  diff free of line-ending noise     clean
+ok  prompts/templates hashed           24 files -> 35c48fb6abd588f2
+ok  LLM config resolved                config/default.yaml loaded
+ok  provider chain recorded            6 providers, head=openai/gpt-oss-120b
+ok  onboarder model pinned             mistralai/mistral-medium-3.5-128b @ temp 0.1
+ok  head provider credential           NVIDIA_API_KEY for nvidia-gpt-oss-120b
+ok  onboarder credential               NVIDIA_API_KEY — the role this benchmark measures
+ok  providers with credentials         GROQ_API_KEY, NVIDIA_API_KEY
+ok  LLM cache cold                     0 entries in /home/giorg/nemesis_workspace/llm_cache — clear it or set cache_enabled: false; pass --allow-warm-cache to override deliberately
+ok  git available                      2.43.0
+ok  clang available                    18.1.3
+ok  afl-fuzz available                 afl-fuzz [ options ] -- /path/to/fuzzed_app [ ... ]
+ok  nemesis on PATH                    /mnt/c/Users/giorg/OneDrive/Desktop/Nemesis/Nemesis/nemesis-env/bin/nemesis
+ok  cmake available                    3.28.3
+ok  make available                     4.3
+ok  meson available                    1.3.2
+ok  ninja available                    /usr/bin/ninja
+ok  autoconf available                 autoconf (GNU Autoconf) 2.71
+ok  automake available                 /usr/bin/automake
+ok  libtool available                  /usr/bin/libtool
+ok  pkg-config available               1.8.1
+ok  running on Linux/WSL               Linux (is_wsl=True)
+ok  disk space                         85 GB free, need >= 20 for 25 clones + builds
+
+experiment_id: b8b7cf70ab005860
+locked_utc:    2026-07-23T17:22:35+00:00

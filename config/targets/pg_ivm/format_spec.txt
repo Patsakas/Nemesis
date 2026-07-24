@@ -1,0 +1,61 @@
+Top-level layout: a PostgreSQL wire protocol message (either a single frontend-backend message or a backend-frontend message).
+
+Message envelope:
+- 1 byte: message type tag (e.g. 'Q' for Query, 'P' for Parse, 'D' for Describe, 'E' for Execute, 'C' for Close, 'F' for FunctionCall, 'B' for Bind, 'S' for Sync, 'X' for Terminate)
+- 4 bytes BE: total message length N (includes tag + 4 bytes + payload; N >= 4)
+- N-4 bytes: payload (varies by message type)
+
+Query message ('Q'):
+- payload: a single null-terminated UTF-8 string (the SQL command text)
+
+Parse message ('P'):
+- 4 bytes BE: statement (portal) name length L1 (0..63), followed by L1 bytes (portal name, empty if L1=0)
+- 4 bytes BE: query string length L2, followed by L2 bytes (UTF-8 SQL query text)
+- 2 bytes BE: number of parameter data types M (0..65535)
+- M times: 4 bytes BE: OID of a parameter data type (0 = unspecified)
+
+Bind message ('B'):
+- 4 bytes BE: portal name length L1 (0..63), followed by L1 bytes (portal name, empty if L1=0)
+- 4 bytes BE: statement name length L2 (0..63), followed by L2 bytes (statement name, empty if L2=0)
+- 2 bytes BE: number of parameter format codes M (0..65535)
+- M times: 2 bytes BE: format code (0 = text, 1 = binary)
+- 2 bytes BE: number of parameter values N (0..65535)
+- N times: parameter value descriptor (varies: for text, a 4-byte BE length L followed by L bytes; for binary, a 4-byte BE length L followed by L bytes)
+- 2 bytes BE: result format code (0 = text, 1 = binary)
+
+Describe message ('D'):
+- 1 byte: describe type ('S' for statement, 'P' for portal)
+- 4 bytes BE: name length L (0..63), followed by L bytes (name, empty if L=0)
+
+Execute message ('E'):
+- 4 bytes BE: portal name length L (0..63), followed by L bytes (portal name, empty if L=0)
+- 4 bytes BE: maximum number of rows to return (0 = unlimited)
+
+Close message ('C'):
+- 1 byte: close type ('S' for statement, 'P' for portal)
+- 4 bytes BE: name length L (0..63), followed by L bytes (name, empty if L=0)
+
+FunctionCall message ('F'):
+- 4 bytes BE: function OID
+- 2 bytes BE: number of argument format codes M (0 = text, 1 = binary)
+- M times: 2 bytes BE: format code per argument
+- 2 bytes BE: number of arguments N
+- N times: argument value descriptor (same as Bind: 4-byte BE length L followed by L bytes)
+- 2 bytes BE: result format code (0 = text, 1 = binary)
+
+Sync message ('S'):
+- no payload
+
+Terminate message ('X'):
+- no payload
+
+Mutator strategy:
+- keep the 1-byte message type tag and 4-byte BE length field intact
+- target the payload bytes of Query ('Q') and Parse ('P') messages for SQL injection-style mutations (e.g., inject semicolons, quotes, backslashes, comments, or malformed UTF-8)
+- for Parse messages, mutate the portal name and query string lengths and contents; avoid setting M > 0 unless you also provide valid type OIDs
+- for Bind messages, mutate the portal and statement names, format code arrays, parameter values (both lengths and contents), and result format code; ensure parameter count N matches the format code array length M
+- for Describe/Execute/Close/FunctionCall, mutate the name/portal/statement lengths and contents; for FunctionCall, avoid setting N > 0 unless you also provide valid argument values
+- do NOT recompute any checksums or CRCs — PostgreSQL does not use wire-level CRCs
+- preserve the invariant that the 4-byte BE length field equals (total message length - 1)
+
+PER-MUTATION COST: keep each mutation tiny — at most ~16 bytes of write. AFL's havoc/cmplog will compose larger runs across iterations.

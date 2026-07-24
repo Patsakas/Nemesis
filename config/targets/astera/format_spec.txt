@@ -1,0 +1,33 @@
+File layout:
+- pak_header_t (64 bytes):
+  - id[4] (ASCII "PAK\0" or similar, fixed)
+  - count (4 bytes LE, number of pak_file_t entries)
+  - padding[56] (zeros, 56 bytes)
+- pak_file_t array (count entries, 64 bytes each):
+  - name[56] (ASCIIZ string, 56 bytes)
+  - offset (4 bytes LE, file offset in bytes)
+  - size (4 bytes LE, file size in bytes)
+- File data (concatenated, no alignment):
+  - file 0 data (size bytes)
+  - file 1 data (size bytes)
+  - ...
+
+Structurally meaningful fields:
+- pak_header_t.id: 4-byte ASCII tag (framing)
+- pak_header_t.count: 4-byte LE count of pak_file_t entries (structural)
+- pak_file_t.name: 56-byte ASCIIZ string (structural, zero-terminated)
+- pak_file_t.offset: 4-byte LE file offset (structural)
+- pak_file_t.size: 4-byte LE file size (structural)
+- pak_header_t.padding: 56 bytes of zeros (framing)
+
+Mutator strategy:
+- Keep pak_header_t.id and pak_header_t.padding intact (framing)
+- Target pak_header_t.count with overflow-prone values (0, 1, 255, 65535, 4294967295)
+- Flip pak_file_t.name bytes through printable ASCII plus null bytes at boundaries
+- Flip pak_file_t.offset and pak_file_t.size with values near 0, near max uint32, and misaligned offsets
+- Flip pak_file_t.offset to point outside the file data region (e.g., beyond file data end)
+- Flip pak_file_t.size to exceed file data region or be zero
+- Preserve structural invariants: count must match actual entries; offsets must be non-decreasing; no overlaps
+- Recompute pak_header_t.count CRC32 (if present) after each mutation; recompute file data checksums if required by API
+
+PER-MUTATION COST: keep each mutation tiny — at most ~16 bytes of write. AFL's havoc/cmplog will compose larger runs across iterations.

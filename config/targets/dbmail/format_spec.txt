@@ -1,0 +1,54 @@
+Top-level layout (wire format):
+- 4-byte BE magic: "DBM\0" (0x44 0x42 0x4D 0x00)
+- 4-byte BE version: currently 0x00000001 (little-endian builds must byte-swap)
+- 4-byte BE total_length (includes header + payload, 0 means stream continues)
+- 4-byte BE payload_type (ASCII tag, e.g. "AUTH", "MSG", "QUOT", "ACL")
+- variable-length payload (length bytes)
+- 4-byte BE payload_crc32 (CRC32 over payload_type + payload)
+
+Header invariants:
+- magic and version are fixed; total_length must match actual bytes sent
+- payload_type must be one of the enumerated command tags; unknown tags are rejected early
+- total_length is zero for the final chunk in a multi-chunk stream; non-zero otherwise
+
+Structurally meaningful fields inside payloads:
+
+AUTH payload (used for SASL CRAM-MD5):
+- 4-byte BE sequence (0 for first, 1 for second, etc.)
+- 1-byte auth_mech (0=PLAIN, 1=CRAM-MD5, 2=LOGIN)
+- 1-byte flags (bit 0: skip_password_check, bit 1: allow_anonymous)
+- variable-length username (null-terminated UTF-8 string)
+- variable-length challenge/response (length determined by auth_mech)
+
+MSG payload (email submission):
+- 4-byte BE msg_id (database row id)
+- 4-byte BE size_bytes (total bytes of message body)
+- 4-byte BE header_lines (count of header lines)
+- 4-byte BE body_lines (count of body lines)
+- variable-length headers block (header_lines null-terminated UTF-8 lines)
+- variable-length body block (body_lines null-terminated UTF-8 lines)
+- 4-byte BE flags (bit 0: is_forwarded, bit 1: is_spam, bit 2: is_training)
+
+QUOT payload (quota update):
+- 4-byte BE user_id
+- 4-byte BE storage_kb (quota in kilobytes)
+- 4-byte BE current_kb (current usage in kilobytes)
+- 1-byte quota_type (0=user, 1=domain, 2=global)
+- 1-byte action (0=set, 1=add, 2=subtract)
+
+ACL payload (access control):
+- 4-byte BE object_id (mailbox or domain id)
+- 1-byte object_type (0=mailbox, 1=domain)
+- 4-byte BE subject_id (user or group id)
+- 1-byte subject_type (0=user, 1=group, 2=anyone)
+- 1-byte rights (bitmask: read=1, write=2, create=4, delete=8, admin=16)
+
+Mutator strategy:
+- Keep magic, version, total_length, payload_type, and framing bytes intact
+- Target AUTH: flip auth_mech through valid set plus 0xFF; flip flags bits; mutate username length and content; mutate challenge/response bytes
+- Target MSG: flip size_bytes and body_lines to trigger overflows; flip flags bits; mutate header_lines count and line lengths; mutate body block bytes
+- Target QUOT: flip storage_kb and current_kb to extreme values; flip quota_type and action; mutate user_id
+- Target ACL: flip rights bitmask; mutate object_id and subject_id; flip object_type and subject_type
+- Recompute payload_crc32 after every mutation; total_length must be updated to match new payload length
+
+PER-MUTATION COST: keep each mutation tiny — at most ~16 bytes of write. AFL's havoc/cmplog will compose larger runs across iterations.

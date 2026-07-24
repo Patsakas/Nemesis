@@ -1,0 +1,44 @@
+File layout: bcg729 bitstream frames are concatenated without framing bytes between frames.
+Frame ::= <10 bytes of packed parameters>
+Packed parameters (80 bits total, big-endian bit order):
+  - bits 0-14 : 15 parameters (each 1 bit, packed contiguously)
+  - bits 15-79 : 65 additional parameters (each 1 bit, packed contiguously)
+
+Parameter semantics (15-bit segment):
+  - bit 0 : L0 (adaptive codebook delay)
+  - bit 1 : L1
+  - bit 2 : L2
+  - bit 3 : L3
+  - bit 4 : P0 (pitch gain)
+  - bit 5 : P1
+  - bit 6 : P2
+  - bit 7 : P3
+  - bit 8 : C0 (fixed codebook index)
+  - bit 9 : C1
+  - bit 10 : C2
+  - bit 11 : C3
+  - bit 12 : GAIN0 (adaptive codebook gain)
+  - bit 13 : GAIN1
+  - bit 14 : GAIN2
+
+Parameter semantics (65-bit segment):
+  - bits 15-29 : reserved (must be 0 in standard frames)
+  - bits 30-34 : reserved (must be 0 in standard frames)
+  - bits 35-49 : reserved (must be 0 in standard frames)
+  - bits 50-64 : reserved (must be 0 in standard frames)
+  - bits 65-79 : reserved (must be 0 in standard frames)
+
+Frame metadata (supplied externally, not in bitstream):
+  - bitStreamLength (1 byte): number of bytes containing the 10-byte frame (always 10 for valid frames)
+  - frameErasureFlag (1 byte): 0 = valid frame, 1 = erased frame
+  - SIDFrameFlag (1 byte): 0 = speech frame, 1 = silence descriptor (SID) frame
+  - rfc3389PayloadFlag (1 byte): 0 = standard payload, 1 = RFC3389 comfort noise payload
+
+Mutator strategy:
+  - Target the 15-bit parameter segment for bit flips (bits 0-14) and the 65-bit reserved segment (bits 15-79) for bit flips
+  - Flip single bits or small clusters within these segments; avoid flipping reserved bits 0-14 as they are critical
+  - Do NOT mutate bitStreamLength; keep it fixed at 10
+  - Mutate frameErasureFlag, SIDFrameFlag, and rfc3389PayloadFlag through their valid enumeration plus invalid edges (e.g., 2, 255)
+  - No checksum or CRC recomputation is required; frames are processed as raw bitstreams
+
+PER-MUTATION COST: keep each mutation tiny — at most ~16 bytes of write. AFL's havoc/cmplog will compose larger runs across iterations.

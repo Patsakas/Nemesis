@@ -1,0 +1,59 @@
+Top-level layout: a single JSON object (UTF-8, no BOM) with a top-level field "agent_controller_request".
+
+- 4-byte BE length prefix (uint32) immediately precedes the JSON object; the JSON object itself does NOT include this length.
+- JSON object fields:
+  - "method": ASCII string, 1–32 bytes, one of: "create_agent", "update_agent", "delete_agent", "list_agents", "get_agent", "authorize_agent", "heartbeat", "install_agent", "update_agent_config", "get_agent_config", "get_agent_version", "get_agent_updater_version", "get_agent_latest_version", "get_agent_latest_updater_version".
+  - "params": object whose exact shape depends on "method"; see per-method shapes below.
+  - "id": optional opaque string, 0–64 bytes, used as client-generated request identifier.
+
+Method-specific "params" shapes:
+
+- create_agent / update_agent / authorize_agent / delete_agent / get_agent:
+  - "agent_id": optional string, 0–64 bytes, UUID-like format recommended but not enforced.
+  - "hostname": optional string, 0–255 bytes, hostname or IP literal.
+  - "authorized": optional int, 0 or 1.
+  - "config": object with optional fields:
+    - "agent_control": object with optional fields:
+      - "retry": object with optional fields:
+        - "attempts": int, 0–255.
+        - "delay_in_seconds": int, 0–3600.
+        - "max_jitter_in_seconds": int, 0–3600.
+    - "agent_script_executor": object with optional fields:
+      - "bulk_size": int, 1–10000.
+      - "bulk_throttle_time_in_ms": int, 0–60000.
+      - "indexer_dir_depth": int, 0–255.
+      - "scheduler_cron_time": array of strings, 0–128 entries, each 0–64 bytes, cron format.
+    - "heartbeat": object with optional fields:
+      - "interval_in_seconds": int, 10–86400.
+      - "miss_until_inactive": int, 1–20.
+
+- list_agents:
+  - "filter": optional object with optional fields:
+    - "authorized": int, 0 or 1.
+    - "connection_status": string, 0–32 bytes, one of: "active", "inactive".
+    - "hostname": string, 0–255 bytes.
+  - "limit": optional int, 1–1000.
+  - "offset": optional int, 0–10000.
+
+- install_agent:
+  - "agent_id": string, 1–64 bytes.
+  - "installer_instruction": object with fields:
+    - "lang_type": int, 0 or 1.
+    - "instruction": string, 1–4096 bytes, JSON-encoded installer instructions.
+
+- update_agent_config:
+  - "agent_id": string, 1–64 bytes.
+  - "update_config": object with optional fields matching create_agent config.
+
+- get_agent_config / get_agent_version / get_agent_updater_version / get_agent_latest_version / get_agent_latest_updater_version:
+  - "agent_id": string, 1–64 bytes.
+
+Mutator strategy:
+- Flip the "method" string among the valid set plus a few invalid edges (e.g., empty, 1-byte junk, 33-byte overflow).
+- For create_agent / update_agent / install_agent / update_agent_config, mutate the nested numeric fields (attempts, delay_in_seconds, bulk_size, interval_in_seconds, miss_until_inactive) with small deltas and boundary-crossing values (0, 1, 255, 256, 3600, 3601).
+- For list_agents, mutate "limit" and "offset" with small deltas and boundary-crossing values (0, 1, 1000, 1001).
+- For install_agent, mutate "lang_type" among 0, 1, 2, 255 and flip the "instruction" string length and contents (insert/delete up to 16 bytes).
+- Preserve JSON syntactic structure: do not break quotes, braces, or commas; do not insert control characters except \n, \t, \r within strings.
+- Do NOT recompute any checksums or signatures; the library performs its own validation after parsing.
+
+PER-MUTATION COST: keep each mutation tiny — at most ~16 bytes of write. AFL's havoc/cmplog will compose larger runs across iterations.

@@ -1,0 +1,35 @@
+File layout (fdpp parameter block, typically placed at FDPP_BPRM_OFFSET):
+
+0x00  uint16_t BprmLen            // total size of this block including this field (bytes, little‑endian)
+0x02  uint16_t InitEnvSeg         // segment selector for initial environment segment
+0x04  uint8_t  ShellDrive         // BIOS drive number for boot shell (0‑255)
+0x05  uint8_t  DeviceDrive        // BIOS drive number for DEVICE= loading
+0x06  uint8_t  CfgDrive           // BIOS drive number for fdppconf.sys loading
+0x07  uint8_t  _pad1               // padding to align next 32‑bit field (must be 0)
+0x08  uint32_t DriveMask          // bitmask of drives to ignore (bits 0‑31, little‑endian)
+0x0c  uint16_t HeapSize           // size of initial heap in bytes (or paragraphs)
+0x0e  uint16_t HeapSeg            // segment selector for heap (0 = allocate after kernel)
+0x10  uint16_t Flags              // bit‑flags: FDPP_FL_KERNEL_HIGH=0x1, FDPP_FL_HEAP_HIGH=0x2, FDPP_FL_HEAP_HMA=0x4
+0x12  uint16_t BprmVersion        // must equal BPRM_VER (currently 10)
+0x14  uint16_t XtraSeg            // segment selector for optional extra block (0 if absent)
+0x16  uint16_t PredMask           // predicate mask for ?x expression handling
+
+Optional extra block (present if XtraSeg != 0, located at segment XtraSeg):
+0x00  uint8_t  BootDrvNum         // BIOS drive number for boot device
+0x01  char[15] filler             // unused, must be zero‑filled
+
+All multi‑byte fields are little‑endian (as used by real‑mode BIOS structures).
+
+Mutator strategy:
+- Preserve BprmLen consistency: after any mutation that changes the size of the block (e.g. adding/removing the optional extra block) recompute BprmLen = total bytes from offset 0 to end of block.
+- Target numeric fields for overflow/underflow:
+  * InitEnvSeg, HeapSeg, XtraSeg: try values 0x0000, 0xFFFF, and random segment selectors.
+  * HeapSize: fuzz 0, 0xFFFF, and large values that may exceed available memory.
+  * DriveMask: flip individual bits, set all bits, clear all bits.
+  * Flags: toggle each defined flag individually and combine them arbitrarily.
+- Flip enumeration‑like bytes (ShellDrive, DeviceDrive, CfgDrive, BootDrvNum) across the full 0‑255 range, including values that are typically invalid (e.g., 0xFF).
+- Mutate PredMask bits arbitrarily; treat each bit as independent predicate selector.
+- When XtraSeg is non‑zero, ensure the extra block exists at the indicated segment and its length is exactly 16 bytes; otherwise set XtraSeg to 0 to omit the block.
+- Do NOT recompute any checksums – the format has no CRC; only structural invariants (BprmLen, flag bits) must hold for the loader to accept the block.
+
+PER-MUTATION COST: keep each mutation tiny — at most ~16 bytes of write. AFL's havoc/cmplog will compose larger runs across iterations.

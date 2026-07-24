@@ -1,0 +1,78 @@
+GIF87a or GIF89a signature (6 bytes, ASCII): 'G' 'I' 'F' '8' '7' 'a' OR 'G' 'I' 'F' '8' '9' 'a'
+Logical Screen Descriptor (7 bytes):
+  - width (2 bytes, little-endian)
+  - height (2 bytes, little-endian)
+  - packed fields (1 byte):
+    * global color table flag (bit 7, 0/1)
+    * color resolution (bits 6-4, 0-7)
+    * sort flag (bit 3, 0/1)
+    * size of global color table (bits 2-0, 0-7 representing 2^(n+1) entries)
+  - background color index (1 byte)
+  - pixel aspect ratio (1 byte, aspect = (ratio+15)/64 if ratio!=0)
+Global Color Table (optional, size = 3 * 2^(N+1) bytes where N is size field above):
+  - each color: 3 bytes (R, G, B)
+Application Extension Block (optional, introduced by GIF89a):
+  - block identifier (1 byte, 0x21)
+  - extension label (1 byte, 0xFF for Application Extension)
+  - block size (1 byte, 11)
+  - application identifier (8 bytes, ASCII)
+  - application authentication code (3 bytes)
+  - application data (variable length, sub-blocks)
+  - sub-block terminator (1 byte, 0x00)
+Logical Screen Descriptor may be followed by multiple Image Descriptors and/or Extension Blocks.
+Image Descriptor (9 bytes header + optional local color table + image data):
+  - block identifier (1 byte, 0x2C)
+  - left position (2 bytes, little-endian)
+  - top position (2 bytes, little-endian)
+  - width (2 bytes, little-endian)
+  - height (2 bytes, little-endian)
+  - packed fields (1 byte):
+    * local color table flag (bit 7, 0/1)
+    * interlace flag (bit 6, 0/1)
+    * sort flag (bit 5, 0/1)
+    * reserved (bits 4-3)
+    * size of local color table (bits 2-0, 0-7 representing 2^(n+1) entries)
+Local Color Table (optional, same format as global, size = 3 * 2^(N+1) bytes)
+Image Data:
+  - LZW minimum code size (1 byte)
+  - sub-blocks of LZW-compressed pixel data (each starts with 1-byte length 1-255, ends with sub-block terminator 0x00)
+Graphic Control Extension (optional):
+  - block identifier (1 byte, 0x21)
+  - extension label (1 byte, 0xF9)
+  - block size (1 byte, 4)
+  - packed fields (1 byte):
+    * disposal method (bits 6-4, 0-7)
+    * user input flag (bit 3, 0/1)
+    * transparent color flag (bit 2, 0/1)
+  - delay time (2 bytes, little-endian, in hundredths of a second)
+  - transparent color index (1 byte, if transparent color flag set)
+  - block terminator (1 byte, 0x00)
+Comment Extension (optional):
+  - block identifier (1 byte, 0x21)
+  - extension label (1 byte, 0xFE)
+  - comment data (variable length, sub-blocks)
+Plain Text Extension (optional):
+  - block identifier (1 byte, 0x21)
+  - extension label (1 byte, 0x01)
+  - block size (1 byte, 12)
+  - text grid left/right/top/bottom (2 bytes each, little-endian)
+  - character cell width/height (1 byte each)
+  - text foreground/background color index (1 byte each)
+  - text data (variable length, sub-blocks)
+Trailer (1 byte): 0x3B
+
+Mutator strategy:
+- Keep GIF signature and trailer intact
+- Target Logical Screen Descriptor width/height with overflow-prone values (2-byte little-endian)
+- Flip global color table flag, color resolution bits, sort flag, and size field in packed byte
+- Flip background color index and pixel aspect ratio bytes
+- For each Image Descriptor:
+  * Flip interlace flag and local color table size field in packed byte
+  * Flip left/top/width/height (2-byte little-endian each)
+  * Flip disposal method, user input flag, and transparent color flag in Graphic Control Extension packed byte
+  * Flip delay time (2-byte little-endian) and transparent color index in Graphic Control Extension
+- DO recompute LZW minimum code size and LZW data if width/height mutated to avoid decoder errors
+- DO recompute CRC-like checksums for Application/Graphic Control/Comment/Plain Text extensions if mutated
+- Preserve structural invariants: block terminators (0x00), sub-block lengths, and trailer
+
+PER-MUTATION COST: keep each mutation tiny — at most ~16 bytes of write. AFL's havoc/cmplog will compose larger runs across iterations.

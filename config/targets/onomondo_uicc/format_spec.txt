@@ -1,0 +1,41 @@
+UICC APDU binary format (ISO/IEC 7816‑4 style)
+
+File/wire layout (each APDU is a self‑contained message):
+  <1 byte>  CLA   – class byte (bit‑7 = logical channel, bits‑6..4 = secure messaging, bits‑3..0 = command class)
+  <1 byte>  INS   – instruction code (e.g. 0xA4 SELECT, 0xB0 READ BINARY, 0xD6 UPDATE BINARY, …)
+  <1 byte>  P1    – parameter 1 (meaning depends on INS)
+  <1 byte>  P2    – parameter 2 (meaning depends on INS)
+  <1 byte>  Lc    – length of command data field (0‑255). If Lc = 0, no data follows.
+  <Lc bytes> DATA – command data (optional, present only if Lc > 0)
+  <1 byte>  Le    – expected length of response data (0‑255). Value 0x00 means 256 bytes expected; if Le is omitted the card returns only status bytes.
+
+Response layout (sent by the card):
+  <Ne bytes> RESPONSE_DATA – optional response payload (length = Le unless Le==0 meaning 256)
+  <1 byte>  SW1 – status byte 1 (e.g. 0x90 for success)
+  <1 byte>  SW2 – status byte 2 (e.g. 0x00 for success)
+
+Structurally meaningful fields:
+  • CLA bits:
+      bit7  – logical channel number (0‑3, encoded as 0b00..0b11; values 4‑7 are proprietary)
+      bit6‑4 – secure messaging indicator (0 = none, 1‑7 = SM types)
+      bits3‑0 – class (0 = ISO, others vendor‑specific)
+  • INS – fixed set of instruction codes; mutator may flip any byte but should respect known opcodes for deeper parsing.
+  • P1/P2 – often contain file identifiers (2‑byte EF/DF IDs) or offsets; they are 8‑bit fields.
+  • Lc – length prefix for DATA; must equal actual DATA byte count.
+  • DATA – opaque payload; its internal structure depends on INS (e.g. TLV for SELECT, file content for READ/WRITE).
+  • Le – length hint for response; 0x00 encodes 256.
+  • SW1/SW2 – status words; SW1=0x90/0x61/0x6C etc. are common success/follow‑up codes.
+
+Mutator strategy:
+  - Preserve the overall APDU framing: keep CLA, INS, P1, P2, Lc, Le positions intact.
+  - Target mutable numeric fields:
+      * Flip bits in CLA (especially channel bits and SM bits) to explore channel handling and secure‑messaging paths.
+      * Mutate INS across the full 0‑255 range; keep a subset of known opcodes (0xA4,0xB0,0xD6,0xC0…) for valid parsing, but also inject unknown values to trigger default handling.
+      * Vary P1/P2 independently; treat them as 8‑bit integers – try boundary values 0x00, 0xFF, and typical file IDs (0x3F00, 0x2F00).
+      * Change Lc to any value 0‑255; when mutating Lc, also adjust the following DATA length accordingly (mutator must keep Lc == actual DATA size). For fuzzing, allow off‑by‑one mismatches to hit length‑check bugs, but recompute a correct Lc when testing normal paths.
+      * Mutate DATA bytes arbitrarily; for TLV‑style payloads, flip tag, length, and value fields, and also insert random bytes to test parsing robustness.
+      * Flip Le to edge cases: 0x00 (256), 0x01, 0xFF, and values larger than actual response size to provoke length‑mismatch handling.
+  - Preserve checksum‑like invariants: there are no explicit checksums in raw APDUs, but the card validates Lc/Data consistency and SW1/SW2 semantics. When mutating Lc, ensure the DATA field length matches unless intentionally testing the length‑check path.
+  - After each mutation, the mutator should leave the APDU byte‑stream syntactically valid (i.e., correct number of bytes) so the library’s parser reaches the access‑control logic where ss_access_check_command is invoked.
+
+PER-MUTATION COST: keep each mutation tiny — at most ~16 bytes of write. AFL's havoc/cmplog will compose larger runs across iterations.
