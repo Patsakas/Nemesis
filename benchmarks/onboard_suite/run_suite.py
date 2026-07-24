@@ -179,7 +179,8 @@ class RepoRun:
 
     def __init__(self, spec: dict[str, Any], workdir: Path, *,
                  verbose: bool = False, log_dir: Path | None = None,
-                 auto_deps: bool = False, target_repair: bool = False) -> None:
+                 auto_deps: bool = False, target_repair: bool = False,
+                 frozen_configs: bool = False) -> None:
         self.spec = spec
         # H1 (v0.2): when set, T2 runs `nemesis setup --auto-deps`. The flag is
         # appended to the recorded command string too, so the results are
@@ -189,6 +190,9 @@ class RepoRun:
         # H2a: when set, T2 runs `nemesis setup --target-repair` (deterministic
         # build-target correction + genuine-target oracle). Independent of auto_deps.
         self.target_repair = target_repair
+        # Config-freezing invariant: T1 uses the committed frozen config instead of
+        # regenerating it via `nemesis onboard`. Required for a valid H2 experiment.
+        self.frozen_configs = frozen_configs
         # Full stdout+stderr per tier, kept on disk. The JSON keeps a 500-char
         # excerpt so the summary stays readable, but the excerpt is not the
         # evidence: two weeks later the useful artifact is not "T4 failed", it is
@@ -237,6 +241,17 @@ class RepoRun:
 
     def t1_config(self) -> bool:
         r = self.results[Tier.CONFIG_GENERATED]
+        cfg = NEMESIS_ROOT / "config" / "targets" / f"{self.project}.yaml"
+        if self.frozen_configs:
+            # Config-freezing invariant (H2_PLAN): use the committed frozen config as
+            # the T1 output; NEVER regenerate it — T1 is LLM-driven and would confound
+            # the H2 intervention. T1 is "reached" iff the frozen config is present.
+            r.command = (f"frozen config: config/targets/{self.project}.yaml "
+                         "(no regeneration)")
+            ok = cfg.exists()
+            return self._finish(
+                Tier.CONFIG_GENERATED, 0 if ok else 1,
+                f"using frozen {cfg}" if ok else f"frozen config missing: {cfg}", 0.0)
         r.command = f"nemesis onboard --source-root {self.src} --project-name {self.project}"
         rc, log, dur = run_cmd(
             ["nemesis", "onboard", "--source-root", str(self.src),
@@ -585,6 +600,13 @@ def main() -> None:
              "Independent of --auto-deps; recorded in the T2 command string.",
     )
     ap.add_argument(
+        "--frozen-configs", action="store_true",
+        help="Config-freezing invariant (H2_PLAN): T1 uses the committed frozen "
+             "config/targets/*.yaml instead of regenerating via `nemesis onboard`. "
+             "Required for a valid H2 experiment — T1 is LLM-driven and would "
+             "otherwise confound the intervention.",
+    )
+    ap.add_argument(
         "--intervention", type=int, default=0, choices=[i.value for i in Intervention],
         help="Record a run that needed human help. Writes to a separate file — "
              "assisted runs must never be mixed into the unattended baseline.",
@@ -754,6 +776,7 @@ def main() -> None:
             "benchmark_instance_id": suite.get("benchmark_instance_id"),
             "auto_deps": args.auto_deps,
             "target_repair": args.target_repair,
+            "frozen_configs": args.frozen_configs,
             "resolver": "curated+apt-file" if args.auto_deps else None,
             "apt_file": ("enabled" if (caps or {}).get("apt_file_available")
                          else "missing") if args.auto_deps else None,
@@ -768,7 +791,8 @@ def main() -> None:
         print(f"\n[{i}/{len(repos)}] {spec['full_name']}")
         rec = RepoRun(spec, workdir, verbose=args.verbose,
                       log_dir=out_dir / "logs", auto_deps=args.auto_deps,
-                      target_repair=args.target_repair).run()
+                      target_repair=args.target_repair,
+                      frozen_configs=args.frozen_configs).run()
         if args.intervention:
             rec["human_intervention"] = {
                 "score": args.intervention,
@@ -794,6 +818,7 @@ def main() -> None:
         "instance_inputs": suite.get("instance_inputs"),
         "auto_deps": args.auto_deps,          # H1 intervention flag; false == baseline conditions
         "target_repair": args.target_repair,  # H2a intervention flag
+        "frozen_configs": args.frozen_configs,  # config-freezing invariant honoured
         "generated_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     })
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
