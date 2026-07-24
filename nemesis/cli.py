@@ -506,10 +506,18 @@ def scout(top: int, round_trip_only: bool, out_path: str, year: int) -> None:
 @click.option("--config", "-c", "config_path", default=None, help="Custom config file path")
 @click.option("--url", default="", help="Git URL to clone (if source doesn't exist)")
 @click.option("--skip-build", is_flag=True, help="Only clone + rsync, skip builds")
-def setup(target: str, config_path: str | None, url: str, skip_build: bool) -> None:
+@click.option(
+    "--auto-deps", is_flag=True,
+    help="H1: auto-install missing system dependencies (curated+apt-file resolver) "
+         "during the build. Needs passwordless sudo. Off by default.",
+)
+def setup(target: str, config_path: str | None, url: str, skip_build: bool,
+          auto_deps: bool) -> None:
     """Auto-setup a target library: clone, prepare workspace, and verify builds."""
     console.print(BANNER)
     cfg = _resolve_config(config_path, target)
+    if auto_deps:
+        cfg.dependencies.auto_install = True
     setup_logging(level=cfg.engine.log_level, fmt=cfg.engine.log_format)
 
     from nemesis.setup import LibrarySetup

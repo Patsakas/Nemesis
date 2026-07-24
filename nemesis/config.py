@@ -30,6 +30,23 @@ class EngineConfig(BaseModel):
     )
 
 
+class DependenciesConfig(BaseModel):
+    """H1 — automated, auditable dependency recovery at the build stage.
+
+    Off by default: auto-`apt install` is a surprising thing for an open-source
+    tool to do unprompted, so a plain `nemesis setup` keeps the pre-H1
+    hint-only behaviour. The onboarding benchmark (and any operator who wants it)
+    opts in explicitly. See nemesis/deps.py for the safety model.
+    """
+    auto_install: bool = False
+    # "off" | "curated" | "curated+apt-file". The apt-file fallback stays
+    # deterministic given an apt DB snapshot; LLM-assisted resolution is
+    # deliberately future work, not a mode here.
+    resolver: str = "curated+apt-file"
+    max_attempts: int = 4                       # bound on install→retry cycles per build step
+    extra_allowlist: list[str] = Field(default_factory=list)
+
+
 class ProviderConfig(BaseModel):
     """A single LLM provider in the fallback chain."""
     name: str                       # "groq", "cerebras", "gemini"
@@ -413,6 +430,7 @@ class NemesisConfig(BaseSettings):
     """Top-level configuration — assembled from YAML files."""
 
     engine: EngineConfig = EngineConfig()
+    dependencies: DependenciesConfig = DependenciesConfig()
     llm: LLMConfig = LLMConfig()
     fuzzing: FuzzingConfig = FuzzingConfig()
     symbolic: SymbolicConfig = SymbolicConfig()

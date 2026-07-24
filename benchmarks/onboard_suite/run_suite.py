@@ -178,8 +178,14 @@ class RepoRun:
     """One repository through all six tiers."""
 
     def __init__(self, spec: dict[str, Any], workdir: Path, *,
-                 verbose: bool = False, log_dir: Path | None = None) -> None:
+                 verbose: bool = False, log_dir: Path | None = None,
+                 auto_deps: bool = False) -> None:
         self.spec = spec
+        # H1 (v0.2): when set, T2 runs `nemesis setup --auto-deps`. The flag is
+        # appended to the recorded command string too, so the results are
+        # self-documenting — no one can later ask whether the environment changed
+        # silently between the baseline and this run.
+        self.auto_deps = auto_deps
         # Full stdout+stderr per tier, kept on disk. The JSON keeps a 500-char
         # excerpt so the summary stays readable, but the excerpt is not the
         # evidence: two weeks later the useful artifact is not "T4 failed", it is
@@ -242,9 +248,12 @@ class RepoRun:
 
     def t2_library(self) -> bool:
         r = self.results[Tier.LIBRARY_BUILT]
-        r.command = f"nemesis setup -t {self.project}"
+        cmd = ["nemesis", "setup", "-t", self.project]
+        if self.auto_deps:
+            cmd.append("--auto-deps")
+        r.command = " ".join(cmd)
         rc, log, dur = run_cmd(
-            ["nemesis", "setup", "-t", self.project],
+            cmd,
             cwd=NEMESIS_ROOT, timeout=TIER_TIMEOUT_SEC[Tier.LIBRARY_BUILT],
             verbose=self.verbose,
         )
@@ -557,6 +566,14 @@ def main() -> None:
                          "not onboarding capability.")
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument(
+        "--auto-deps", action="store_true",
+        help="H1 (v0.2): run T2 as `nemesis setup --auto-deps`, enabling automated "
+             "system-dependency installation. A different experiment than the "
+             "baseline; the flag is recorded in every T2 command string. Before the "
+             "repo loop starts, gates on install capability (apt + passwordless sudo "
+             "+ network) and aborts if the runner cannot install.",
+    )
+    ap.add_argument(
         "--intervention", type=int, default=0, choices=[i.value for i in Intervention],
         help="Record a run that needed human help. Writes to a separate file — "
              "assisted runs must never be mixed into the unattended baseline.",
@@ -682,11 +699,58 @@ def main() -> None:
         print(f"  warning: not on PATH: {', '.join(missing)} — "
               "are you running inside WSL?", file=sys.stderr)
 
+    # H1 capability gate: if auto-deps is requested, the runner must actually be
+    # able to install packages. The real failure mode is broader than "no sudo" —
+    # a container with no apt, an offline runner, or broken sources all silently
+    # degrade the run into "every install fails". Check before spending hours.
+    if args.auto_deps:
+        from nemesis.deps import probe_capabilities
+        caps = probe_capabilities()
+        print("\nauto_deps_requested: true\ncapability checks:")
+        for k in ("apt_available", "sudo_noninteractive", "network_access",
+                  "apt_update_possible", "apt_file_available"):
+            print(f"  {k:22s} {'PASS' if caps.get(k) else 'FAIL'}")
+        if not (caps["apt_available"] and caps["sudo_noninteractive"]):
+            print("\n[abort] --auto-deps needs apt-get + passwordless sudo. "
+                  "Configure sudo (e.g. an /etc/sudoers.d NOPASSWD entry for "
+                  "apt-get) or drop --auto-deps.", file=sys.stderr)
+            sys.exit(2)
+        if not caps["network_access"]:
+            print("  warning: no network to archive.ubuntu.com — installs of "
+                  "uncached packages will fail (recorded as unresolved).",
+                  file=sys.stderr)
+
+        # Consolidated intervention manifest — so the run directory names itself as
+        # a controlled H1 experiment against the baseline, without a reader having
+        # to reconstruct it from command strings and the summary.
+        cache_warm = None
+        lock_p = HERE / "baseline.lock"
+        if lock_p.exists():
+            try:
+                cdir = Path(json.loads(lock_p.read_text(encoding="utf-8"))
+                            ["llm_cache_at_lock"]["dir"])
+                cache_warm = cdir.is_dir() and any(cdir.iterdir())
+            except Exception:
+                cache_warm = None
+        (out_dir / "intervention.json").write_text(json.dumps({
+            "intervention": "H1_dependency_recovery",
+            "baseline_id": "b8b7cf70_491eaad8_FROZEN",
+            "baseline_experiment_id": locked_id,
+            "benchmark_instance_id": suite.get("benchmark_instance_id"),
+            "auto_deps": True,
+            "resolver": "curated+apt-file",
+            "apt_file": "enabled" if caps.get("apt_file_available") else "missing",
+            "llm_cache": ("warm" if cache_warm else
+                          ("cold" if cache_warm is False else "unknown")),
+            "capabilities": caps,
+        }, indent=2), encoding="utf-8")
+        print(f"  intervention manifest -> {out_dir / 'intervention.json'}")
+
     results = []
     for i, spec in enumerate(repos, 1):
         print(f"\n[{i}/{len(repos)}] {spec['full_name']}")
         rec = RepoRun(spec, workdir, verbose=args.verbose,
-                      log_dir=out_dir / "logs").run()
+                      log_dir=out_dir / "logs", auto_deps=args.auto_deps).run()
         if args.intervention:
             rec["human_intervention"] = {
                 "score": args.intervention,
@@ -710,6 +774,7 @@ def main() -> None:
         "matches_baseline": locked_id == current_id if locked_id else None,
         "benchmark_instance_id": suite.get("benchmark_instance_id"),
         "instance_inputs": suite.get("instance_inputs"),
+        "auto_deps": args.auto_deps,          # H1 intervention flag; false == baseline conditions
         "generated_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     })
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
