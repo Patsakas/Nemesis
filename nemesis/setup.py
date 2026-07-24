@@ -35,6 +35,8 @@ class LibrarySetup:
         self._resolver: DependencyResolver | None = None
         self._installed: set[str] = set()
         self.dep_events: list[dict] = []
+        # H2a build-target repair trace (one entry per repair decision).
+        self.repair_events: list[dict] = []
 
     def _get_resolver(self) -> DependencyResolver:
         if self._resolver is None:
@@ -290,6 +292,19 @@ class LibrarySetup:
         self.create_build_dirs()
         results["build_dirs"] = True
 
+        # H2a Phase 1: correct a specific/subdir build target to the build-system
+        # default (respects the build graph) before building. In-memory only — the
+        # frozen config file is never rewritten (H2_PLAN config-freezing invariant).
+        if self.config.target_repair.enabled:
+            from nemesis.repair import correct_target
+            rec = correct_target(self.config.target.build.make)
+            self.log.info("setup.target_repair", **rec.as_dict())
+            self.repair_events.append(rec.as_dict())
+            if rec.action == "replace_invalid_target":
+                self.config.target.build.make = rec.after
+                if self.config.target.build.debug_make:
+                    self.config.target.build.debug_make = rec.after
+
         # Step 4: Fuzz build (AFL)
         build_dir = Path(self.config.target.build_dir)
         ok, err = self.run_build(
@@ -301,6 +316,19 @@ class LibrarySetup:
         results["fuzz_build"] = ok
         if err:
             results["fuzz_build_error"] = err
+
+        # H2a Phase 2: genuine-target oracle. Build success is necessary but
+        # insufficient — a build that produced no project library (an application,
+        # or only a vendored dependency) is a FALSE T2, recorded as genuine_t2=False.
+        if self.config.target_repair.enabled and self.config.target_repair.oracle:
+            from nemesis.repair import genuine_oracle
+            orec = genuine_oracle(build_dir, ok)
+            self.log.info("setup.target_oracle", **orec.as_dict())
+            self.repair_events.append(orec.as_dict())
+            results["genuine_t2"] = orec.oracle == "accept"
+            results["genuine_t2_reason"] = orec.reason
+            if orec.artifact:
+                results["genuine_library"] = orec.artifact
 
         # Step 5: Verify fuzz library
         if ok:
@@ -347,6 +375,18 @@ class LibrarySetup:
                 false_positive_installs=len(false_pos),
                 any_step_recovered=recovered,
                 made_progress=made_progress,
+            )
+
+        if self.repair_events:
+            oracle_rec = next((e for e in reversed(self.repair_events)
+                               if e.get("action") == "genuine_target_oracle"), {})
+            self.log.info(
+                "setup.h2a_summary",
+                target_repaired=any(e.get("action") == "replace_invalid_target"
+                                    for e in self.repair_events),
+                oracle=oracle_rec.get("oracle"),
+                oracle_reason=oracle_rec.get("reason"),
+                genuine_t2=results.get("genuine_t2"),
             )
 
         return results

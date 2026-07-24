@@ -511,13 +511,21 @@ def scout(top: int, round_trip_only: bool, out_path: str, year: int) -> None:
     help="H1: auto-install missing system dependencies (curated+apt-file resolver) "
          "during the build. Needs passwordless sudo. Off by default.",
 )
+@click.option(
+    "--target-repair", is_flag=True,
+    help="H2a: deterministic build-target correction (specific/subdir target -> "
+         "build-system default) + genuine-target oracle (build success alone is not "
+         "T2 unless a real project library is produced). Off by default.",
+)
 def setup(target: str, config_path: str | None, url: str, skip_build: bool,
-          auto_deps: bool) -> None:
+          auto_deps: bool, target_repair: bool) -> None:
     """Auto-setup a target library: clone, prepare workspace, and verify builds."""
     console.print(BANNER)
     cfg = _resolve_config(config_path, target)
     if auto_deps:
         cfg.dependencies.auto_install = True
+    if target_repair:
+        cfg.target_repair.enabled = True
     setup_logging(level=cfg.engine.log_level, fmt=cfg.engine.log_format)
 
     from nemesis.setup import LibrarySetup

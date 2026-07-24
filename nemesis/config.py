@@ -47,6 +47,20 @@ class DependenciesConfig(BaseModel):
     extra_allowlist: list[str] = Field(default_factory=list)
 
 
+class TargetRepairConfig(BaseModel):
+    """H2a — deterministic build-target inference & validation.
+
+    Off by default (like dependency auto-install): a plain `nemesis setup` keeps
+    the frozen config's build target. Enabled per experiment / via
+    `nemesis setup --target-repair`. See nemesis/repair.py.
+    """
+    enabled: bool = False
+    # Genuine-target oracle: when on, a build that succeeds but produces no project
+    # library artifact is reported as genuine_t2=False (a false T2). The raw build
+    # result is always recorded too, for comparison.
+    oracle: bool = True
+
+
 class ProviderConfig(BaseModel):
     """A single LLM provider in the fallback chain."""
     name: str                       # "groq", "cerebras", "gemini"
@@ -431,6 +445,7 @@ class NemesisConfig(BaseSettings):
 
     engine: EngineConfig = EngineConfig()
     dependencies: DependenciesConfig = DependenciesConfig()
+    target_repair: TargetRepairConfig = TargetRepairConfig()
     llm: LLMConfig = LLMConfig()
     fuzzing: FuzzingConfig = FuzzingConfig()
     symbolic: SymbolicConfig = SymbolicConfig()
