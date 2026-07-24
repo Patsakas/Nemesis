@@ -179,13 +179,16 @@ class RepoRun:
 
     def __init__(self, spec: dict[str, Any], workdir: Path, *,
                  verbose: bool = False, log_dir: Path | None = None,
-                 auto_deps: bool = False) -> None:
+                 auto_deps: bool = False, target_repair: bool = False) -> None:
         self.spec = spec
         # H1 (v0.2): when set, T2 runs `nemesis setup --auto-deps`. The flag is
         # appended to the recorded command string too, so the results are
         # self-documenting — no one can later ask whether the environment changed
         # silently between the baseline and this run.
         self.auto_deps = auto_deps
+        # H2a: when set, T2 runs `nemesis setup --target-repair` (deterministic
+        # build-target correction + genuine-target oracle). Independent of auto_deps.
+        self.target_repair = target_repair
         # Full stdout+stderr per tier, kept on disk. The JSON keeps a 500-char
         # excerpt so the summary stays readable, but the excerpt is not the
         # evidence: two weeks later the useful artifact is not "T4 failed", it is
@@ -251,6 +254,8 @@ class RepoRun:
         cmd = ["nemesis", "setup", "-t", self.project]
         if self.auto_deps:
             cmd.append("--auto-deps")
+        if self.target_repair:
+            cmd.append("--target-repair")
         r.command = " ".join(cmd)
         rc, log, dur = run_cmd(
             cmd,
@@ -574,6 +579,12 @@ def main() -> None:
              "+ network) and aborts if the runner cannot install.",
     )
     ap.add_argument(
+        "--target-repair", action="store_true",
+        help="H2a: run T2 as `nemesis setup --target-repair` (deterministic build-"
+             "target correction + genuine-target oracle). No system mutation, no LLM. "
+             "Independent of --auto-deps; recorded in the T2 command string.",
+    )
+    ap.add_argument(
         "--intervention", type=int, default=0, choices=[i.value for i in Intervention],
         help="Record a run that needed human help. Writes to a separate file — "
              "assisted runs must never be mixed into the unattended baseline.",
@@ -703,6 +714,7 @@ def main() -> None:
     # able to install packages. The real failure mode is broader than "no sudo" —
     # a container with no apt, an offline runner, or broken sources all silently
     # degrade the run into "every install fails". Check before spending hours.
+    caps = None
     if args.auto_deps:
         from nemesis.deps import probe_capabilities
         caps = probe_capabilities()
@@ -720,9 +732,10 @@ def main() -> None:
                   "uncached packages will fail (recorded as unresolved).",
                   file=sys.stderr)
 
-        # Consolidated intervention manifest — so the run directory names itself as
-        # a controlled H1 experiment against the baseline, without a reader having
-        # to reconstruct it from command strings and the summary.
+    # Consolidated intervention manifest for any treatment (H1 and/or H2a) — so the
+    # run directory names itself as a controlled experiment against the baseline,
+    # without a reader having to reconstruct it from command strings and the summary.
+    if args.auto_deps or args.target_repair:
         cache_warm = None
         lock_p = HERE / "baseline.lock"
         if lock_p.exists():
@@ -732,14 +745,18 @@ def main() -> None:
                 cache_warm = cdir.is_dir() and any(cdir.iterdir())
             except Exception:
                 cache_warm = None
+        ops = ([("H1_dependency_recovery")] if args.auto_deps else []) + \
+              ([("H2a_target_repair")] if args.target_repair else [])
         (out_dir / "intervention.json").write_text(json.dumps({
-            "intervention": "H1_dependency_recovery",
+            "intervention": "+".join(ops),
             "baseline_id": "b8b7cf70_491eaad8_FROZEN",
             "baseline_experiment_id": locked_id,
             "benchmark_instance_id": suite.get("benchmark_instance_id"),
-            "auto_deps": True,
-            "resolver": "curated+apt-file",
-            "apt_file": "enabled" if caps.get("apt_file_available") else "missing",
+            "auto_deps": args.auto_deps,
+            "target_repair": args.target_repair,
+            "resolver": "curated+apt-file" if args.auto_deps else None,
+            "apt_file": ("enabled" if (caps or {}).get("apt_file_available")
+                         else "missing") if args.auto_deps else None,
             "llm_cache": ("warm" if cache_warm else
                           ("cold" if cache_warm is False else "unknown")),
             "capabilities": caps,
@@ -750,7 +767,8 @@ def main() -> None:
     for i, spec in enumerate(repos, 1):
         print(f"\n[{i}/{len(repos)}] {spec['full_name']}")
         rec = RepoRun(spec, workdir, verbose=args.verbose,
-                      log_dir=out_dir / "logs", auto_deps=args.auto_deps).run()
+                      log_dir=out_dir / "logs", auto_deps=args.auto_deps,
+                      target_repair=args.target_repair).run()
         if args.intervention:
             rec["human_intervention"] = {
                 "score": args.intervention,
@@ -775,6 +793,7 @@ def main() -> None:
         "benchmark_instance_id": suite.get("benchmark_instance_id"),
         "instance_inputs": suite.get("instance_inputs"),
         "auto_deps": args.auto_deps,          # H1 intervention flag; false == baseline conditions
+        "target_repair": args.target_repair,  # H2a intervention flag
         "generated_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
     })
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
