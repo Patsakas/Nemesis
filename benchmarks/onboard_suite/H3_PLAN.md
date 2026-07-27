@@ -31,14 +31,54 @@ The seven genuine-T2 repositories, split by what a failure would tell us:
 
 | Group | Repos | Role |
 |---|---|---|
-| **B — sanity** | tiny-AES-c, bcg729 | small, single-library, unambiguous API. A model failing here fails outright. |
-| **A — informative** | astera, gensio, pg_ivm | astera: artifact identity + a prior LINK_FAILURE · gensio: large, many libraries · pg_ivm: `.so` where the config expects `.a` |
+| **Primary** | astera, gensio, libdc | real artifact, real API surface, genuinely hard harness generation |
+| **Secondary** | tiny-AES-c, bcg729, pg_ivm | easier or special cases — tiny-AES-c and bcg729 are small single-library targets; pg_ivm is the `.so` case |
+| **Held out** | onomondo-uicc | untouched until a chain decision is fixed, then used once to confirm it |
 
-**Gate:** a model that fails Group B is not run against Group A. Nothing is learned by
-spending 20K-token prompts on a model that cannot handle tiny-AES-c.
+The reserve exists because H2b showed how quickly small *n* manufactures confidence. If a
+result looks decisive across six repositories, onomondo-uicc is one that no choice was tuned
+against — and it is a useful one, being the only other repo with a concretely pinned function
+in its frozen config.
 
-onomondo-uicc and libdc are held out of Stage 2 entirely, as an unused reserve — if a result
-looks decisive on five repositories, there are two more that no choice was tuned against.
+**Staged execution, to avoid burning 20K-token prompts on a dead end:**
+
+```
+Stage 2A   gpt-oss-120b  ×  astera, gensio, libdc
+              |
+     compile rate > 0  ──yes──>  Stage 2B: full model matrix × primary + secondary
+              |
+              no
+              |
+              v
+     STOP. Analyse failure modes before spending anything further.
+```
+
+A compile rate of zero for the baseline model on the primary group is itself the finding, and
+it is cheaper to read than four models × seven repositories.
+
+## 2a. Baseline arm — a deterministic control for the pipeline itself
+
+Before any model is judged, the pipeline must be shown to work. This is the T3 analogue of
+the frozen control: **if a known-good harness fails to get through, the experiment is
+measuring infrastructure, not generation.**
+
+Fixtures already committed to this repository, used as-is:
+
+| Fixture | Expected |
+|---|---|
+| `benchmarks/libnmea_harness_e2e/harnesses/nmea_parse.c` | **passes every stage** |
+| `benchmarks/libnmea_harness_e2e/harnesses/nmea_load_parsers.BROKEN.c` | **rejected** — it declares that it does not feed the fuzz buffer to the parser |
+| `benchmarks/minmea_harness_generation/invalid/mistral_small_4_variadic_ub.c` | **rejected** — known-invalid, variadic UB |
+
+A positive fixture alone would only show the pipeline says *yes*. The negatives show it can
+say *no*, and they fail at different depths: the variadic case should die at validation or
+compile, while the BROKEN nmea harness plausibly **compiles and links and still is not a
+fuzzer**, because its defect is semantic. Establishing exactly where each one dies is part of
+the baseline's job, and it defines the pipeline's discrimination before any model output is
+scored against it.
+
+**Gate:** if the positive fixture does not pass, or a negative one is accepted, Stage 2 does
+not run. A model cannot be blamed for a stage that is broken or blind.
 
 ## 3. Model matrix
 
@@ -65,11 +105,23 @@ invariant exists to prevent.
 
 ## 5. Metrics
 
-| | Metric | Definition |
+A ladder, because each rung fails for a different reason and collapsing them would hide which
+one the model actually hit:
+
+| Rung | Metric | What a failure here means |
 |---|---|---|
-| **Primary** | T3 completion rate | a harness was generated **and** passed schema validation |
-| **Secondary** | compile success rate | the generated harness **compiles**. This is the real gate — a fast model producing a schema-valid harness that does not compile has not solved T3 |
-| Tertiary | time to valid harness | not raw latency; time until an output that passes both gates above |
+| 1 | completion rate | the model answered at all, rather than timing out |
+| 2 | valid output rate | it followed the output contract (schema) |
+| 3 | **compile rate** | it produced real code — right includes, right syntax |
+| 4 | link rate | it used APIs that actually exist in the artifact |
+| 5 | **smoke pass rate** | the harness consumes the fuzz input and runs — the only rung that approaches T4 |
+
+Rungs 3 and 5 are the ones that decide. A schema-valid harness that does not compile has not
+solved T3; a harness that compiles and links but ignores the fuzz buffer is not a fuzzer —
+which is precisely what the BROKEN baseline fixture is there to prove the pipeline can detect.
+
+Time to valid harness is recorded as a descriptive tertiary figure, not as a criterion, and
+never as raw latency.
 
 ## 6. Congestion is a censored observation, not a failure
 
