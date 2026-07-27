@@ -97,11 +97,15 @@ here, before any H2b code:
 | `oracle` | `accept` \| `reject` \| `n/a` |
 | `reason` | `project_library_present` \| `only_vendored_artifact` \| `no_project_library_artifact` \| `build_failed` |
 
-**The oracle MUST NOT pass** — and the resolver must not consult — anything derived from the
-evaluation criterion: symbol tables, harness contents, the set of functions a consumer needs,
-or link results. The oracle decides ownership from *path and size*. The evaluator decides
-correctness from *symbol containment*. Two independent signals, and neither may borrow from
-the other.
+**Information-leakage invariant:**
+
+> The oracle must not expose, and the resolver must not consult, information derived from
+> archive **contents** or from downstream **link outcomes**.
+
+Concretely that excludes symbol tables, `nm` output, harness contents, the set of functions a
+consumer needs, and compile or link results. The oracle decides ownership from *path and
+size*. The evaluator decides correctness from *symbol containment*. Two independent signals,
+and neither may borrow from the other.
 
 Violating this contract invalidates an H2b run regardless of its numbers.
 
@@ -111,11 +115,41 @@ Violating this contract invalidates an H2b run regardless of its numbers.
 whether the intervention did what it was told, not whether the result is correct.
 
 **Primary metric — symbol containment.** Independent of both oracle and resolver, computed
-with `nm` over the archives:
+with `nm` over the archives.
 
-> A resolution is a **false artifact acceptance** if it returns an archive that defines none
-> of the symbols the consumer requires, while another archive in the same build tree defines
-> them.
+### 5.1 Classification rule — fixed before the run
+
+Let `S` be the required symbol set and `R` the archive the resolver selected. Every
+repository falls into exactly one class; the rule is stated in both directions so a negative
+outcome is judged by the same pre-declared standard as a positive one.
+
+| Class | Condition | Counts as |
+|---|---|---|
+| `satisfied` | `R` defines **every** symbol in `S` | correct selection |
+| `partial` | `R` defines some but not all of `S` | **incorrect selection** |
+| `unsatisfied` | `R` defines **none** of `S` | **incorrect selection** |
+| `no_resolution` | the resolver returned no path | not a selection error — reported separately |
+| `no_candidate` | no archive in the build tree satisfies `S` | not a selection error — nothing correct existed to choose |
+| `undetermined` | `S` is empty or unavailable (placeholder config) | excluded from the metric, **never scored as success** |
+
+`partial` is an incorrect selection, not a partial success. A harness that references four
+symbols and links an archive defining three does not link.
+
+> **False artifact acceptance** — the primary quantity — is a resolution classified `partial`
+> or `unsatisfied` **while at least one other archive in the same build tree is `satisfied`**.
+> That last clause is what separates "the resolver chose wrongly" from "there was nothing
+> right to choose", and it is why `no_candidate` exists as its own class.
+
+Where several archives are `satisfied`, selecting any of them is correct: the metric measures
+whether the link can succeed, not whether a preferred file was chosen.
+
+### 5.2 What the classes are for
+
+- Success direction: `satisfied` count rises, `no_resolution` does not.
+- Failure direction: any repository moving *into* `partial`/`unsatisfied`, or out of
+  `satisfied`, is a regression — regardless of what happens to the totals.
+- `undetermined` is reported as a coverage limit of the metric, never absorbed into either
+  direction.
 
 Ground truth for "what the consumer requires", in priority order, all **frozen inputs**
 predating every experiment in this series:
