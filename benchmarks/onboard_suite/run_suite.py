@@ -22,8 +22,14 @@ a synchronising filesystem. Override with --results-dir.
         environment.json     toolchain, NEMESIS state, LLM chain
         summary.json         funnel, failure distribution, medians
         matrix.md            per-repository tier grid
-        <owner>__<repo>.json one per repository
+        <owner>__<repo>.json one per repository, incl. its artifact inventory
         logs/<owner>__<repo>/T0_acquired.log … T5_fuzz_ready.log
+
+Provenance invariant: every completed arm persists an artifact inventory before any
+workspace cleanup. What a build produced exists only in the workspace, and a control
+arm carries no genuine-target oracle to interpret it; if the workspace is reset before
+that is recorded, artifact identity can only be reconstructed by rebuilding. See
+RepoRun._artifact_inventory and H2a_V2_RESULTS.md §9.
 
 Usage:
     python run_suite.py --workdir ~/bench            # full suite
@@ -376,6 +382,52 @@ class RepoRun:
             return []
         return [p for p in ws.rglob("*harness*.c*") if p.stat().st_size > 0]
 
+    def _artifact_inventory(self) -> dict[str, Any]:
+        """What the build actually produced, recorded while it still exists.
+
+        **Invariant: every completed arm persists an artifact inventory before any
+        workspace cleanup.** This is experimental provenance, not a debugging
+        convenience. It was added because a paired run demonstrated the cost of its
+        absence: the arms were reset symmetrically between runs — correct for
+        symmetry — which removed the control's build directories, and a control arm
+        has no genuine-target oracle of its own. Artifact identity for that arm then
+        had to be reconstructed by rebuilding afterwards. The reconstruction worked;
+        provenance should not depend on one being possible.
+
+        Recorded per repository rather than once per arm, so a run that is killed
+        halfway still carries inventories for everything it finished.
+        """
+        empty = {"build_dir": None, "exists": False, "artifacts": [],
+                 "artifact_count": 0, "truncated": False}
+        cfg = NEMESIS_ROOT / "config" / "targets" / f"{self.project}.yaml"
+        if not cfg.exists():
+            return empty
+        try:
+            doc = yaml.safe_load(cfg.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            return empty
+        raw = ((doc.get("target") or {}).get("build_dir") or "")
+        if not raw:
+            return empty
+        build_dir = Path(os.path.expanduser(os.path.expandvars(raw)))
+        if not build_dir.is_dir():
+            return {**empty, "build_dir": str(build_dir)}
+
+        found = []
+        for pattern in ("*.a", "*.so", "*.dylib"):
+            for p in build_dir.rglob(pattern):
+                try:
+                    found.append({"path": str(p.relative_to(build_dir)),
+                                  "bytes": p.stat().st_size})
+                except OSError:
+                    continue
+        found.sort(key=lambda x: -x["bytes"])
+        # Keep the largest; a build tree can hold hundreds of intermediate archives
+        # and the point is identity, not exhaustiveness.
+        return {"build_dir": str(build_dir), "exists": True,
+                "artifacts": found[:100], "artifact_count": len(found),
+                "truncated": len(found) > 100}
+
     def _harness_binaries(self) -> list[Path]:
         ws = self._workspace()
         if not ws.exists():
@@ -458,6 +510,10 @@ class RepoRun:
                 if first_failure.locality else None,
             } if first_failure else None,
             "fuzz_signals": self.fuzz_signals,
+            # Persisted here, at the end of this repository's tiers, because the
+            # workspace is the only place this information exists and the next arm
+            # will reset it. See _artifact_inventory.
+            "artifact_inventory": self._artifact_inventory(),
             "human_intervention": {"score": Intervention.NONE.value,
                                    "label": Intervention.NONE.name},
             # Measured inputs to any later effort estimate. Deliberately raw counts:
