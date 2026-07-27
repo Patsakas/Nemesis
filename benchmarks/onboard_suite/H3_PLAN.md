@@ -45,7 +45,7 @@ in its frozen config.
 ```
 Stage 2A   gpt-oss-120b  ×  astera, gensio, libdc
               |
-     compile rate > 0  ──yes──>  Stage 2B: full model matrix × primary + secondary
+   compile > 0  AND  smoke > 0  ──yes──>  Stage 2B: full matrix × primary + secondary
               |
               no
               |
@@ -53,8 +53,24 @@ Stage 2A   gpt-oss-120b  ×  astera, gensio, libdc
      STOP. Analyse failure modes before spending anything further.
 ```
 
-A compile rate of zero for the baseline model on the primary group is itself the finding, and
-it is cheaper to read than four models × seven repositories.
+**Compile alone does not unlock the matrix.** A model can emit
+
+```c
+int LLVMFuzzerTestOneInput(const uint8_t *d, size_t n) { return 0; }
+```
+
+which compiles, links, and fuzzes nothing. That is the same defect the BROKEN baseline fixture
+carries, which is why the gate requires the rung that fixture is there to police.
+
+A zero for the baseline model on the primary group is itself the finding, and it is cheaper to
+read than four models × seven repositories:
+
+| Stage 2A outcome | Reading |
+|---|---|
+| `smoke > 0` | H3 unlocks — the chain is settled by measurement |
+| `compile > 0, smoke = 0` | harness **semantics** problem, not model availability |
+| `compile = 0` | **generation** problem |
+| `completion = 0` | provider / model problem — re-check the health gate first |
 
 ## 2a. Baseline arm — a deterministic control for the pipeline itself
 
@@ -122,6 +138,32 @@ which is precisely what the BROKEN baseline fixture is there to prove the pipeli
 
 Time to valid harness is recorded as a descriptive tertiary figure, not as a criterion, and
 never as raw latency.
+
+### 5.1 Failure attribution — recorded, not inferred
+
+Every outcome carries where it stopped and why, so a null result is diagnostic rather than
+merely negative:
+
+```yaml
+stage_failed:   completion | validation | compile | link | smoke | none
+failure_class:  syntax | contract | missing_api | semantic_no_input_consumption
+                | runtime | censored
+```
+
+This is an observation layer over the existing design — it changes no gate and no metric.
+
+Its first use is on the baseline itself. `nmea_load_parsers.BROKEN.c` is expected to reach
+`smoke` and be rejected there with `semantic_no_input_consumption`. If it does, the record
+proves two things the T3 metric depends on:
+
+```
+compile  ≠  harness correctness
+link     ≠  fuzz readiness
+```
+
+**If it passes smoke, the finding is about the evaluator, not about any model** — and it is a
+larger finding than any model failure, because it would mean "T3 success" had degenerated
+into "a compiler accepted some C file".
 
 ## 6. Congestion is a censored observation, not a failure
 
