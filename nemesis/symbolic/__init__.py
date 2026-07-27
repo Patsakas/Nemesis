@@ -3836,6 +3836,7 @@ class InstrumentedBuilder:
         """Locate the built library, keeping how it was found."""
         return LibraryResolver(
             source_subdir=self.config.target.source_subdir, log=self.log,
+            identity_aware=self.config.artifact_identity.enabled,
         ).resolve(build_dir, name)
 
     def _fallback_compile(

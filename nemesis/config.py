@@ -66,6 +66,16 @@ class TargetRepairConfig(BaseModel):
     validate_target: bool = True
 
 
+class ArtifactIdentityConfig(BaseModel):
+    """H2b — artifact identity-aware library resolution.
+
+    A separate operator from H2a, and independently disableable: H2a decides which
+    target to *build*, H2b decides which built artifact to *use*. Off by default.
+    See nemesis/library_resolver.py and benchmarks/onboard_suite/H2b_PLAN.md.
+    """
+    enabled: bool = False
+
+
 class ProviderConfig(BaseModel):
     """A single LLM provider in the fallback chain."""
     name: str                       # "groq", "cerebras", "gemini"
@@ -451,6 +461,7 @@ class NemesisConfig(BaseSettings):
     engine: EngineConfig = EngineConfig()
     dependencies: DependenciesConfig = DependenciesConfig()
     target_repair: TargetRepairConfig = TargetRepairConfig()
+    artifact_identity: ArtifactIdentityConfig = ArtifactIdentityConfig()
     llm: LLMConfig = LLMConfig()
     fuzzing: FuzzingConfig = FuzzingConfig()
     symbolic: SymbolicConfig = SymbolicConfig()

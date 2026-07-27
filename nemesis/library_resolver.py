@@ -72,11 +72,72 @@ class LibraryResolver:
        helper.
     """
 
-    def __init__(self, source_subdir: str = "", log=None) -> None:
+    def __init__(self, source_subdir: str = "", log=None,
+                 identity_aware: bool = False) -> None:
         self.source_subdir = source_subdir
         self.log = log
+        # H2b: when set, a name-based resolution that lands on a vendored artifact is
+        # re-decided against artifact ownership. Off by default — every repair operator
+        # is independently disableable (H2_PLAN repair-independence).
+        self.identity_aware = identity_aware
 
     def resolve(self, build_dir: Path, name: str) -> LibraryResolution:
+        """Locate the library, then decide whether the located file is the right one.
+
+        Name resolution and identity resolution answer different questions:
+
+            name     — "is there a file matching what the config asked for?"
+            identity — "does that file correspond to the intended target?"
+
+        astera showed these are not equivalent. Its config names a vendored dependency
+        (`dep/glfw/src/libglfw.a`), the real vendored file is `libglfw3.a`, and the
+        renamed-output strategy repaired the requested name into the vendored file. The
+        resolution succeeded; the harness then failed to link against the project's own
+        symbols, and the library the build had produced was never considered.
+        """
+        resolution = self._resolve_by_name(build_dir, name)
+        if not self.identity_aware:
+            return resolution
+        return self._apply_identity(build_dir, resolution)
+
+    def _apply_identity(self, build_dir: Path,
+                        resolution: LibraryResolution) -> LibraryResolution:
+        """H2b. Re-decide a resolution that landed inside a vendored subtree.
+
+        Interface contract (H2b_PLAN §4): only the artifact path, the verdict and the
+        reason cross this boundary. Ownership is decided from path and size. Nothing
+        derived from archive *contents* or from downstream link outcomes may be consulted
+        here — that information belongs to the independent evaluator, and borrowing it
+        would make the operator and its measurement the same thing.
+        """
+        if not resolution.found or resolution.path is None:
+            return resolution                       # nothing selected; not this operator's call
+        from nemesis.repair import _is_vendored, genuine_oracle
+        if not _is_vendored(resolution.path, build_dir):
+            return resolution                       # already project-owned
+
+        verdict = genuine_oracle(build_dir, build_ok=True)
+        if verdict.oracle != "accept" or not verdict.artifact:
+            # No project-owned artifact exists to prefer. The vendored file stands, and
+            # the reason is recorded so this is distinguishable from "identity agreed".
+            resolution.candidates_checked.append(f"identity:no_project_artifact:{verdict.reason}")
+            return resolution
+
+        owned = Path(verdict.artifact)
+        if owned == resolution.path:
+            return resolution
+        if self.log:
+            self.log.info("library.identity_correction", requested=resolution.requested,
+                          was=str(resolution.path), now=str(owned),
+                          oracle_reason=verdict.reason)
+        return LibraryResolution(
+            requested=resolution.requested, path=owned, kind=_kind_of(owned),
+            strategy="identity_ownership",
+            candidates_checked=[*resolution.candidates_checked,
+                                f"identity:{resolution.path}->{owned}"],
+        )
+
+    def _resolve_by_name(self, build_dir: Path, name: str) -> LibraryResolution:
         if not name:
             return LibraryResolution(requested=name, strategy="no_name_configured")
 
