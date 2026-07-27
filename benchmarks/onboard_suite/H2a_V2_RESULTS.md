@@ -163,15 +163,35 @@ conditions**. It is not a claim of full reproducibility of the benchmark.
 
 ## 8. What this experiment does not show
 
-- **Nothing reaches T3.** All seven genuine-T2 repos then fail at harness generation
-  (COMPILE_FAILURE ×5, HARNESS_VALIDATION_FAILURE, LINK_FAILURE). The wall has **moved**
-  from T2 to T3; it has not fallen. H2a delivers genuine build targets, not fuzzable
-  harnesses.
-- **Target correction is not artifact-identity correction.** astera reaches genuine T2 with
-  `libastera.a` and then fails T3 with LINK_FAILURE, because the frozen config's
-  `library_name` still points at `dep/glfw/src/libglfw.a` — the vendored artifact of the
-  target that was just corrected. Both arms log `library_not_found`. These are two different
-  operators, and the second does not exist.
+- **Nothing reaches T3** — but this run's T3 outcomes are **confounded and carry no weight**.
+  Two LLM providers reached end-of-life on the run date (2026-07-27), and every T3 attempt in
+  both arms logged `410 Gone` / end-of-life errors: **7/7 in the treatment, 4/4 in the
+  control.** The v1 run three days earlier logged **0**. T3 is the only LLM-dependent stage
+  reached here — `--frozen-configs` removes the LLM from T1, and T2 is a pure build — so
+  **the genuine-T2 result above is untouched by this**, and nothing about harness generation
+  should be inferred from this pair. The claim that the wall has moved from T2 to T3 rests on
+  the v1 run, which reached T3 with the provider chain intact and still failed there.
+- **Target correction is not artifact-identity correction.** This is established from v1's
+  uncontaminated log rather than from this run. astera reaches genuine T2 with `libastera.a`
+  and then fails to link — and the failing symbols are astera's *own* API
+  (`pak_open_mem`, `pak_count`, `pak_extract_noalloc`, `pak_close`). The mechanism is exact:
+
+  ```
+  config library_name = dep/glfw/src/libglfw.a     (names the VENDORED dependency)
+        ↓  no such file — the real vendored artifact is libglfw3.a
+  LibraryResolver strategy 3 (renamed_output): libglfw.a -> libglfw3.a
+        ↓
+  the harness links the vendored archive; libastera.a never appears in the log at all
+        ↓
+  undefined reference to astera's own functions -> LINK_FAILURE
+  ```
+
+  The resolver did not fail; it succeeded at the wrong thing. It already handles *name*
+  mismatch through three strategies with recorded provenance, but it cannot notice that the
+  name it was given **designates the wrong artifact** — so it repaired the vendored name into
+  the vendored file, and the project library H2a had just produced was never considered.
+  Artifact identity has to be decided by what an artifact *contains*, not by what the config
+  *names*. That is a separate operator, and it does not exist.
 - **No v1 comparison is made here.** v1 and v2 are different interventions measured against
   different controls; a v1↔v2 analysis is separate work and is deliberately not folded into
   this pair.
