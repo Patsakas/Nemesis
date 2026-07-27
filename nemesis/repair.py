@@ -194,14 +194,15 @@ def _expand(name: str, variables: dict[str, str]) -> str:
     return _VAR_REF.sub(lambda m: variables.get(m.group(1), m.group(0)), name).strip('"\'')
 
 
-def _declared_names(path: Path, root_project: str) -> set[str]:
-    """Target/artifact names declared by one build file."""
+def _declared_names(path: Path, root_project: str) -> set[tuple[str, str]]:
+    """(name, kind) pairs declared by one build file. `kind` is lib | exe | rule —
+    it is what stops a library artifact from matching a same-named *program*."""
     try:
         text = path.read_text(errors="ignore")
     except OSError:
         return set()
     text = _COMMENT.sub("", text)           # a commented-out add_library declares nothing
-    names: set[str] = set()
+    names: set[tuple[str, str]] = set()
 
     if path.name == "CMakeLists.txt":
         variables: dict[str, str] = {}
@@ -212,12 +213,13 @@ def _declared_names(path: Path, root_project: str) -> set[str]:
         for m in _CMAKE_TARGET.finditer(text):
             name = _expand(m.group(1), variables)
             if name and "::" not in name:   # skip IMPORTED/ALIAS targets
-                names.add(name)
+                names.add((name, "exe" if "executable" in m.group(0).lower() else "lib"))
 
     elif path.name == "Makefile.am":
         joined = text.replace("\\\n", " ")
         for m in _AM_DECL.finditer(joined):
-            names.update(t for t in m.group(1).split() if not t.startswith("$"))
+            kind = "exe" if m.group(0).split("=")[0].rstrip().endswith("PROGRAMS") else "lib"
+            names.update((t, kind) for t in m.group(1).split() if not t.startswith("$"))
 
     elif path.name == "meson.build":
         variables = {m.group(1): m.group(2) for m in _MESON_ASSIGN.finditer(text)}
@@ -225,26 +227,36 @@ def _declared_names(path: Path, root_project: str) -> set[str]:
             raw = m.group(1).strip()
             name = variables.get(raw, raw).strip('"\'')
             if name:
-                names.add(name)
+                names.add((name, "exe" if m.group(0).lower().lstrip().startswith("executable")
+                           else "lib"))
 
-    else:                                    # Makefile / GNUmakefile
-        names.update(m.group(1) for m in _MAKE_RULE.finditer(text)
+    else:                                    # Makefile / GNUmakefile — kind unknowable
+        names.update((m.group(1), "rule") for m in _MAKE_RULE.finditer(text)
                      if not m.group(1).startswith("."))
     return names
 
 
-def _target_aliases(target: str) -> set[str]:
-    """The forms a configured target may take: a logical build-system target name
-    (`uicc`, `png_static`) or an artifact path (`src/libsmk.a`, `libgensio.la`).
+def _declares(target: str, declared: set[tuple[str, str]]) -> bool:
+    """Does this build file declare `target`?
+
+    A configured target is either a logical build-system target (`uicc`, `png_static`)
+    or an artifact path (`src/libsmk.a`, `libgensio.la`). The artifact form is matched
+    against its logical name too (`libfoo.a` ↔ `foo`, standard CMake), but **only
+    against library declarations**: gifsicle's configured `libgifsicle.la` must not be
+    validated by `bin_PROGRAMS = gifsicle` — the project declares the *program*, and
+    the library the config names does not exist.
 
     No `-`/`_` normalisation: tiny-AES-c's configured `tiny_AES_c` must NOT match the
     declared `tiny-AES-c` — that mismatch is a real build failure and a v1 recovery."""
     base = target.rsplit("/", 1)[-1]
-    aliases = {target, base}
     m = re.fullmatch(r"lib(.+)\.(?:a|la|so|dylib)", base)
-    if m:
-        aliases.add(m.group(1))
-    return {a for a in aliases if a}
+    stripped = m.group(1) if m else None
+    for name, kind in declared:
+        if name and name in (target, base):
+            return True
+        if stripped and name == stripped and kind != "exe":
+            return True
+    return False
 
 
 def _is_vendored(path: Path, root: Path) -> bool:
@@ -261,7 +273,6 @@ def find_declaration(target: str, source_root: Path) -> tuple[Path | None, bool]
     → (declaring file, is_vendored). Non-vendored declarations win: a name declared
     both by the project and by a bundled dependency belongs to the project."""
     root = Path(source_root)
-    aliases = _target_aliases(target)
     root_project = ""
     root_cml = root / "CMakeLists.txt"
     if root_cml.is_file():
@@ -275,7 +286,7 @@ def find_declaration(target: str, source_root: Path) -> tuple[Path | None, bool]
             if fn not in _BUILD_FILES:
                 continue
             path = Path(dirpath) / fn
-            if not (aliases & _declared_names(path, root_project)):
+            if not _declares(target, _declared_names(path, root_project)):
                 continue
             if _is_vendored(path, root):
                 vendored_hit = vendored_hit or path
@@ -313,18 +324,24 @@ def validate_target(make_cmd: str, source_root: Path | str | None) -> RepairReco
     if p.has_default_segment:
         # pg_ivm / smk: `ninja <artifact> || ninja` already recovers by itself.
         return keep("command_falls_back_to_default_build")
-    if p.subdir:
-        # gensio: building a leaf inside `-C glib` never builds its parent `lib/`.
+    if not p.target:                     # `make -C src` — a subdir with no target
         return replace("subdir_invocation_bypasses_root_build_graph")
     if not source_root or not Path(source_root).is_dir():
         return replace("source_root_unavailable_for_validation")
 
+    # Identity before reachability: "this target does not exist" is a deeper defect
+    # than "it is reached the wrong way", so it must be the reported reason when both
+    # hold (gifsicle names a library the project never declares AND uses -C src).
     declaring, vendored = find_declaration(p.target, Path(source_root))
     if declaring is None:
         return replace("undeclared_target")
     rec.artifact = str(declaring)
     if vendored:
         return replace("declared_in_vendored_subtree")
+    if p.subdir:
+        # gensio: `libgensioglib.la` IS declared in glib/Makefile.am, but building it
+        # via `-C glib` never builds its parent `lib/`. Declared ≠ reachable.
+        return replace("subdir_invocation_bypasses_root_build_graph")
     return keep("declared_project_target")
 
 

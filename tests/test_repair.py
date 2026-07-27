@@ -208,6 +208,22 @@ class TestPhase0Validation:
         assert rec.action == "validate_keep_target"
         assert rec.reason == "declared_project_target"
 
+    def test_library_artifact_does_not_match_a_program(self, tmp_path):
+        # gifsicle: the config names `libgifsicle.la`, the project declares the PROGRAM
+        # `gifsicle`. Matching them would validate a library that does not exist —
+        # exactly the false-KEEP the validity predicate must not produce.
+        _write(tmp_path, "src/Makefile.am", "bin_PROGRAMS = gifsicle\n")
+        rec = validate_target("make -j$(nproc) libgifsicle.la", tmp_path)
+        assert rec.action == "validate_replace_target"
+        assert rec.reason == "undeclared_target"
+
+    def test_library_artifact_matches_its_logical_library_target(self, tmp_path):
+        # the legitimate half of the same rule: add_library(foo) produces libfoo.a
+        _write(tmp_path, "CMakeLists.txt", "project(p C)\nadd_library(foo STATIC)\n")
+        rec = validate_target("make -j$(nproc) libfoo.a", tmp_path)
+        assert rec.action == "validate_keep_target"
+        assert rec.reason == "declared_project_target"
+
     def test_project_declaration_wins_over_vendored_namesake(self, tmp_path):
         _write(tmp_path, "CMakeLists.txt", "project(p C)\nadd_library(zlib STATIC)\n")
         _write(tmp_path, "third_party/zlib/CMakeLists.txt", "add_library(zlib STATIC)\n")

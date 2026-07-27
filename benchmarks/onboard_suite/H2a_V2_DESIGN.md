@@ -61,20 +61,38 @@ default" cannot be unconditional.
 
 Ordered, deterministic, no LLM. First matching rule wins.
 
-| # | Condition | Verdict | Reason |
-|---|---|:---:|---|
-| 1 | command is not a recognised build invocation (`/bin/true`) | keep | `no_recognised_build_command` |
-| 2 | single segment, no target, no `-C` | keep | `already_default_build` |
-| 3 | some segment **is** a bare default build (`… \|\| ninja`) | keep | `command_falls_back_to_default_build` |
-| 4 | `-C <subdir>` invocation | **replace** | `subdir_invocation_bypasses_root_build_graph` |
-| 5 | target declared in a non-vendored build file | keep | `declared_project_target` |
-| 6 | target declared **only** inside a vendored subtree | **replace** | `declared_in_vendored_subtree` |
-| 7 | target not declared anywhere | **replace** | `undeclared_target` |
+```text
+build command
+      |
+      v
+recognised build invocation?  --no--> KEEP  (no_recognised_build_command)
+      |yes
+      v
+already the default build, or falls back to it?  --yes--> KEEP
+      |no                          (already_default_build / command_falls_back_to_default_build)
+      v
+declared?  --no--> REPLACE  (undeclared_target)
+      |yes
+      v
+declared inside a vendored subtree?  --yes--> REPLACE  (declared_in_vendored_subtree)
+      |no
+      v
+subdirectory invocation bypasses the build graph?  --yes--> REPLACE
+      |no                          (subdir_invocation_bypasses_root_build_graph)
+      v
+    KEEP  (declared_project_target)
+```
 
-Rule 4 precedes declaration lookup on purpose: gensio's `libgensioglib.la` *is* declared
-in `glib/Makefile.am`, yet building it via `-C glib` never builds its parent `lib/`. Being
-declared does not make a target reachable through the project's build graph — this is the
-second conjunct doing work the first cannot.
+**Identity is decided before reachability.** "This target does not exist" is a deeper
+defect than "it is reached the wrong way", so when both hold the reported reason is the
+former. gifsicle is the case that shows why: it is invoked as `-C src libgifsicle.la`, but
+the project declares no such library at all — and `undeclared_target` is what the oracle
+later confirms as `no_project_library_artifact`.
+
+The reachability branch is still load-bearing and cannot be folded into declaredness:
+gensio's `libgensioglib.la` *is* declared in `glib/Makefile.am`, yet building it via
+`-C glib` never builds its parent `lib/`. Being declared does not make a target reachable
+through the project's build graph — the second conjunct doing work the first cannot.
 
 **Declaration scanning** covers CMake (`add_library`/`add_executable`), Autotools
 (`*_LTLIBRARIES`/`*_LIBRARIES`/`*_PROGRAMS`), Meson (`static_library`/`shared_library`/
@@ -87,8 +105,13 @@ second conjunct doing work the first cannot.
   above the real one; a commented declaration declares nothing.
 - **no `-`/`_` normalisation** — tiny-AES-c's configured `tiny_AES_c` must *not* match the
   declared `tiny-AES-c`. That mismatch is a real build failure and one of v1's recoveries.
-- **artifact/logical aliasing** — a configured target may be a logical name (`uicc`) or an
-  artifact path (`src/libsmk.a`, `libxml2.la`); both forms are matched.
+- **artifact/logical aliasing, restricted by declaration kind** — a configured target may
+  be a logical name (`uicc`) or an artifact path (`src/libsmk.a`, `libxml2.la`), so
+  `libfoo.a` is also matched against a declared library `foo` (standard CMake). But *only*
+  against **library** declarations: gifsicle's configured `libgifsicle.la` must not be
+  validated by `bin_PROGRAMS = gifsicle`. Without the kind restriction the validator would
+  keep a library target the project never declares — the false-KEEP that exit criterion 4
+  exists to catch.
 - **non-vendored declarations win** over a vendored namesake.
 
 ## 4. Pre-flight verdicts (static, no builds)
@@ -99,9 +122,9 @@ The validator applied to the 25 frozen configs and their pinned source trees:
 |---|---|
 | **KEEP** — declared project target (9) | bcg729, onomondo_uicc, BotW_BetterVR, H5Z_ZFP, gvm_libs, iris, meatloaf, rp6502, turbovnc |
 | **KEEP** — command self-corrects (2) | pg_ivm, smk |
-| **REPLACE** — subdir invocation (6) | gensio, gifsicle, libdc, dbmail, fdpp, vdi_stream_client |
+| **REPLACE** — subdir invocation (4) | gensio, libdc, dbmail, fdpp |
 | **REPLACE** — vendored declaration (1) | astera |
-| **REPLACE** — undeclared (7) | tiny_AES_c, pspsdk, ESCape32, ProcMon_for_Linux, clam, lv_port_pc_vscode, lv_port_stm32f746_disco |
+| **REPLACE** — undeclared (9) | tiny_AES_c, gifsicle, pspsdk, vdi_stream_client, ESCape32, ProcMon_for_Linux, clam, lv_port_pc_vscode, lv_port_stm32f746_disco |
 
 (11 keep / 14 replace.)
 
@@ -113,7 +136,7 @@ The validator applied to the 25 frozen configs and their pinned source trees:
 | tiny-AES-c | recovery | replace | replace — undeclared | ✅ |
 | libdc | recovery | replace | replace — subdir | ✅ |
 | astera | recovery | replace | replace — **vendored declaration** | ✅ |
-| gifsicle | oracle-only correction | replace | replace — subdir | ✅ |
+| gifsicle | oracle-only correction | replace | replace — **undeclared** (no such library) | ✅ |
 | onomondo-uicc | **regression** | **keep** | keep — declared at `src/softsim/uicc/CMakeLists.txt` | ✅ |
 | pg_ivm | **regression** | **keep** | keep — command self-corrects | ✅ |
 
