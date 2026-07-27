@@ -69,6 +69,11 @@ evaluator can currently detect**.
 
 > Ownership separates *project* from *vendored*. It does not decide *which* project artifact.
 
+The size gap (230 KB against 8.1 MB) is recorded as an observation and **not** as a rule.
+"Larger is the right one" is not established by a single case, and adopting it because it
+happens to hold for gensio would be exactly the kind of unvalidated heuristic this operator
+was written to avoid.
+
 ### 4.2 pg_ivm shows a third class
 
 The config names `libpg_ivm.a`; the build produces `pg_ivm.so`. Every resolver glob is
@@ -80,12 +85,17 @@ different operator.
 
 Derived from the data, not from preference:
 
-1. **Ownership is necessary but not sufficient.** A second criterion is needed to choose
-   among project-owned candidates. gensio suggests build-graph position or symbol breadth;
-   both must be pre-registered before use, and symbol breadth would collide with the
-   information-leakage invariant unless the evaluator changes with it.
-2. **Artifact kind must be part of resolution.** A configured `.a` should not prevent finding
-   the `.so` the build produced.
+1. **Artifact kind belongs in resolution** — the most mature direction, because it rests on
+   an objective mismatch rather than a heuristic: the config requests an archive, the build
+   produced a shared library. A configured `.a` should not prevent finding the `.so` that
+   exists. Nothing has to be inferred to see this.
+2. **Ownership is necessary but not sufficient.** Some second criterion is needed to choose
+   among project-owned candidates, but the evidence does not yet name it. Build-graph
+   position and symbol breadth are *possible discriminators to investigate*, not the next
+   discriminator: one case cannot establish either, and symbol breadth would additionally
+   collide with the information-leakage invariant unless the evaluator changes with it.
+   Choosing a discriminator on this evidence would repeat v1's mistake of generalising from
+   the case in front of us.
 3. **The evaluator's coverage is the binding constraint, not the operator's.** Five of seven
    configs cannot be judged at all. Route 2 (header-derived symbol sets) has to be built and
    validated before any wider claim is possible — including the claim that H2b *failed* to
@@ -100,6 +110,17 @@ Derived from the data, not from preference:
 
 What is **not** established: that identity-aware resolution improves artifact selection in
 general. That needed more than one witness, and the pre-registration said so in advance.
+
+Stated as a reviewer would want it:
+
+> The proposed identity criterion resolves the motivating vendored-artifact failure without
+> introducing regressions, but the pre-registered benchmark shows that this failure mode is
+> only one of several artifact-resolution mechanisms. The hypothesis is refined rather than
+> confirmed.
+
+The useful result is the bound, not the fix: **the ownership criterion is necessary but not
+sufficient.** That constrains the problem space correctly and gives the next iteration a
+defined target instead of a direction.
 
 ---
 
