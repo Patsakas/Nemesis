@@ -85,10 +85,14 @@ different operator.
 
 Derived from the data, not from preference:
 
-1. **Artifact kind belongs in resolution** — the most mature direction, because it rests on
-   an objective mismatch rather than a heuristic: the config requests an archive, the build
-   produced a shared library. A configured `.a` should not prevent finding the `.so` that
-   exists. Nothing has to be inferred to see this.
+1. **Artifact kind belongs in resolution** — it rests on an objective mismatch rather than a
+   heuristic: the config requests an archive, the build produced a shared library, and
+   nothing has to be inferred to see it. **But its population is 1.** Measured across the
+   seven repositories that have artifacts at all: kind mismatch occurs in `pg_ivm` alone,
+   exactly as vendored-name occurs in `astera` alone. Promoting it to "the next operator"
+   would recreate the single-witness situation this document was written to refuse — before
+   the operator was even written. It is recorded as a known defect, not scheduled as the next
+   hypothesis.
 2. **Ownership is necessary but not sufficient.** Some second criterion is needed to choose
    among project-owned candidates, but the evidence does not yet name it. Build-graph
    position and symbol breadth are *possible discriminators to investigate*, not the next
@@ -96,10 +100,33 @@ Derived from the data, not from preference:
    collide with the information-leakage invariant unless the evaluator changes with it.
    Choosing a discriminator on this evidence would repeat v1's mistake of generalising from
    the case in front of us.
-3. **The evaluator's coverage is the binding constraint, not the operator's.** Five of seven
+3. **The evaluator's coverage is a binding constraint, not the operator's.** Five of seven
    configs cannot be judged at all. Route 2 (header-derived symbol sets) has to be built and
    validated before any wider claim is possible — including the claim that H2b *failed* to
    help elsewhere.
+
+### 5.1 The structural finding: artifact-level work is population-bound
+
+An artifact-level operator can only be evaluated where artifacts exist, so its population is
+**the genuine-T2 set — seven repositories** — and within that, each distinct mechanism has one
+or two witnesses. Measured:
+
+| Mechanism | Witnesses |
+|---|---:|
+| vendored name | 1 (astera) |
+| artifact kind | 1 (pg_ivm) |
+| wrong project-owned artifact | 1 (gensio, and unmeasurable today) |
+| name spelling | 1 (tiny-AES-c, already handled) |
+
+No refinement of artifact resolution can escape n≈1 at present. That is not a property of any
+particular operator; it is a property of the sample. So the honest next step is **not another
+artifact-level operator**. It is to enlarge the genuine-T2 population — the 17 unresolved
+repositories, where `H2_PLAN.md`'s remaining interventions (H2c dependency convergence, H2d
+codegen and submodule acquisition, H2e configure and path repair) operate on a population an
+order of magnitude larger.
+
+Sequencing artifact work before population work would produce a chain of special-case rules,
+each defensible on its single witness and none of them a general principle.
 
 ## 6. What is established
 
