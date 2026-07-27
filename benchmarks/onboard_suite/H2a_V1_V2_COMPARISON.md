@@ -71,9 +71,15 @@ v1: 25 interventions, 11 unnecessary, 2 harmful   -> 5 genuine T2
 v2: 14 interventions,  0 unnecessary by this test -> 7 genuine T2
 ```
 
-"Unnecessary by this test" is the correct hedge: the 11 are unnecessary in the sense that
-withholding intervention lost nothing. It does not follow that intervening on them is always
-safe — for two of them, it demonstrably was not.
+"Unnecessary by this test" is load-bearing, and the claim should be stated at exactly its
+scope:
+
+> On these frozen configurations, the eleven non-intervention decisions lost no genuine T2
+> and avoided both known harmful interventions.
+
+What must **not** be claimed is that KEEP is always safe. The evidence bounds the decision on
+this suite, under these configs; it does not establish a general property of withholding
+repair.
 
 ## 4. Where the improvement actually came from
 
