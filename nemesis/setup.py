@@ -292,18 +292,28 @@ class LibrarySetup:
         self.create_build_dirs()
         results["build_dirs"] = True
 
-        # H2a Phase 1: correct a specific/subdir build target to the build-system
-        # default (respects the build graph) before building. In-memory only — the
-        # frozen config file is never rewritten (H2_PLAN config-freezing invariant).
+        # H2a Phase 0 (v2): validate the configured target BEFORE replacing it. v1
+        # replaced unconditionally and regressed repos whose target was already valid
+        # (H2a_RESULTS.md §5). Phase 1 then corrects only what Phase 0 rejects, to the
+        # default build of the build system in use. In-memory only — the frozen config
+        # file is never rewritten (H2_PLAN config-freezing invariant).
         if self.config.target_repair.enabled:
-            from nemesis.repair import correct_target
-            rec = correct_target(self.config.target.build.make)
-            self.log.info("setup.target_repair", **rec.as_dict())
-            self.repair_events.append(rec.as_dict())
-            if rec.action == "replace_invalid_target":
-                self.config.target.build.make = rec.after
-                if self.config.target.build.debug_make:
-                    self.config.target.build.debug_make = rec.after
+            from nemesis.repair import correct_target, validate_target
+            make_cmd = self.config.target.build.make
+            replace = True
+            if self.config.target_repair.validate_target:
+                vrec = validate_target(make_cmd, source_root)
+                self.log.info("setup.target_validation", **vrec.as_dict())
+                self.repair_events.append(vrec.as_dict())
+                replace = vrec.action == "validate_replace_target"
+            if replace:
+                rec = correct_target(make_cmd)
+                self.log.info("setup.target_repair", **rec.as_dict())
+                self.repair_events.append(rec.as_dict())
+                if rec.action == "replace_invalid_target":
+                    self.config.target.build.make = rec.after
+                    if self.config.target.build.debug_make:
+                        self.config.target.build.debug_make = rec.after
 
         # Step 4: Fuzz build (AFL)
         build_dir = Path(self.config.target.build_dir)
@@ -380,8 +390,14 @@ class LibrarySetup:
         if self.repair_events:
             oracle_rec = next((e for e in reversed(self.repair_events)
                                if e.get("action") == "genuine_target_oracle"), {})
+            val_rec = next((e for e in self.repair_events
+                            if str(e.get("action", "")).startswith("validate_")), {})
             self.log.info(
                 "setup.h2a_summary",
+                # Phase 0 verdict and Phase 1 action are reported separately: "the
+                # target was kept" is a result of the operator, not an absence of one.
+                target_validated=val_rec.get("action"),
+                validation_reason=val_rec.get("reason"),
                 target_repaired=any(e.get("action") == "replace_invalid_target"
                                     for e in self.repair_events),
                 oracle=oracle_rec.get("oracle"),

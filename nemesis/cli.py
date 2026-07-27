@@ -513,12 +513,17 @@ def scout(top: int, round_trip_only: bool, out_path: str, year: int) -> None:
 )
 @click.option(
     "--target-repair", is_flag=True,
-    help="H2a: deterministic build-target correction (specific/subdir target -> "
-         "build-system default) + genuine-target oracle (build success alone is not "
-         "T2 unless a real project library is produced). Off by default.",
+    help="H2a: validate the configured build target, correct only invalid ones "
+         "(-> build-system default) + genuine-target oracle (build success alone is "
+         "not T2 unless a real project library is produced). Off by default.",
+)
+@click.option(
+    "--no-target-validation", is_flag=True,
+    help="H2a ablation: skip Phase 0 validation and replace every specific target "
+         "(v1 behaviour). Regressed valid targets in the v1 run — for ablation only.",
 )
 def setup(target: str, config_path: str | None, url: str, skip_build: bool,
-          auto_deps: bool, target_repair: bool) -> None:
+          auto_deps: bool, target_repair: bool, no_target_validation: bool) -> None:
     """Auto-setup a target library: clone, prepare workspace, and verify builds."""
     console.print(BANNER)
     cfg = _resolve_config(config_path, target)
@@ -526,6 +531,8 @@ def setup(target: str, config_path: str | None, url: str, skip_build: bool,
         cfg.dependencies.auto_install = True
     if target_repair:
         cfg.target_repair.enabled = True
+    if no_target_validation:
+        cfg.target_repair.validate_target = False
     setup_logging(level=cfg.engine.log_level, fmt=cfg.engine.log_format)
 
     from nemesis.setup import LibrarySetup

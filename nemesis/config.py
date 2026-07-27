@@ -59,6 +59,11 @@ class TargetRepairConfig(BaseModel):
     # library artifact is reported as genuine_t2=False (a false T2). The raw build
     # result is always recorded too, for comparison.
     oracle: bool = True
+    # v2 Phase 0: validate the configured target before replacing it (conservative
+    # replacement + ownership-aware validation). Turning it OFF restores v1's
+    # unconditional replacement, for the ablation arm — v1 regressed onomondo-uicc
+    # and pg_ivm that way (H2a_RESULTS.md §5).
+    validate_target: bool = True
 
 
 class ProviderConfig(BaseModel):
